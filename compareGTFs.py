@@ -5,8 +5,6 @@ import math
 import re
 import string
 import numpy as np
-import pickle
-import sPickle
 
 
 def compareGTFs(file1, file2):

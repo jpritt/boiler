@@ -311,58 +311,245 @@ class Chromosome:
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
 
-        # Find most common read length
-        mode = 0
-        modeVal = 0
-        for k,v in readLens.items():
-            if v > modeVal:
-                mode = k
-                modeVal = v
+        debug = False
 
-        # Find min and max read lengths
-        minLen = min(readLens)
-        maxLen = max(readLens)
+        lens = readLens.keys()
+
+        # Find max and mode read lengths
+        maxLen = max(lens)
+
+        # Read lengths sorted by frequency, largest to smallest
+        lensSorted = sorted(readLens, key=readLens.get, reverse=True)
 
         reads = []
-        for i in xrange(len(coverage)):
-            while coverage[i] > 0:
-                # find next endpoints of reads
-                j = i+1
-                endpoints = []
-                #while j < len(coverage) and j < exons[currExon+1] and (j-i+1) < (maxLen+3):
-                while j < (len(coverage)-1) and (j-i+1) < (maxLen+3):
-                    if coverage[j] > coverage[j+1]:
-                        endpoints += [j-i+1] 
-                    j += 1
 
-                if len(readLens) == 0:
-                    if len(endpoints) > 0:
-                        length = endpoints[0]
+        # start and end of coverage window
+        # Keep finding reads from both ends until they meet in the middle
+        start = 0
+        while coverage[start] == 0:
+            start += 1
+        end = len(coverage)
+        while coverage[end-1] == 0:
+            end -= 1
+
+
+
+        while end > start:
+            if debug:
+                print 'Coverage range: (%d, %d)' % (start, end)
+                print lensSorted
+                print readLens
+
+            # find a read from the beginning
+            readStart = start
+            readEnd = start
+
+            closestEndpoint = None
+            for length in xrange(1, maxLen+1):
+                if readStart+length < end and coverage[readStart + length] < coverage[readStart + length - 1]:
+
+                    if length in readLens:
+                        readEnd = readStart + length
+                        reads.append([readStart, readEnd])
+
+                        readLens[length] -= 1
+
+                        # reorder sorted lengths
+                        for i in xrange(len(lensSorted)):
+                            if lensSorted[i] == length:
+                                break
+                        j = i+1
+                        while j < len(readLens) and readLens[lensSorted[j]] > readLens[lensSorted[i]]:
+                            j += 1
+                        if j > i+1:
+                            lensSorted = lensSorted[:i] + lensSorted[i+1:j] + [lensSorted[i]] + lensSorted[j:]
+
+                        if readLens[length] == 0:
+                            del readLens[length]
+
+                        break
                     else:
-                        length = mode
-                elif len(endpoints) == 0:
-                    if mode in readLens:
-                        length = mode
-                    else:
-                        length = readLens[len(readLens)/2]
-                elif endpoints[0] < minLen:
-                    length = minLen
+                        if closestEndpoint == None:
+                            closestEndpoint = readStart + length
+            if readEnd == readStart:
+                if closestEndpoint == None:
+                    length = lensSorted[0]
+                    readEnd = readStart + length
+                    reads.append([readStart, readEnd])
+
+                    if length in readLens:
+                        readLens[length] -= 1
+
+                        # reorder sorted lengths
+                        for i in xrange(len(lensSorted)):
+                            if lensSorted[i] == length:
+                                break
+                        j = i+1
+                        while j < len(readLens) and readLens[lensSorted[j]] > readLens[lensSorted[i]]:
+                            j += 1
+                        if j > i+1:
+                            lensSorted = lensSorted[:i] + lensSorted[i+1:j] + [lensSorted[i]] + lensSorted[j:]
+
+                        if readLens[length] == 0:
+                            del readLens[length]
                 else:
-                    (id1, id2) = self.findClosestVals(readLens.keys(), endpoints)
-                    length = readLens.keys()[id1]
+                    readEnd = closestEndpoint
+                    reads.append([readStart, readEnd])
 
-                if length in readLens:
-                    readLens[length] -= 1
-                    if readLens[length] == 0:
-                        del readLens[length]
-                        if len(readLens) > 0:
-                            minLen = min(readLens)
+            # Update coverage vector
+            for i in xrange(readStart, readEnd):
+                coverage[i] -= 1
 
-                for x in xrange(length):
-                    coverage[i+x] -= 1
+            # update start
+            while start < end and coverage[start] == 0:
+                start += 1
+            while end > start and coverage[end-1] == 0:
+                end -= 1
+
+
+            if end > start:
+                if debug:
+                    print 'Coverage range: (%d, %d)' % (start, end)
+                    print lensSorted
+                    print readLens
+
+                # find a read from the end
+                readEnd = end
+                readStart = end
+
+                closestEndpoint = None
+                for length in xrange(1, maxLen+1):
+                    if end-length >= start and coverage[end - length] > coverage[end - length - 1]:
+                        if length in readLens:
+                            readStart = readEnd - length
+                            reads.append([readStart, readEnd])
+
+                            readLens[length] -= 1
+                                
+
+                            # reorder sorted lengths
+                            for i in xrange(len(lensSorted)):
+                                if lensSorted[i] == length:
+                                    break
+                            j = i+1
+
+                            while j < len(readLens) and readLens[lensSorted[j]] > readLens[lensSorted[i]]:
+                                #print '  j = %d' % j
+                                j += 1
+                            if j > i+1:
+                                lensSorted = lensSorted[:i] + lensSorted[i+1:j] + [lensSorted[i]] + lensSorted[j:]
+
+
+                            if readLens[length] == 0:
+                                del readLens[length]
+
+                            break
+                        else:
+                            if closestEndpoint == None:
+                                closestEndpoint = readEnd - length
+
+                if readStart == readEnd:
+                    if closestEndpoint == None:
+                        length = lensSorted[0]
+                        readStart = readEnd - length
+                        reads.append([readStart, readEnd])
+
+                        if length in readLens:
+                            readLens[length] -= 1
+
+                            # reorder sorted lengths
+                            for i in xrange(len(lensSorted)):
+                                if lensSorted[i] == length:
+                                    break
+
+                            j = i+1
+                            while j < len(readLens) and readLens[lensSorted[j]] > readLens[lensSorted[i]]:
+                                j += 1
+                            if j > i+1:
+                                lensSorted = lensSorted[:i] + lensSorted[i+1:j] + [lensSorted[i]] + lensSorted[j:]
+
+                            if readLens[length] == 0:
+                                del readLens[length]
+                    else:
+                        readStart = closestEndpoint
+                        reads.append([readStart, readEnd])
+
+                for i in xrange(readStart, readEnd):
+                    coverage[i] -= 1
+
+                # update end
+                while coverage[end-1] == 0 and end > start:
+                    end -= 1
+                while coverage[start] == 0 and start < end:
+                    start += 1
+
                 
-                reads.append([i, i+length])
         return reads
+
+    # def findReads(self, readLens, coverage):
+    #     ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
+    #     '''
+
+    #     # Find most common read length
+    #     mode = 0
+    #     modeVal = 0
+    #     for k,v in readLens.items():
+    #         if v > modeVal:
+    #             mode = k
+    #             modeVal = v
+
+    #     # Find min and max read lengths
+    #     minLen = min(readLens)
+    #     maxLen = max(readLens)
+
+    #     reads = []
+    #     for i in xrange(len(coverage)):
+    #         while coverage[i] > 0:
+    #             # find next endpoints of reads
+    #             j = i+1
+    #             endpoints = []
+    #             #while j < len(coverage) and j < exons[currExon+1] and (j-i+1) < (maxLen+3):
+    #             while j < (len(coverage)-1) and (j-i+1) < (maxLen+3):
+    #                 if coverage[j] > coverage[j+1]:
+    #                     endpoints += [j-i+1] 
+    #                 j += 1
+
+    #             if len(readLens) == 0:
+    #                 if len(endpoints) > 0:
+    #                     length = endpoints[0]
+    #                 else:
+    #                     length = mode
+    #             elif len(endpoints) == 0:
+    #                 if mode in readLens:
+    #                     length = mode
+    #                 else:
+    #                     length = readLens[len(readLens)/2]
+    #             elif endpoints[0] < minLen:
+    #                 length = minLen
+    #             else:
+    #                 (id1, id2) = self.findClosestVals(readLens.keys(), endpoints)
+    #                 length = readLens.keys()[id1]
+
+    #             if length in readLens:
+    #                 readLens[length] -= 1
+    #                 if readLens[length] == 0:
+    #                     del readLens[length]
+    #                     if len(readLens) > 0:
+    #                         minLen = min(readLens)
+
+    #             for x in xrange(length):
+    #                 coverage[i+x] -= 1
+                
+    #             reads.append([i, i+length])
+    #     return reads
+
+    def insertInOrder(sortedList, a):
+        ''' Insert a in the correct place in a sorted list in increasing order
+        '''
+        i = 0
+        while i < len(sortedList) and a > sortedList[i]:
+            i += 1
+        return sortedList[:i] + [a] + sortedList[i:]
 
     def RLE(self, vector, filehandle):
         val = vector[0]

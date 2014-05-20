@@ -113,6 +113,20 @@ class Genome:
 
         return exons
 
+    '''
+    def testExpand(self):
+        print 'expanding'
+        cov = [1,2,2,2,1,1,2,3,4,4,4,2]
+        reads = dict()
+        reads[3] = 1
+        reads[4] = 1
+        reads[5] = 3
+        reads[6] = 1
+
+        print self.chromosomes[self.chromosomes.keys()[0]].findReads(reads, cov)
+        exit()
+    '''
+
     def writeSAM(self, filename):
         ''' Write all stored alignments to a new SAM file
         '''
