@@ -8,5 +8,14 @@ class Junction:
         self.label = ' '.join([str(e) for e in exons])
         self.length = length
 
+        # Distribution of lengths of all reads crossing this junction
         self.readLens = dict()
+
+        # Distribution of gap lengths for all paired-end reads crossing this junction
+        #self.gaps = dict()
+
+        # Distribution of left and right lengths for all paired-end reads crossing this junction
+        self.lensLeft = dict()
+        self.lensRight = dict()
+
         self.coverage = [0] * length

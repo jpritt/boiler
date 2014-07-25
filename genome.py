@@ -54,6 +54,9 @@ class Genome:
             alignments: SAM filehandle containing aligned reads
         '''
 
+        # paired reads that have not yet found their partner
+        unpaired = dict()
+
         for line in alignments:
             row = line.strip().split('\t')
             if len(row) < 5:
@@ -64,19 +67,46 @@ class Genome:
 
             exons = self.parseCigar(row[5], int(row[3]))
 
-            if len(exons) == 1:
-                self.chromosomes[row[2]].addUnspliced(read.Read(exons))
-            else:
-                # find XS value:
+            # find XS value:
+            xs = None
+            if len(exons) > 1:
                 for r in row[11 : len(row)]:
                     if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
                         xs = r[5]
 
-                self.chromosomes[row[2]].addSpliced(read.Read(exons, xs))
+            pair = int(row[7])
+            pair_offset = int(row[8])
+            self.chromosomes[row[2]].processRead(read.Read(exons, xs), pair, pair_offset)
+
+            '''
+            if pair == 0 and pair_offset == 0:
+                # unpairs read
+                if len(exons) == 1:
+                    self.chromosomes[row[2]].addUnspliced(read.Read(exons))
+                else:
+                    # find XS value:
+                    for r in row[11 : len(row)]:
+                        if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                            xs = r[5]
+
+                    self.chromosomes[row[2]].addSpliced(read.Read(exons, xs))
+
+            else:
+                if pair in unpaired:
+                    # create new read
+
+                    # Tophat alignments should be in increasing order of index
+                    if unpaired[pair].exons[0][0] > exons[0][0]:
+                        print 'Error! Tophat file not sorted!'
+
+                    paired_exons = 
+                    paired_read = read.Read()
+            '''
 
         # finalize exon list in each chromosome
         for c in self.chromosomes.values():
             c.finalizeExons()
+            c.finalizeReads()
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome

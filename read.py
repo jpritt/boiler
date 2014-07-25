@@ -7,3 +7,6 @@ class Read:
         '''
         self.exons = exons
         self.xs = xs
+
+        self.lenLeft = 0
+        self.lenRight = 0

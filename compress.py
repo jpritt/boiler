@@ -2,6 +2,7 @@
 import sys
 import argparse
 import genome
+import time
 
 def read_chromosome_info(chrom_info):
     ''' Read chromosome names and lengths from the given file
@@ -26,28 +27,47 @@ if __name__ == '__main__':
     if (form != 'sam'):
         print 'Only .sam files are supported'
 
-    print 'Parsing alignments'
-    with open(args.alignments) as alignments:
+    sys.stdout.write('Parsing alignments... ')
+    start = time.time()
+    with open(args.alignments) as f:
+        alignments = f.read().split('\n')
         header = ''
         for line in alignments:
             if line[0] == '@':
-                header += line
+                header += line + '\n'
             else:
                 break
 
         origGenome = genome.Genome(header)
         origGenome.parseAlignments(alignments)
+    end = time.time()
+    parseTime = end-start
+    print '%fs' % parseTime
 
-    print 'Compressing'
+    sys.stdout.write('Compressing... ')
+    start = time.time()
+
     file_prefix = 'compressed/compressed'
     origGenome.compress(file_prefix)
 
+    end = time.time()
+    compressTime = end-start
+    print '%fs' % compressTime
+
+
     #compress.compressReads(alignments, chr_info, 'compressed')
 
-    origGenome.writeSAM('minimal.sam')
+    #origGenome.writeSAM('minimal.sam')
 
-    print 'Expanding'
+    sys.stdout.write('Expanding... ')
+    print ''
+
     genomeExpanded = genome.Genome(header)
+    start = time.time()
     genomeExpanded.expand(file_prefix)
+    end = time.time()
+    expandTime = end-start
+    print '%fs' % expandTime
+    
     genomeExpanded.writeSAM('expanded.sam')
 
