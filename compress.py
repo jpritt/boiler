@@ -60,7 +60,6 @@ if __name__ == '__main__':
     #origGenome.writeSAM('minimal.sam')
 
     sys.stdout.write('Expanding... ')
-    print ''
 
     genomeExpanded = genome.Genome(header)
     start = time.time()

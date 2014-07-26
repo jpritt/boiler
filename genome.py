@@ -1,8 +1,9 @@
 #! /usr/bin/env python
 
 import re
-import chromosome
+#import chromosome
 import read
+import alignments
 
 class Genome:
     ''' A set of reads aligned to a genome '''
@@ -12,40 +13,49 @@ class Genome:
 
             header: SAM file header containing (among other things) chromosome information
         ''' 
+
+        '''        
         chrom_info = []
         for line in header.split('\n'):
             if line[0:3] == '@SQ':
                 chrom_info.append(line.strip().split('\t')[1:])
-        self.chromosomes = self.init_chromosomes(chrom_info)
+        '''
+
+        self.chromosomes = dict()
+        for line in header.split('\n'):
+            if line[0:3] == '@SQ':
+                row = line.strip().split('\t')
+                self.chromosomes[row[1][3:]] = int(row[2][3:])
+
+        self.alignments = alignments.Alignments(self.chromosomes)
+        #self.chromosomes = self.init_chromosomes(chrom_info)
 
     def compress(self, file_prefix):
         ''' Compresses the alignments to multiple files
 
             file_prefix: Prefix for all output file names
         '''
-        for k,v in self.chromosomes.items():
-            v.compress(file_prefix + '.' + k)
+        self.alignments.compress(file_prefix)
 
     def expand(self, file_prefix):
         ''' Expand the alignments compressed in multiple files
         '''
 
-        for k,v in self.chromosomes.items():
-            v.expand(file_prefix + '.' + k)
+        self.alignments.expand(file_prefix)
 
-    def init_chromosomes(self, chrom_info):
-        '''
-            Initialize genome chromosomes
+    # def init_chromosomes(self, chrom_info):
+    #     '''
+    #         Initialize genome chromosomes
 
-            chrom_info: File handle containing a list of chromosome names and lengths
-        '''
-        chromosomes = dict()
-        self.chr_names = []
-        for line in chrom_info:
-            chrom = line[0][3:]
-            length = int(line[1][3:])
-            chromosomes[chrom] = chromosome.Chromosome(chrom, length)
-        return chromosomes
+    #         chrom_info: File handle containing a list of chromosome names and lengths
+    #     '''
+    #     chromosomes = dict()
+    #     self.chr_names = []
+    #     for line in chrom_info:
+    #         chrom = line[0][3:]
+    #         length = int(line[1][3:])
+    #         chromosomes[chrom] = chromosome.Chromosome(chrom, length)
+    #     return chromosomes
 
     def parseAlignments(self, alignments):
         ''' Parse a file in SAM format
@@ -61,6 +71,9 @@ class Genome:
             row = line.strip().split('\t')
             if len(row) < 5:
                 continue
+
+            chromosome = str(row[2])
+            
             if not row[2] in self.chromosomes.keys():
                 print 'Chromosome ' + str(row[2]) + ' not found!'
                 continue
@@ -74,39 +87,18 @@ class Genome:
                     if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
                         xs = r[5]
 
-            pair = int(row[7])
-            pair_offset = int(row[8])
-            self.chromosomes[row[2]].processRead(read.Read(exons, xs), pair, pair_offset)
-
-            '''
-            if pair == 0 and pair_offset == 0:
-                # unpairs read
-                if len(exons) == 1:
-                    self.chromosomes[row[2]].addUnspliced(read.Read(exons))
+            if not row[6] == '*':
+                if row[6] == '=':
+                    pair_chrom = chromosome
                 else:
-                    # find XS value:
-                    for r in row[11 : len(row)]:
-                        if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
-                            xs = r[5]
-
-                    self.chromosomes[row[2]].addSpliced(read.Read(exons, xs))
-
+                    pair_chrom = row[6]
+                pair_index = int(row[7])
+                self.alignments.processRead(read.Read(chromosome, exons, xs), pair_chrom, pair_index)
             else:
-                if pair in unpaired:
-                    # create new read
+                self.alignments.processRead(read.Read(chromosome, exons, xs))
 
-                    # Tophat alignments should be in increasing order of index
-                    if unpaired[pair].exons[0][0] > exons[0][0]:
-                        print 'Error! Tophat file not sorted!'
-
-                    paired_exons = 
-                    paired_read = read.Read()
-            '''
-
-        # finalize exon list in each chromosome
-        for c in self.chromosomes.values():
-            c.finalizeExons()
-            c.finalizeReads()
+        self.alignments.finalizeExons()
+        self.alignments.finalizeReads()
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome
@@ -143,19 +135,6 @@ class Genome:
 
         return exons
 
-    '''
-    def testExpand(self):
-        print 'expanding'
-        cov = [1,2,2,2,1,1,2,3,4,4,4,2]
-        reads = dict()
-        reads[3] = 1
-        reads[4] = 1
-        reads[5] = 3
-        reads[6] = 1
-
-        print self.chromosomes[self.chromosomes.keys()[0]].findReads(reads, cov)
-        exit()
-    '''
 
     def writeSAM(self, filename):
         ''' Write all stored alignments to a new SAM file
@@ -164,10 +143,9 @@ class Genome:
         with open(filename, 'w') as f:
             # write header
             f.write('@HD\tVN:1.0\tSO:unsorted\n')
-            for c in self.chromosomes.values():
-                f.write('@SQ\tSN:' + c.name + '\tLN:' + str(c.length) + '\n')
+            for k,v in self.chromosomes.items():
+                f.write('@SQ\tSN:' + str(k) + '\tLN:' + str(v) + '\n')
 
             # write alignments
-            for c in self.chromosomes.values():
-                c.writeSAM(f)
+            self.alignments.writeSAM(f)
     
