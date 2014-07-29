@@ -37,7 +37,9 @@ class Alignments:
         self.spliced = []
 
         # paired reads for which the mate still needs to be found
-        self.unmatched = []
+        #self.unmatched = []
+        self.unmatched = dict()
+
         self.paired = []
 
     def addUnspliced(self, read):
@@ -158,6 +160,7 @@ class Alignments:
             filename: Name of file to compress to
         '''
 
+        '''
         coverage = [0] * self.exons[-1]
         readLensList = []
         lensLeftList = []
@@ -216,19 +219,22 @@ class Alignments:
 
                 # Write coverage vector
                 self.RLE(coverage[self.exons[i]:self.exons[i+1]], f)
-
-
         '''
+
+        
         # sort reads into exons
         start = time.time()
+
         readExons = []
         for i in xrange(len(self.exons)-1):
             readExons += [[]]
-        for r in self.unspliced:
-            j = 0
-            while r.exons[0][0] >= self.exons[j+1]:
-                j += 1
-            readExons[j] += [r]
+        for i in xrange(len(self.unspliced)):
+            r = self.unspliced[i]
+            #j = 0
+            #while r.exons[0][0] >= self.exons[j+1]:
+            #    j += 1
+            j = bisect.bisect_right(self.exons, r.exons[0][0])-1
+            readExons[j] += [i]
         time1 = time.time() - start
         print 'Sorting time:\t%f' % time1
 
@@ -248,7 +254,8 @@ class Alignments:
                 lensLeft = dict()
                 lensRight = dict()
 
-                for read in readExons[i]:
+                for readId in readExons[i]:
+                    read = self.unspliced[readId]
                     alignment = read.exons
 
                     start = alignment[0][0] - exonStart
@@ -290,7 +297,7 @@ class Alignments:
 
             time1 = time.time() - startTime
             print 'Writing time:\t%f' % time1
-        '''
+        
 
     def expand(self, file_prefix):
         ''' Expand both spliced and unspliced alignments
@@ -1721,6 +1728,40 @@ class Alignments:
             pair_index += self.chromOffsets[pair_chrom]
 
             # TODO: Use binary search here for speed
+            #self.unmatched = dict()
+
+            if (pair_index, pair_chrom, read.exons[0][0], read.chrom) in self.unmatched:
+                match = self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][0]
+
+                if len(self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)]) == 1:
+                    del self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)]
+                else:
+                    del self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][0]
+
+                xs = read.xs or match.xs
+
+                # update list of exons
+                alignment = match.exons
+                if len(alignment) > 1:
+                    for i in xrange(len(alignment)-1):
+                        self.exons.add(alignment[i][1])
+                        self.exons.add(alignment[i+1][0])
+
+                alignment = read.exons
+                if len(alignment) > 1:
+                    for i in xrange(len(alignment)-1):
+                        self.exons.add(alignment[i][1])
+                        self.exons.add(alignment[i+1][0])
+
+                self.paired.append(pairedread.PairedRead(pair_chrom, match.exons, read.chrom, read.exons, xs))
+            else:
+                if not (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
+                    self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
+                else:
+                    self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
+
+                
+            '''
             matched = False
 
             i = 0
@@ -1755,6 +1796,7 @@ class Alignments:
                     i += 1
             if not matched:
                 self.unmatched += [(read.exons[0][0], read.chrom, pair_index, pair_chrom, read)]
+            '''
 
     def RLE(self, vector, filehandle):
         val = vector[0]
