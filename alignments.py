@@ -60,17 +60,17 @@ class Alignments:
             file_prefix: Prefix for all output file names
         '''
 
-        start = time.time()
+        #start = time.time()
         if len(self.spliced) > 0:
             self.compressSpliced(file_prefix + '.spliced.txt')
-        time1 = time.time() - start
-        print '\nSpliced (%d):\t%f s' % (len(self.spliced), time1)
+        #time1 = time.time() - start
+        #print '\nSpliced (%d):\t%f s' % (len(self.spliced), time1)
 
-        start = time.time()
+        #start = time.time()
         if len(self.unspliced) > 0:
             self.compressUnspliced(file_prefix + '.unspliced.txt')
-        time1 = time.time() - start
-        print 'Unspliced (%d):\t%f s' % (len(self.unspliced), time1)
+        #time1 = time.time() - start
+        #print 'Unspliced (%d):\t%f s' % (len(self.unspliced), time1)
 
     def compressSpliced(self, filename):
         ''' Compress the spliced alignments to a single file
@@ -116,9 +116,6 @@ class Alignments:
                     j = junctions[key1]
 
                     key = key1
-
-            if r.exons[0][0] == 90627667:
-                print key
 
             # update junction coverage vector in dictionary
             for i in xrange(r.startOffset, len(j.coverage)-r.endOffset):
@@ -450,9 +447,6 @@ class Alignments:
 
                                 self.spliced.append(read.Read(self.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
 
-                            if junc.exons == [24217, 24221]:
-                                print str(junc.exons) + ', ' + junc.xs + ', ' + str(junc.NH)
-
                             for p in paired:
                                 start = p[0][0]
                                 i = 0
@@ -502,10 +496,6 @@ class Alignments:
 
                                 self.paired.append(pairedread.PairedRead(self.getChromosome(readExonsA[0][0]), readExonsA,  \
                                                                          self.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
-
-
-                                if junc.exons == [24217, 24221]:
-                                    print  self.getChromosome(readExonsA[0][0]) + ', ' + str(readExonsA) + ', ' + self.getChromosome(readExonsB[0][0]) + ', ' + str(readExonsB) + ', ' + junc.xs + ', ' + str(junc.NH)
 
                         # Start of a new junction
                         key = line[1:].rstrip().split('\t')
@@ -885,13 +875,6 @@ class Alignments:
                 newRead = read.Read(pair.chromA, exonsA+exonsB, pair.xs, pair.NH)
                 gap = exonsB[0][0] - self.exons[pair.exonIdsB[0]] + self.exons[pair.exonIdsA[-1]+1] - exonsA[-1][1]
             newRead.exonIds = pair.exonIdsA + pair.exonIdsB[n:]
-
-
-            if newRead.exons[0][0] == 90627667:
-                print 'Finalized:'
-                print newRead.exons
-                print 'NH: ' + str(pair.NH)
-                print ''
 
             newRead.lenLeft = readLenLeft
             newRead.lenRight = readLenRight
