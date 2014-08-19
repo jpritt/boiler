@@ -99,6 +99,7 @@ class Genome:
             else:
                 self.alignments.processRead(read.Read(chromosome, exons, xs, NH))
 
+
         self.alignments.finalizeExons()
         self.alignments.finalizeReads()
 
