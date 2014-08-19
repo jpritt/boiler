@@ -8,10 +8,10 @@ import time
 Calculate the KC score for the reference sequence and alignment given
 '''
 
-k = 15
+#k = 24
 sumKmersWeighted = dict()
 
-def buildProfile(transcripts):
+def buildProfile(transcripts, k):
     ''' Create frequency profile
     '''
 
@@ -42,7 +42,7 @@ def buildProfile(transcripts):
 
     return profile
 
-def computeWKRandICR(assembly, sequence, transcripts, dataLength):
+def computeWKRandICR(assembly, sequence, transcripts, dataLength, k):
     ''' Compute the WKR from the frequency profile and cufflinks GTF (assembly) file
 
         assembly: Cufflinks GTF file containing assembled transcript
@@ -51,7 +51,7 @@ def computeWKRandICR(assembly, sequence, transcripts, dataLength):
         dataLength: Length in nucleotides of input data
     '''
     with open(assembly, 'r') as f:
-        print 'Computing FC'
+        print 'Computing KC'
 
         # WKR denominator is the same for all kmers
         denom = 0.0
@@ -213,7 +213,7 @@ def readGenome(genome):
 
         return chromosomes
 
-def updateTranscripts(transcripts, refGTF, sequence):
+def updateTranscripts(transcripts, refGTF, sequence, k):
     with open(refGTF, 'r') as f:
         for line in f:
             row = line.strip().split('\t')
@@ -237,7 +237,7 @@ def updateTranscripts(transcripts, refGTF, sequence):
         #if (i%1000) == 0:
         #    print 'Adding sequence %d / %d' % (i, numTranscripts)
 
-        t.addSequence(sequence[t.chrom])
+        t.addSequence(sequence[t.chrom], k)
     return transcripts
 
 class Transcript:
@@ -252,7 +252,7 @@ class Transcript:
 
         self.exons = []
 
-    def addSequence(self, sequence):
+    def addSequence(self, sequence, k):
         ''' Add nucleotide sequence covered by this transcript
         '''
         self.sequence = ''
@@ -301,15 +301,19 @@ if __name__ == '__main__':
         help='Full path of assembled Cufflinks GTF file')
     parser.add_argument('--data', type=str, required=True,
         help='Full path of read data used for assembly')
+    parser.add_argument('--kmer', type=str, required=True,
+        help='k-mer length')
+    
     
     args = parser.parse_args(sys.argv[1:])
 
+    k = int(args.kmer)
     transcripts = parsePro(args.refPRO)
     sequence = readGenome(args.sequence)
-    transcripts = updateTranscripts(transcripts, args.refGTF, sequence)
+    transcripts = updateTranscripts(transcripts, args.refGTF, sequence, k)
 
     dataLength = countDataLength(args.data)
 
     assembly = args.assembly
-    WKR, ICR = computeWKRandICR(assembly, sequence, transcripts, dataLength)
+    WKR, ICR = computeWKRandICR(assembly, sequence, transcripts, dataLength, k)
     print 'KC = %f - %f = %f' % (WKR, ICR, WKR-ICR)

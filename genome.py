@@ -82,10 +82,12 @@ class Genome:
 
             # find XS value:
             xs = None
-            if len(exons) > 1:
-                for r in row[11 : len(row)]:
-                    if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
-                        xs = r[5]
+            NH = 1
+            for r in row[11 : len(row)]:
+                if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                    xs = r[5]
+                elif r[0:3] == 'NH:':
+                    NH = int(r[5:])
 
             if not row[6] == '*':
                 if row[6] == '=':
@@ -93,9 +95,9 @@ class Genome:
                 else:
                     pair_chrom = row[6]
                 pair_index = int(row[7])
-                self.alignments.processRead(read.Read(chromosome, exons, xs), pair_chrom, pair_index)
+                self.alignments.processRead(read.Read(chromosome, exons, xs, NH), pair_chrom, pair_index)
             else:
-                self.alignments.processRead(read.Read(chromosome, exons, xs))
+                self.alignments.processRead(read.Read(chromosome, exons, xs, NH))
 
         self.alignments.finalizeExons()
         self.alignments.finalizeReads()

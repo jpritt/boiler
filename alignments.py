@@ -77,7 +77,7 @@ class Alignments:
 
             filename: Name of file to compress to
         '''
-            
+
         # Compute coverage levels across every exon junction
         junctions = dict()
 
@@ -86,7 +86,7 @@ class Alignments:
 
             if not r.xs == None:
                 # XS is defined for this read
-                key = '\t'.join([str(e) for e in exonIds]) + '\t' + r.xs
+                key = '\t'.join([str(e) for e in exonIds]) + '\t' + r.xs + '\t' + str(r.NH)
                 if not key in junctions:
                     covLength = 0
                     for e in exonIds:
@@ -95,8 +95,8 @@ class Alignments:
                 j = junctions[key]
             else:
                 # XS not defined for this read, so see which one (+/-) is in the dict already or add + by default
-                key1 = '\t'.join([str(e) for e in exonIds]) + '\t+'
-                key2 = '\t'.join([str(e) for e in exonIds]) + '\t-'
+                key1 = '\t'.join([str(e) for e in exonIds]) + '\t+\t' + str(r.NH)
+                key2 = '\t'.join([str(e) for e in exonIds]) + '\t-\t' + str(r.NH)
                 if key1 in junctions:
                     read.xs = '+'
                     j = junctions[key1]
@@ -154,77 +154,149 @@ class Alignments:
                 # write coverage
                 self.RLE(junc.coverage, f)
 
+    def updateRLE(self, RLE, start, length, value):
+        i = 0
+        while start > 0 and start >= RLE[i][1]:
+            start -= RLE[i][1]
+            i += 1
+
+        if start > 0:
+            RLE = RLE[:i] + [ [RLE[i][0], start], [RLE[i][0], RLE[i][1]-start] ] + RLE[i+1:]
+            i += 1
+
+        while length > 0 and length >= RLE[i][1]:
+            RLE[i][0] += value
+            length -= RLE[i][1]
+            i += 1
+
+        if length > 0:
+            RLE = RLE[:i] + [ [RLE[i][0]+value, length], [RLE[i][0], RLE[i][1]-length] ] + RLE[i+1:]
+
+        return RLE
+
     def compressUnspliced(self, filename):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
         '''
 
-        '''
-        coverage = [0] * self.exons[-1]
-        readLensList = []
-        lensLeftList = []
-        lensRightList = []
-        for i in xrange(len(self.exons)-1):
-            readLensList += [dict()]
-            lensLeftList += [dict()]
-            lensRightList += [dict()]
-
-        for read in self.unspliced:
-            alignment = read.exons
-
-            j = 0
-            while alignment[0][0] >= self.exons[j+1]:
-                j += 1
-
-            #exonStart = self.exons[j]
-            start = alignment[0][0]# - exonStart
-            end = alignment[0][1]# - exonStart
-
-            # update coverage vector
-            for base in xrange(start, end):
-                coverage[base] += 1
-
-            # update read lengths distribution
-            length = end - start
-
-            readLens = readLensList[j]
-            if length in readLens:
-                readLens[length] += 1
-            else:
-                readLens[length] = 1
-
-            # update left and right read lengths
-            if read.lenLeft > 0 or read.lenRight > 0:
-                lensLeft = lensLeftList[j]
-                if read.lenLeft in lensLeft:
-                    lensLeft[read.lenLeft] += 1
-                else:
-                    lensLeft[read.lenLeft] = 1
-
-                lensRight = lensRightList[j]
-                if read.lenRight in lensRight:
-                    lensRight[read.lenRight] += 1
-                else:
-                    lensRight[read.lenRight] = 1
-
-        with open(filename, 'w') as f:
-            for i in xrange(len(self.exons)-1):
-                # Write read lengths
-                f.write('>' + '\t'.join([str(k)+','+str(v) for k,v in readLensList[i].items()]) + '\n')
-
-                # Write left and right read lengths
-                f.write('\t'.join([str(k)+','+str(v) for k,v in lensLeftList[i].items()]) + '\n')
-                f.write('\t'.join([str(k)+','+str(v) for k,v in lensRightList[i].items()]) + '\n')
-
-                # Write coverage vector
-                self.RLE(coverage[self.exons[i]:self.exons[i+1]], f)
-        '''
-
         
         # sort reads into exons
-        start = time.time()
+        readExons = dict()
+        coverages = dict()
+        for i in xrange(len(self.unspliced)):
+            #r = self.unspliced[i]
+            r = self.unspliced[len(self.unspliced) - i - 1]
 
+            if not r.NH in readExons:
+                readExons[r.NH] = []
+                for n in xrange(len(self.exons)-1):
+                    readExons[r.NH] += [[]]
+
+                if r.NH == 1:
+                    coverages[r.NH] = [0] * self.exons[-1]
+                else:
+                    coverages[r.NH] = [ [0, self.exons[-1]] ]
+
+            j = bisect.bisect_right(self.exons, r.exons[0][0])-1
+            readExons[r.NH][j] += [len(self.unspliced) - i - 1]
+
+            # update coverage vector
+            if r.NH == 1:
+                for base in xrange(r.exons[0][0], r.exons[0][1]):
+                    coverages[r.NH][base] += 1
+            else:
+                coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.exons[0][1]-r.exons[0][0], 1)
+
+        
+        #cov = [0] * self.exons[-1]
+
+        #readExons = []
+        #for i in xrange(len(self.exons)-1):
+        #    readExons += [[]]
+        #for i in xrange(len(self.unspliced)):
+        #    r = self.unspliced[i]
+        #    j = bisect.bisect_right(self.exons, r.exons[0][0])-1
+        #    readExons[j] += [i]
+
+        #    # update coverage vector
+        #    for base in xrange(r.exons[0][0], r.exons[0][1]):
+        #        cov[base] += 1
+        
+
+        with open(filename, 'w') as f:
+            for NH in readExons.keys():
+                f.write('#' + str(NH) + '\n')
+
+                cov = coverages[NH]
+                reads = readExons[NH]
+
+                # Write coverage vector
+                if NH == 1:
+                    self.RLE(cov, f)
+                else:
+                    for c in cov:
+                        if c[1] == 1:
+                            f.write(str(c[0]) + '\n')
+                        else:
+                            f.write(str(c[0]) + '\t' + str(c[1]) + '\n')
+
+                # Write lengths for each exon
+                for i in xrange(len(reads)):
+                    if len(reads[i]) > 0:
+                        length = self.exons[i+1] - self.exons[i]
+
+                        exonStart = self.exons[i]
+
+                        # Distribution of all read lengths
+                        readLens = dict()
+
+                        # Distribution of all gap lengths in paired-end reads
+                        lensLeft = dict()
+                        lensRight = dict()
+
+                        for readId in reads[i]:
+                            read = self.unspliced[readId]
+
+                            alignment = read.exons
+
+                            start = alignment[0][0] - exonStart
+                            end = alignment[0][1] - exonStart
+
+                            # update read lengths distribution
+                            length = end - start
+                            if length in readLens:
+                                readLens[length] += 1
+                            else:
+                                readLens[length] = 1
+
+                            # update left and right read lengths
+                            if read.lenLeft > 0 or read.lenRight > 0:
+                                #if NH > 1:
+                                #    print str(NH) + ', ' + str(self.exons[i]) + '-' + str(self.exons[i+1])
+                                if read.lenLeft in lensLeft:
+                                    lensLeft[read.lenLeft] += 1
+                                else:
+                                    lensLeft[read.lenLeft] = 1
+
+                                if read.lenRight in lensRight:
+                                    lensRight[read.lenRight] += 1
+                                else:
+                                    lensRight[read.lenRight] = 1
+
+                        # Write bounds
+                        f.write('>' + str(self.exons[i]) + '-' + str(self.exons[i+1]) + '\n')
+
+                        # Write read lengths
+                        f.write('\t'.join([str(k)+','+str(v) for k,v in readLens.items()]) + '\n')
+
+                        # Write left and right read lengths
+                        f.write('\t'.join([str(k)+','+str(v) for k,v in lensLeft.items()]) + '\n')
+                        f.write('\t'.join([str(k)+','+str(v) for k,v in lensRight.items()]) + '\n')
+
+
+        '''
+        # sort reads into exons
         readExons = []
         for i in xrange(len(self.exons)-1):
             readExons += [[]]
@@ -235,11 +307,8 @@ class Alignments:
             #    j += 1
             j = bisect.bisect_right(self.exons, r.exons[0][0])-1
             readExons[j] += [i]
-        time1 = time.time() - start
-        print 'Sorting time:\t%f' % time1
 
         with open(filename, 'w') as f:
-            startTime = time.time()
             for i in xrange(len(readExons)):
                 length = self.exons[i+1] - self.exons[i]
 
@@ -293,10 +362,7 @@ class Alignments:
 
                 # Write coverage vector
                 self.RLE(cov, f)
-
-
-            time1 = time.time() - startTime
-            print 'Writing time:\t%f' % time1
+        '''
         
 
     def expand(self, file_prefix):
@@ -373,7 +439,7 @@ class Alignments:
 
                                     readExons.append( [offsets[j]+juncOffset, end+juncOffset] ) 
 
-                                self.spliced.append(read.Read(self.getChromosome(readExons[0][0]), readExons, xs))
+                                self.spliced.append(read.Read(self.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
 
                             for p in paired:
                                 start = p[0][0]
@@ -423,12 +489,11 @@ class Alignments:
                                     readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
                                 self.paired.append(pairedread.PairedRead(self.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                                         self.getChromosome(readExonsB[0][0]), readExonsB))
+                                                                         self.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
 
                         # Start of a new junction
                         key = line[1:].rstrip().split('\t')
-                        junctionExons = [int(e) for e in key[:-1]]
-                        xs = key[-1]
+                        junctionExons = [int(e) for e in key[:-2]]
                         length = 0
                         for e in junctionExons:
                             length += self.exons[e+1] - self.exons[e]
@@ -437,6 +502,9 @@ class Alignments:
                         junc.readLens = None
                         junc.lensLeft = None
                         junc.lensRight = None
+
+                        junc.xs = key[-2]
+                        junc.NH = int(key[-1])
 
                     else:
                         if junc.readLens == None:
@@ -470,6 +538,7 @@ class Alignments:
                             val = int(row[0])
 
                             junc.coverage += [val] * length
+
 
             # process the final junction
             unpaired, paired = self.findReads(junc.readLens, junc.lensLeft, junc.lensRight, junc.coverage)
@@ -520,7 +589,7 @@ class Alignments:
 
                     readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                self.spliced.append(read.Read(self.getChromosome(readExons[0][0]), readExons, xs))
+                self.spliced.append(read.Read(self.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
 
             for p in paired:
                 start = p[0][0]
@@ -571,62 +640,51 @@ class Alignments:
                     readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
                 self.paired.append(pairedread.PairedRead(self.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                         self.getChromosome(readExonsB[0][0]), readExonsB ))
+                                                         self.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH ))
 
     def expandUnspliced(self, filename):
         ''' Expand a file containing compressed unspliced alignments
         '''
 
         with open(filename, "r") as f:
-            lineNum = 0
-            segmentNum = 0
+            NH = 1
             readLens = None
-            lensLeft = None
-            lensRight = None
-            coverage = []
-
-            # Read read lengths and coverage vector
+            exonStart = 0
+            exonEnd = 0
             for line in f:
-                if line[0] == '>':
-                    if not readLens == None and len(readLens) > 0:
+                if line[0] == '#':
+                    if (not readLens == None) and len(readLens) > 0:
 
-                        unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage)
-                        start = self.exons[segmentNum-1]
+                        #print '%d - %d' % (exonStart, exonEnd)
+                        #print readLens
+                        #print lensLeft
+                        #print lensRight
 
+                        # Process the final exon
+                        #exonStart = self.exons[exonId-1]
+                        #exonEnd = self.exons[exonId]
+
+                        unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
 
                         for r in unpaired:
-                            self.unspliced.append(read.Read(self.getChromosome(r[0]+start), [[r[0]+start, r[1]+start]]))
+                            self.unspliced.append(read.Read(self.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
 
                         for p in paired:
-                            self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+start), [[p[0][0]+start, p[0][1]+start]],   \
-                                                                     self.getChromosome(p[1][0]+start), [[p[1][0]+start, p[1][1]+start]] ))
+                            self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
+                                                                     self.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
+
+
+                    NH = int(line.rstrip()[1:])
 
                     lineNum = 0
-                    segmentNum += 1
-
+                    readLens = None
+                    lensLeft = None
+                    lensRight = None
                     coverage = []
+                    RLE_segment = True
+                    #exonId = 0
 
-                    # First line contains read lengths
-                    readLens = dict()
-                    for row in line[1:].rstrip().split('\t'):
-                        if len(row) > 0:
-                            readLen = row.split(',')
-                            readLens[int(readLen[0])] = int(readLen[1])
-                elif lineNum == 1:
-                    # Second line after '>' contains left read length distribution
-                    lensLeft = dict()
-                    if len(line.rstrip()) > 0:
-                        for length in line.rstrip().split('\t'):
-                            length = length.split(',')
-                            lensLeft[int(length[0])] = int(length[1])
-                elif lineNum == 2:
-                    # Third line after '>' contains right read length distribution
-                    lensRight = dict()
-                    if len(line.rstrip()) > 0:
-                        for length in line.rstrip().split('\t'):
-                            length = length.split(',')
-                            lensRight[int(length[0])] = int(length[1])
-                else:
+                elif RLE_segment and not line[0] == '>':
                     # Rest of lines contain run-length-encoded coverage vector
                     row = line.rstrip().split("\t")
 
@@ -637,18 +695,75 @@ class Alignments:
 
                     coverage += [int(row[0])] * length
 
+                elif line[0] == '>':
+                    RLE_segment = False
+                    if (not readLens == None) and len(readLens) > 0:
+
+                        #print '%d - %d' % (exonStart, exonEnd)
+                        #print readLens
+                        #print lensLeft
+                        #print lensRight
+
+                        # Process previous exon
+                        #exonStart = self.exons[exonId-1]
+                        #exonEnd = self.exons[exonId]
+
+                        unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+
+                        for r in unpaired:
+                            self.unspliced.append(read.Read(self.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
+
+                        for p in paired:
+                            self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
+                                                                     self.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH ))
+                    #exonId += 1
+                    lineNum = 0
+                    bounds = line[1:].rstrip().split('-')
+                    exonStart = int(bounds[0])
+                    exonEnd = int(bounds[1])
+
+                elif lineNum == 1:
+                    # First line after '>' contains read lengths
+                    readLens = dict()
+                    for row in line.rstrip().split('\t'):
+                        if len(row) > 0:
+                            readLen = row.split(',')
+                            readLens[int(readLen[0])] = int(readLen[1])
+                elif lineNum == 2:
+                    # Second line after '>' contains left read length distribution
+                    lensLeft = dict()
+                    if len(line.rstrip()) > 0:
+                        for length in line.rstrip().split('\t'):
+                            length = length.split(',')
+                            lensLeft[int(length[0])] = int(length[1])
+                elif lineNum == 3:
+                    # Third line after '>' contains right read length distribution
+                    lensRight = dict()
+                    if len(line.rstrip()) > 0:
+                        for length in line.rstrip().split('\t'):
+                            length = length.split(',')
+                            lensRight[int(length[0])] = int(length[1])
                 lineNum += 1
 
+            # Process the final exon
+            if (not readLens == None) and len(readLens) > 0:
 
-            unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage)
-            start = self.exons[segmentNum-1]
+                #print '%d - %d' % (exonStart, exonEnd)
+                #print readLens
+                #print lensLeft
+                #print lensRight
 
-            for r in unpaired:
-                self.unspliced.append(read.Read(self.getChromosome(r[0]+start), [[r[0]+start, r[1]+start]]))
+                #exonStart = self.exons[exonId-1]
+                #exonEnd = self.exons[exonId]
 
-            for p in paired:
-                self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+start), [[p[0][0]+start, p[0][1]+start]],   \
-                                                         self.getChromosome(p[1][0]+start), [[p[1][0]+start, p[1][1]+start]]))
+                unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+
+                for r in unpaired:
+                    self.unspliced.append(read.Read(self.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
+
+                for p in paired:
+                    self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
+                                                             self.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
 
     def finalizeExons(self):
         ''' Convert the set of exon boundaries to a list
@@ -771,7 +886,7 @@ class Alignments:
             while n < len(pair.exonIdsB) and pair.exonIdsB[n] <= pair.exonIdsA[-1]:
                 n += 1
 
-            ## Fix this problem with exons not matching
+            ## TODO: Fix this problem with exons not matching
             if n > 0 and not pair.exonIdsA[-n:] == pair.exonIdsB[:n]:
                 continue
 
@@ -873,8 +988,8 @@ class Alignments:
         sumCov = sum(coverage)
         '''
 
-        #reads = self.findReadsInCoverage_v1(coverage, readLens, boundaries)
-        reads = self.findReadsInCoverage_v2(coverage, readLens, boundaries)
+        reads = self.findReadsInCoverage_v1(coverage, readLens, boundaries)
+        #reads = self.findReadsInCoverage_v2(coverage, readLens, boundaries)
         #reads = self.findReadsInCoverage_v3(coverage, readLens, boundaries)
 
         '''
@@ -946,10 +1061,17 @@ class Alignments:
             boundaries = [0, len(coverage)]
         else:
             boundaries = list(boundaries)
+        if not len(boundaries) == 2:
+            print '%d boundaries' % len(boundaries)
         boundBottom = 0
         boundTop = len(boundaries)-1
 
         lens = readLens.keys()
+
+        #if len(lens) == 0:
+        #    self.RLE(coverage, sys.stdout)
+        #    print 'Read lens: ' + str(readLens)
+        #    exit()
 
         # Find max and mode read lengths
         maxLen = max(lens)
@@ -980,6 +1102,11 @@ class Alignments:
             currMaxLen = maxLen
 
             closestEndpoint = None
+            #if len(coverage) == 391:
+            #    print '  Read lens: ' + str(readLens)
+            #    print maxLen
+            #    print len(lens)
+            #    print '  (%d, %d)' % (1,min(maxLen+1, boundaries[boundBottom]-start))
             for length in xrange(1, min(maxLen+1, boundaries[boundBottom]-start)):
                 if (readStart+length == end) or (readStart+length < end and coverage[readStart + length] < coverage[readStart + length - 1]):
                     if length in readLens:
@@ -1012,8 +1139,18 @@ class Alignments:
                     break
             if readEnd == readStart:
                 if closestEndpoint == None:
-                    length = lensSorted[0]
+                    lenId = 0
+                    length = lensSorted[lenId]
                     readEnd = readStart + length
+
+                    while readEnd > len(coverage) and lenId < (len(lensSorted)-1):
+                        lenId += 1
+                        length = lensSorted[lenId]
+                        readEnd = readStart + length
+                    if readEnd > len(coverage):
+                        # No read lengths fit within the end of the vector
+                        readEnd = len(coverage)
+
                     reads.append([readStart, readEnd])
 
                     if length in readLens:
@@ -1036,6 +1173,7 @@ class Alignments:
                     reads.append([readStart, readEnd])
 
             # Update coverage vector
+            #print '(%d,%d) / %d' % (readStart, readEnd, len(coverage))
             for i in xrange(readStart, readEnd):
                 coverage[i] -= 1
 
@@ -1686,6 +1824,16 @@ class Alignments:
             else:
                 index -= self.chromosomes[c]
 
+    def getChromosomeAndIndex(self, index):
+        ''' Return chromosome name containing the given index from the whole-genome vector
+        '''
+
+        for c in self.chromosomes:
+            if self.chromosomes[c] > index:
+                return c, index
+            else:
+                index -= self.chromosomes[c]
+
     def insertInOrder(sortedList, a):
         ''' Insert a in the correct place in a sorted list in increasing order
         '''
@@ -1740,6 +1888,11 @@ class Alignments:
 
                 xs = read.xs or match.xs
 
+                if not read.NH == match.NH:
+                    print 'Error! NH values do not match (%d, %d)' % (read.NH, match.NH)
+                    exit()
+                NH = read.NH
+
                 # update list of exons
                 alignment = match.exons
                 if len(alignment) > 1:
@@ -1753,7 +1906,7 @@ class Alignments:
                         self.exons.add(alignment[i][1])
                         self.exons.add(alignment[i+1][0])
 
-                self.paired.append(pairedread.PairedRead(pair_chrom, match.exons, read.chrom, read.exons, xs))
+                self.paired.append(pairedread.PairedRead(pair_chrom, match.exons, read.chrom, read.exons, xs, NH))
             else:
                 if not (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
                     self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
@@ -1820,12 +1973,13 @@ class Alignments:
     def writeSAM(self, filehandle):
         ''' Write all alignments to a SAM file
         '''
-
+        readId = 0
         for read in self.unspliced:
             exons = read.exons
             chrom = read.chrom
             offset = self.chromOffsets[chrom]
-            filehandle.write(chrom + '\t0\t' + read.chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + str(exons[0][1]-exons[0][0]) + 'M\t*\t0\t0\t*\t*\n')
+            filehandle.write(read.chrom+':'+str(readId) + '\t0\t' + read.chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + str(exons[0][1]-exons[0][0]) + 'M\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
+            readId += 1
 
         for read in self.spliced:
             exons = read.exons
@@ -1851,7 +2005,12 @@ class Alignments:
 
             chrom = read.chrom
             offset = self.chromOffsets[chrom]
-            filehandle.write(chrom + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\n')
+
+            if 'N' in cigar:
+                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\tNH:i:' + str(read.NH) + '\n')
+            else:
+                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
+            readId += 1
         
         for pair in self.paired:
             exonsA = pair.exonsA
@@ -1892,9 +2051,24 @@ class Alignments:
             chromB = pair.chromB
             offsetA = self.chromOffsets[chromA]
             if chromA == chromB:
-                filehandle.write(chromA + '\t0\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tXS:A:' + read.xs + '\n')
-                filehandle.write(chromB + '\t0\t' + chromA + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tXS:A:' + read.xs + '\n')
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                if 'N' in cigarA:
+                    filehandle.write('\tXS:A:' + read.xs)
+                filehandle.write('\n')
+
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromA + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                if 'N' in cigarB:
+                    filehandle.write('\tXS:A:' + read.xs)
+                filehandle.write('\n')
             else:
                 offsetB = self.chromOffsets[chromB]
-                filehandle.write(chromA + '\t0\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t' + str(totalLen) + '\t*\t*\tXS:A:' + read.xs + '\n')
-                filehandle.write(chromB + '\t0\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tXS:A:' + read.xs + '\n')
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                if 'N' in cigarA:
+                    filehandle.write('\tXS:A:' + read.xs)
+                filehandle.write('\n')
+
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                if 'N' in cigarB:
+                    filehandle.write('\tXS:A:' + read.xs)
+                filehandle.write('\n')
+            readId += 1

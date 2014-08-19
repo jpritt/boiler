@@ -25,8 +25,6 @@ class Transcript:
         if (not self.chrom == transcript.chrom) or (self.start > transcript.end) or (self.end < transcript.start):
             return 0
 
-        #print transcript.name
-
         thisMatches = []
         scores = []
         for i in xrange(len(self.exons)):
@@ -98,7 +96,7 @@ class Transcript:
 Compare a Cufflinks GTF file to the .pro output by flux
 '''
 
-def compareTripartite(proFile, truthGTF, compGTF1, compGTF2):
+def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
     # Read reference transcripts
     # file 1 is a .pro file output by flux
     transcriptsTruth = parsePro(proFile)
@@ -174,14 +172,53 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2):
     matches = 0
     score = 0.0
     threshold = 10
+
+    xs = []
+    ys = []
+
     for i in xrange(len(connectionsA)):
-        if len(connectionsA[i]) == 1 and len(connectionsB[i]) == 1:
-            matches += 1
-            score += transcriptsCompA[connectionsA[i][0]].scoreTranscript(transcriptsCompB[connectionsB[i][0]], threshold)
+        if strict:
+            # strict
+            if len(connectionsA[i]) == 1 and len(connectionsB[i]) == 1:
+                xs += [transcriptsCompA[connectionsA[i][0]].cov]
+                ys += [transcriptsCompB[connectionsB[i][0]].cov]
+
+                matches += 1
+                score += transcriptsCompA[connectionsA[i][0]].scoreTranscript(transcriptsCompB[connectionsB[i][0]], threshold)
+        
+        else:
+        # loose
+            if len(connectionsA[i]) > 0 and len(connectionsB[i]) > 0:
+                matches += 1
+                bestA = None
+                bestScoreA = 0
+                for j in connectionsA[i]:
+                    t = transcriptsCompA[j]
+                    currScore = t.scoreTranscript(transcriptsTruth[i], threshold)
+                    if currScore > bestScoreA:
+                        bestScoreA = currScore
+                        bestA = t
+
+                bestB = None
+                bestScoreB = 0
+                for j in connectionsB[i]:
+                    t = transcriptsCompB[j]
+                    currScore = t.scoreTranscript(transcriptsTruth[i], threshold)
+                    if currScore > bestScoreB:
+                        bestScoreB = currScore
+                        bestB = t
+
+                xs += [bestA.cov]
+                ys += [bestB.cov]
+
+                score += bestA.scoreTranscript(bestB, threshold)
+        
     print '%d / %d transcripts from file 1' % (matches, len(transcriptsCompA))
     print '%d / %d transcripts from file 2' % (matches, len(transcriptsCompB))
     print 'Score: %f' % (score / matches)
 
+    plt.scatter(xs, ys)
+    plt.show()
 
 
 def parsePro(filename):
@@ -232,7 +269,8 @@ def buildGraph(transcriptsTrue, transcriptsPredictedA, transcriptsPredictedB):
                 bestScore = score
                 bestTranscript = j
 
-        refConnectionsA[bestTranscript] += [i]
+        if bestScore > 0:
+            refConnectionsA[bestTranscript] += [i]
 
     for i in xrange(len(transcriptsPredictedB)):
         t = transcriptsPredictedB[i]
@@ -244,8 +282,75 @@ def buildGraph(transcriptsTrue, transcriptsPredictedA, transcriptsPredictedB):
                 bestScore = score
                 bestTranscript = j
 
-        refConnectionsB[bestTranscript] += [i]
+        if bestScore > 0:
+            refConnectionsB[bestTranscript] += [i]
 
     return refConnectionsA, refConnectionsB
 
-compareTripartite(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+def scoreTranscripts(exons1, exons2, threshold):
+    thisMatches = []
+    scores = []
+    for i in xrange(len(exons1)):
+        e1 = exons1[i]
+        closest = 0
+        closestScore = 0
+
+        for j in xrange(len(exons2)):
+            e2 = exons2[j]
+            currScore = scoreExons(e1, e2, threshold)
+
+            if currScore > closestScore:
+                closestScore = currScore
+                closest = j
+
+        thisMatches.append(closest)
+        scores.append(closestScore)
+
+    otherMatches = []
+    for i in xrange(len(exons2)):
+        e1 = exons2[i]
+        closest = 0
+        closestScore = 0
+
+        for j in xrange(len(exons1)):
+            e2 = exons1[j]
+            currScore = scoreExons(e1, e2, threshold)
+
+            if currScore > closestScore:
+                closestScore = currScore
+                closest = j
+
+        otherMatches.append(closest)
+
+    totalScore = 0.0
+    count = len(thisMatches)
+    for i in xrange(len(thisMatches)):
+        if otherMatches[thisMatches[i]] == i:
+            totalScore += scores[i]
+    for i in xrange(len(otherMatches)):
+        if not thisMatches[otherMatches[i]] == i:
+            count += 1
+
+    return totalScore / float(count)
+
+def scoreExons(exon1, exon2, threshold):
+    ''' Returns a value between 0 and 1, where 1 indicates that the 2 exons are a perfect match and 0 indicates no match
+    '''
+
+    dx = min(abs(exon1[0] - exon2[0]), threshold)
+    dy = min(abs(exon1[1] - exon2[1]), threshold)
+
+    return 1 - dx / (2.0*threshold) - dy / (2.0*threshold)
+
+ref_pro = sys.argv[1]
+ref_gtf = sys.argv[2]
+alignments1 = sys.argv[3]
+alignments2 = sys.argv[4]
+
+strict = True
+if int(sys.argv[5]) == 0:
+    strict = False
+    print 'Comparing tripartite loose'
+else:
+    print 'Comparing tripartite strict'
+compareTripartite(ref_pro, ref_gtf, alignments1, alignments2, strict)

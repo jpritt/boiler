@@ -2,16 +2,36 @@
 import sys
 import argparse
 import genome
+import compressedAlignment
 import time
 
-def read_chromosome_info(chrom_info):
-    ''' Read chromosome names and lengths from the given file
-    '''
-    chromosome_info = []
-    for line in chrom_info:
-        row = line.rstrip().split('\t')
-        chromosome_info.append([row[0], int(row[1])])
-    return chromosome_info
+def getTrueCoverage(sam_file, chrom, start=None, end=None):
+    with open(sam_file, 'r') as f:
+        alignments = f.read().split('\n')
+        header = ''
+        for line in alignments:
+            if line[0] == '@':
+                header += line + '\n'
+            else:
+                break
+
+        chromosomes = dict()
+        for line in header.split('\n'):
+            if line[0:3] == '@SQ':
+                row = line.strip().split('\t')
+                chromosomes[row[1][3:]] = int(row[2][3:])
+
+        if start == None:
+            start = 0
+        if end == None:
+            end = len(chromosomes[chrom])
+
+        coverage = [0] * (end-start)
+
+        for row in alignments:
+            read = row.rstrip().split()
+            if read[2] == chrom:
+                
 
 if __name__ == '__main__':
     # Print file's docstring if -h is invoked
@@ -37,37 +57,23 @@ if __name__ == '__main__':
                 header += line + '\n'
             else:
                 break
-           
+
         origGenome = genome.Genome(header)
         origGenome.parseAlignments(alignments)
     end = time.time()
     parseTime = end-start
     print '%fs' % parseTime
 
+
     sys.stdout.write('Compressing... ')
     start = time.time()
-
     file_prefix = 'compressed/compressed'
     origGenome.compress(file_prefix)
-
     end = time.time()
     compressTime = end-start
     print '%fs' % compressTime
+
+    sys.stdout.write('Querying...')
+    compressed = compressedAlignment.CompressedAlignment(header, 'compressed/compressed.spliced.txt', 'compressed/compressed.unspliced.txt')
+
     
-
-    #compress.compressReads(alignments, chr_info, 'compressed')
-
-    #origGenome.writeSAM('minimal.sam')
-    sys.stdout.write('Expanding... ')
-
-    file_prefix = 'compressed/compressed'
-
-    genomeExpanded = genome.Genome(header)
-    start = time.time()
-    genomeExpanded.expand(file_prefix)
-    end = time.time()
-    expandTime = end-start
-    print '%fs' % expandTime
-    
-    genomeExpanded.writeSAM('expanded.sam')
-

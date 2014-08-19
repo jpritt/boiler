@@ -166,6 +166,9 @@ def parsePro(filename):
             start = int(row[0][sep1+1:sep2])
             end = int(row[0][sep2+1:sep3])
             fraction = float(row[8])
+            #cov = float(row[7])
+            #if cov > 0:
+            #    fraction = float(row[11]) / cov
 
             if fraction > threshold:
                 transcripts[tag] = Transcript(chrom, start, end, fraction, tag)
@@ -176,20 +179,14 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     ''' Compare 
     '''
     
-    totalScore = 0.0
     threshold = 10
 
 
+    totalScore1 = 0.0
     transcriptsTrueCount = 0
     line = 0
     for t1 in transcriptsTrue:
         line += 1
-        #if line % 1000 == 0:
-        #    print "%d / %d transcripts done" % (line, len(transcriptsTrue))
-
-#        if t1.cov < .000001:
-#            continue
-
 
         closestScore = 0.0
         closestT = None
@@ -200,32 +197,50 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        '''
-        if closestT == None:
-            print '%s\t%s\t\t%f' % (t1.name, closestT, closestScore)
-        else:
-            print '%s\t%s\t%f' % (t1.name, closestT.name, closestScore)
-        '''
-
         if closestScore > 0:
-            totalScore += closestScore
-        transcriptsTrueCount += 1
+            totalScore1 += closestScore * t1.cov
+            #totalScore1 += closestScore
+        transcriptsTrueCount += t1.cov
+        #transcriptsTrueCount += 1
+        
 
-    transcriptsPredictedCount = len(transcriptsPredicted)
+    #transcriptsPredictedCount = len(transcriptsPredicted)
+    totalScore2 = 0.0
+    transcriptsPredictedCount = 0
+    line = 0
+    for t1 in transcriptsPredicted:
+        line += 1
 
-    print "%d transcripts in file 1" % transcriptsTrueCount
-    print "%d transcripts in file 2" % transcriptsPredictedCount
+        closestScore = 0.0
+        closestT = None
+        
+        for t2 in transcriptsTrue:
+            score = t1.scoreTranscript(t2, threshold)
+            if score > closestScore:
+                closestScore = score
+                closestT = t2
+        
+        if closestScore > 0:
+            totalScore2 += closestScore * t1.cov
+            #totalScore2 += closestScore
+        transcriptsPredictedCount += t1.cov
+        #transcriptsPredictedCount += 1
+        
 
-    recall = float(totalScore) / float(transcriptsTrueCount)
-    print 'TP = ' + str(totalScore)
+
+    #print "%d transcripts in file 1" % transcriptsTrueCount
+    #print "%d transcripts in file 2" % transcriptsPredictedCount
+
+    recall = float(totalScore1) / float(transcriptsTrueCount)
+    print 'TP = ' + str(totalScore1)
     print 'T  = ' + str(transcriptsTrueCount)
     print 'Recall    = TP/T = ' + str(recall)
 
 
-    precision = float(totalScore) / float(transcriptsPredictedCount)
-    print 'TP = ' + str(totalScore)
+    precision = float(totalScore2) / float(transcriptsPredictedCount)
+    print 'TP = ' + str(totalScore2)
     print 'P  = ' + str(transcriptsPredictedCount)
-    print 'Recall    = TP/T = ' + str(precision)
+    print 'Precision = TP/T = ' + str(precision)
 
     '''
     scatterX = []
