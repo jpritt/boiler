@@ -30,18 +30,12 @@ def filterByLength(inputFile, outputFile, filterLength):
 
                     #if totalLength == filterLength:
                     if True:
-                        fout.write(row[0] + '\t' + row[1] + '\t' + '\t'.join(row[2:11]))
-                        #fout.write('\t'.join(row[:11]))
-
-                        #if str(row[7]) == 0 and str(row[8]) == 0:
-                        #    fout.write('\tXS:A:+')
-                        #else:
+                        fout.write(row[0] + '\t' + '0' + '\t' + row[2] + '\t' + row[3] + '\t0\t' + row[5] + '\t' + row[6] + '\t' + row[7] + '\t' + row[8] + '\t*\t*')
+                        
                         for x in row[11:]:
     	                    if x[:3] == 'XS:':
         	                    fout.write('\tXS:A:+')
-                                #    #fout.write('\t' + x)
-                                #if not (x[:3] == 'NH:' or x[:3] == 'CC:' or x[:3] == 'CP:' or x[:3] == 'HI:'):
-                            else:
+                            elif x[:3] == 'NH:':
                                 fout.write('\t' + x)
                         fout.write('\n')
 

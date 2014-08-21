@@ -7,6 +7,13 @@ class Junction:
     lensLeft = None
     lensRight = None
     coverage = []
+    NH = 1
+
+class Chromosome:
+    # RLE coverage vector
+    coverage = []
+    NH = 1
+
 
 class CompressedAlignment:
     '''
@@ -38,19 +45,21 @@ class CompressedAlignment:
                     if line[0] == '>':
                         if not junc == None:
                             self.junctions.append(junc)
-                            
+
                         # Start of a new junction
                         key = line[1:].rstrip().split('\t')
-                        junctionExons = [int(e) for e in key[:-1]]
-                        xs = key[-1]
+                        junctionExons = [int(e) for e in key[:-2]]
                         length = 0
                         for e in junctionExons:
                             length += self.exons[e+1] - self.exons[e]
 
-                        junc = junction.Junction(junctionExons, length)
+                        junc = Junction()
                         junc.readLens = None
                         junc.lensLeft = None
                         junc.lensRight = None
+
+                        #junc.xs = key[-2]
+                        junc.NH = int(key[-1])
 
                     else:
                         if junc.readLens == None:
@@ -85,59 +94,30 @@ class CompressedAlignment:
 
                             junc.coverage += [val] * length
 
+
             # process the final junction
             self.junctions.append(junc)
 
         with open(unspliced, 'r') as f:
-            lineNum = 0
-            segmentNum = 0
-            readLens = None
-            lensLeft = None
-            lensRight = None
-            coverage = []
-
-            # Read read lengths and coverage vector
+            NH = 1
+            readLens = dict()
+            exonStart = 0
+            exonEnd = 0
             for line in f:
-                if line[0] == '>':
-                    if not readLens == None and len(readLens) > 0:
+                if line[0] == '#':
+                    # process last chromosome
 
-                        unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage)
-                        start = self.exons[segmentNum-1]
-
-
-                        for r in unpaired:
-                            self.unspliced.append(read.Read(self.getChromosome(r[0]+start), [[r[0]+start, r[1]+start]]))
-
-                        for p in paired:
-                            self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+start), [[p[0][0]+start, p[0][1]+start]],   \
-                                                                     self.getChromosome(p[1][0]+start), [[p[1][0]+start, p[1][1]+start]] ))
+                    chrom = Chromosome()
+                    chrom.NH = int(line.rstrip()[1:])
 
                     lineNum = 0
-                    segmentNum += 1
-
-                    coverage = []
-
-                    # First line contains read lengths
                     readLens = dict()
-                    for row in line[1:].rstrip().split('\t'):
-                        if len(row) > 0:
-                            readLen = row.split(',')
-                            readLens[int(readLen[0])] = int(readLen[1])
-                elif lineNum == 1:
-                    # Second line after '>' contains left read length distribution
                     lensLeft = dict()
-                    if len(line.rstrip()) > 0:
-                        for length in line.rstrip().split('\t'):
-                            length = length.split(',')
-                            lensLeft[int(length[0])] = int(length[1])
-                elif lineNum == 2:
-                    # Third line after '>' contains right read length distribution
                     lensRight = dict()
-                    if len(line.rstrip()) > 0:
-                        for length in line.rstrip().split('\t'):
-                            length = length.split(',')
-                            lensRight[int(length[0])] = int(length[1])
-                else:
+                    coverage = []
+                    RLE_segment = True
+
+                elif RLE_segment and not line[0] == '>':
                     # Rest of lines contain run-length-encoded coverage vector
                     row = line.rstrip().split("\t")
 
@@ -148,7 +128,57 @@ class CompressedAlignment:
 
                     coverage += [int(row[0])] * length
 
+                elif line[0] == '>':
+                    RLE_segment = False
+                    if len(readLens) > 0:
+                        # Process previous exon
+                        unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+
+                        for r in unpaired:
+                            self.unspliced.append(read.Read(self.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
+
+                        for p in paired:
+                            self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
+                                                                     self.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH ))
+                    #exonId += 1
+                    lineNum = 0
+                    bounds = line[1:].rstrip().split('-')
+                    exonStart = int(bounds[0])
+                    exonEnd = int(bounds[1])
+
+                elif lineNum == 1:
+                    # First line after '>' contains read lengths
+                    readLens = dict()
+                    for row in line.rstrip().split('\t'):
+                        if len(row) > 0:
+                            readLen = row.split(',')
+                            readLens[int(readLen[0])] = int(readLen[1])
+                elif lineNum == 2:
+                    # Second line after '>' contains left read length distribution
+                    lensLeft = dict()
+                    if len(line.rstrip()) > 0:
+                        for length in line.rstrip().split('\t'):
+                            length = length.split(',')
+                            lensLeft[int(length[0])] = int(length[1])
+                elif lineNum == 3:
+                    # Third line after '>' contains right read length distribution
+                    lensRight = dict()
+                    if len(line.rstrip()) > 0:
+                        for length in line.rstrip().split('\t'):
+                            length = length.split(',')
+                            lensRight[int(length[0])] = int(length[1])
                 lineNum += 1
+
+            # Process the final exon
+            if len(readLens) > 0:
+                unpaired, paired = self.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+
+                for r in unpaired:
+                    self.unspliced.append(read.Read(self.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
+
+                for p in paired:
+                    self.paired.append(pairedread.PairedRead(self.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
+                                                             self.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
 
     def getChromosome(self, index):
         ''' Return chromosome name containing the given index from the whole-genome vector
@@ -166,9 +196,9 @@ class CompressedAlignment:
         if not chrom in self.chromosomes:
             print 'Error! Chromosome name not recognized!'
             print 'Chromosomes: ' + ', '.join(self.chromosomes.keys())
-            exit()
+            return []
 
-            coverage = []
+        coverage = []
         if start == None or end == None:
             start = 0
             end = len(self.chromosomes[chrom])
@@ -201,6 +231,33 @@ class CompressedAlignment:
                     indexInCov += self.exons[e+1] - self.exons[e]
 
         return coverage
+
+    def getCoverageFromRLE(RLE, start, end):
+        ''' Return the coverage vector expanded from the RLE vector between start and end.
+        '''
+        coverage = []
+
+        index = 0
+        offset = RLE[index][1]
+        while offset < start:
+            index += 1
+            offset += RLE[index][1]
+
+        coverage += [RLE[index][0]] * (min(offset, end) - start)
+
+        while offset < end:
+            index += 1
+            nextOffset = offset + RLE[index][1]
+
+            if nextOffset <= end:
+                coverage += [RLE[index][0]] * RLE[index][1]
+            else:
+                coverage += [RLE[index][0]] * (end - offset)
+
+            offset = nextOffset
+
+        print coverage
+
 
     def getAvgCoverage(chrom, start=None, end=None):
         ''' Return average coverage over the given interval

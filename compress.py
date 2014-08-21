@@ -54,13 +54,7 @@ if __name__ == '__main__':
     compressTime = end-start
     print '%fs' % compressTime
     
-
-    #compress.compressReads(alignments, chr_info, 'compressed')
-
-    #origGenome.writeSAM('minimal.sam')
     sys.stdout.write('Expanding... ')
-
-    file_prefix = 'compressed/compressed'
 
     genomeExpanded = genome.Genome(header)
     start = time.time()
