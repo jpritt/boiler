@@ -6,6 +6,7 @@ import re
 def filterByLength(inputFile, outputFile, filterLength):
     with open(inputFile, 'r') as fin:
         with open(outputFile, 'w') as fout:
+            i = 0
             for line in fin:
                 row = line.rstrip().split('\t')
 
@@ -30,7 +31,7 @@ def filterByLength(inputFile, outputFile, filterLength):
 
                     #if totalLength == filterLength:
                     if True:
-                        fout.write(row[0] + '\t' + '0' + '\t' + row[2] + '\t' + row[3] + '\t0\t' + row[5] + '\t' + row[6] + '\t' + row[7] + '\t' + row[8] + '\t*\t*')
+                        fout.write(str(i) + '\t' + '0' + '\t' + row[2] + '\t' + row[3] + '\t0\t' + row[5] + '\t' + row[6] + '\t' + row[7] + '\t' + row[8] + '\t*\t*')
                         
                         for x in row[11:]:
     	                    if x[:3] == 'XS:':
@@ -38,6 +39,7 @@ def filterByLength(inputFile, outputFile, filterLength):
                             elif x[:3] == 'NH:':
                                 fout.write('\t' + x)
                         fout.write('\n')
+                i += 1
 
 
 ''' Usage: ./filterByLength input.sam output.sam length
