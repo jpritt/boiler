@@ -28,34 +28,53 @@ class Compressor:
 
         with open(samFilename, 'r') as f:
             self.parseAlignments(f)
-        
-        with open(compressedFilename, 'w') as f:
-            if len(self.aligned.spliced) > 0:
-                self.compressSpliced(f)
 
-            f.write('/\n')
 
-            if len(self.aligned.unspliced) > 0:
-                self.compressUnspliced(f)
+        if binary:
+            import shelve
+            f = shelve.open(compressedFilename, 'n', 2)
 
-        # Write exons and index information
-        compressed = None
-        with open(compressedFilename, 'r') as f:
-            compressed = f.read()
-        with open(compressedFilename, 'w') as f:
-            chroms = []
-            for k,v in self.aligned.chromosomes.items():
-                chroms.append(str(k)+','+str(v))
-            f.write('\t'.join(chroms) + '\n')
+            f['chroms'] = self.aligned.chromosomes
+            f['exons'] = self.aligned.exons
 
-            f.write('\t'.join([str(e) for e in self.aligned.exons]) + '\n')
+            self.compressSpliced(f, binary)
+            self.compressUnspliced(f, binary)
 
-            f.write('#' + '\t' + '\t'.join([str(i) for i in self.splicedIndex]) + '\n')
+            f.close()
 
-            for k,v in self.unsplicedIndex.items():
-                f.write('#' + str(k) + '\t' + '\t'.join([str(i) for i in v]) + '\n')
+        else:
+            with open(compressedFilename, 'w') as f:
+                if len(self.aligned.spliced) > 0:
+                    self.compressSpliced(f)
 
-            f.write(compressed)
+                f.write('/\n')
+
+                if len(self.aligned.unspliced) > 0:
+                    self.compressUnspliced(f)
+
+            # Write exons and index information
+            compressed = None
+            with open(compressedFilename, 'r') as f:
+                compressed = f.read()
+            with open(compressedFilename, 'w') as f:
+                chroms = []
+                for k,v in self.aligned.chromosomes.items():
+                    chroms.append(str(k)+','+str(v))
+                f.write('\t'.join(chroms) + '\n')
+
+                f.write('\t'.join([str(e) for e in self.aligned.exons]) + '\n')
+                f.write('#' + '\t' + '\t'.join([str(i) for i in self.splicedIndex]) + '\n')
+
+                for k,v in self.unsplicedIndex.items():
+                    f.write('#' + str(k))
+                    for i in xrange(len(v[0])):
+                        if v[1][i] == 0:
+                            f.write('\t' + str(v[0][i]))
+                        else:
+                            f.write('\t' + str(v[0][i]) + ',' + str(v[1][i]))
+                    f.write('\n')
+
+                f.write(compressed)
 
     def compressSpliced(self, filehandle, binary=False):
         ''' Compress the spliced alignments to a single file
@@ -135,38 +154,43 @@ class Compressor:
                     j.lensRight[r.lenRight] = 1
 
         # Write junction information
-        #for key in sorted(junctions.keys(), key=lambda x: min([int(n) for n in x.split('\t')[:-2]])):
-        for key in sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]]):
-            # get offset in file
-            offset = filehandle.tell()
-            exons = [int(e) for e in key.split('\t')[:-2]]
-            for e in exons:
-                if self.splicedIndex[e] == -1:
-                    self.splicedIndex[e] = offset
+        if not binary:
+            #for key in sorted(junctions.keys(), key=lambda x: min([int(n) for n in x.split('\t')[:-2]])):
+            for key in sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]]):
+                # get offset in file
+                offset = filehandle.tell()
+                exons = [int(e) for e in key.split('\t')[:-2]]
+                for e in exons:
+                    if self.splicedIndex[e] == -1:
+                        self.splicedIndex[e] = offset
 
-            junc = junctions[key]
+                junc = junctions[key]
 
-            # write junction information
-            filehandle.write('>' + key + '\n')
+                # write junction information
+                filehandle.write('>' + key + '\n')
 
-            # write read lengths
-            filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.readLens.items()] ) + '\n')
+                # write read lengths
+                filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.readLens.items()] ) + '\n')
 
-            # Write left and right read lengths
-            filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensLeft.items()]) + '\n')
-            filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensRight.items()]) + '\n')
+                # Write left and right read lengths
+                filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensLeft.items()]) + '\n')
+                filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensRight.items()]) + '\n')
 
-            # write coverage
-            self.writeRLE(junc.coverage, filehandle)
+                # write coverage
+                self.writeRLE(junc.coverage, filehandle)
+        else:
+            filehandle['juncs'] = sorted(junctions.keys(), key=lambda x: min([int(n) for n in x.split('\t')[:-2]]))
+            for key, junc in junctions.items():
+                filehandle[key + 'reads'] = junc.readLens
+                filehandle[key + 'left'] = junc.lensLeft
+                filehandle[key + 'right'] = junc.lensRight
+                filehandle[key + 'cov'] = self.RLE(junc.coverage)
 
     def compressUnspliced(self, filehandle, binary=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
         '''
-
-        sectionLen = 100000
-        breakpoints = range(0, self.aligned.exons[-1], sectionLen)
 
         # For each NH value and for each exon, store the byte offset in the file for the given exon in the coverage vector
         self.unsplicedIndex = dict()
@@ -210,55 +234,48 @@ class Compressor:
                     coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.lenLeft, 1)
                     coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-r.lenRight, r.lenRight, 1)
 
+        if binary:
+            filehandle['NHs'] = [str(nh) for nh in readExons.keys()]
+
         for NH in readExons.keys():
             cov = coverages[NH]
             reads = readExons[NH]
 
-            filehandle.write('#' + str(NH) + '\n')
+            if not binary:
+                filehandle.write('#' + str(NH) + '\n')
 
-            # Write coverage vector
-            if NH == 1:
-                offsets = [0] * len(breakpoints)
-                #for i in xrange(len(self.aligned.exons)-1):
-                #    offsets[i] = filehandle.tell()
-                #    self.writeRLE(cov[self.aligned.exons[i]:self.aligned.exons[i+1]], filehandle)
-                for i in xrange(len(breakpoints)-1):
-                    offsets[i] = filehandle.tell()
-                    self.writeRLE(cov[breakpoints[i]:breakpoints[i+1]], filehandle)
-                offsets[-1] = filehandle.tell()
-                self.writeRLE(cov[breakpoints[-1]:], filehandle)
+                # Write coverage vector
+                if NH == 1:
+                    line, offsetInLine = self.writeRLE(cov, filehandle, self.aligned.exons)
+                    self.unsplicedIndex[NH] = (line, offsetInLine)
+                else:
+                    line = [-1] * len(self.aligned.exons)
+                    offsetInLine = [0] * len(self.aligned.exons)
+                    exonId = 0
+                    baseId = 0
+                    numExons = len(self.aligned.exons)
 
-                self.unsplicedIndex[NH] = offsets
-            else:
-                offsets = [0] * len(breakpoints)
+                    for c in cov:
+                        while exonId < numExons and self.aligned.exons[exonId] < baseId + c[1]:
+                            line[exonId] = filehandle.tell()
+                            offsetInLine[exonId] = self.aligned.exons[exonId] - baseId
+                            exonId += 1
 
-                pos = 0
-                currBreakpoint = 0
-                for c in cov:
-                    if breakpoints[currBreakpoint] == pos:
-                        offsets[currBreakpoint] = filehandle.tell()
-                        currBreakpoint += 1
-
-                    segmentEnd = pos+c[1]
-                    while currBreakpoint < len(breakpoints) and breakpoints[currBreakpoint] < segmentEnd:
-                        length = breakpoints[currBreakpoint] - pos
-                        if length == 1:
+                        if c[1] == 1:
                             filehandle.write(str(c[0]) + '\n')
                         else:
-                            filehandle.write(str(c[0]) + '\t' + str(length) + '\n')
-                        c[1] -= length
-                        pos += length
-                        offsets[currBreakpoint] = filehandle.tell()
-                        currBreakpoint += 1
+                            filehandle.write(str(c[0]) + '\t' + str(c[1]) + '\n')
 
-                    if c[1] == 1:
-                        filehandle.write(str(c[0]) + '\n')
-                    else:
-                        filehandle.write(str(c[0]) + '\t' + str(c[1]) + '\n')
-                    pos += c[1]
-                offsets[-1] = filehandle.tell()
+                        baseId += c[1]
 
-                self.unsplicedIndex[NH] = offsets
+                    self.unsplicedIndex[NH] = (line, offsetInLine)
+            else:
+                key = str(NH)
+                # Write coverage vector
+                if NH == 1:
+                    filehandle[key + 'cov'] = self.RLE(cov)
+                else:
+                    filehandle[key + 'cov'] = cov
 
             # Write lengths for each exon
             for i in xrange(len(reads)):
@@ -304,14 +321,20 @@ class Compressor:
                                 lensRight[read.lenRight] = 1
 
                     # Write bounds
-                    filehandle.write('>' + str(i) + '\n')
+                    if not binary:
+                        filehandle.write('>' + str(i) + '\n')
 
-                    # Write read lengths
-                    filehandle.write('\t'.join([str(k)+','+str(v) for k,v in readLens.items()]) + '\n')
+                        # Write read lengths
+                        filehandle.write('\t'.join([str(k)+','+str(v) for k,v in readLens.items()]) + '\n')
 
-                    # Write left and right read lengths
-                    filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensLeft.items()]) + '\n')
-                    filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensRight.items()]) + '\n')
+                        # Write left and right read lengths
+                        filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensLeft.items()]) + '\n')
+                        filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensRight.items()]) + '\n')
+                    else:
+                        newKey = key + str(i)
+                        filehandle[newKey + 'reads'] = readLens
+                        filehandle[newKey + 'left'] = lensLeft
+                        filehandle[newKey + 'right'] = lensRight
 
     def parseAlignments(self, filehandle):
         ''' Parse a file in SAM format
@@ -454,7 +477,22 @@ class Compressor:
 
         return RLE
 
-    def writeRLE(self, vector, filehandle):
+    def writeRLE(self, vector, filehandle, exons=None):
+        '''
+            exons: If included, create an index storing the position in the file for each exon
+        '''
+
+        index = False
+        numExons = 0
+        if not exons == None:
+            index = True
+            numExons = len(exons)
+
+            line = [-1]*numExons
+            offsetInLine = [0]*numExons
+            exonId = 0
+            baseId = 0
+
         val = vector[0]
         length = 0
 
@@ -462,6 +500,15 @@ class Compressor:
             if v == val:
                 length += 1
             else:
+                if index:
+                    while exonId < numExons and exons[exonId] < baseId:
+                        line[exonId] = filehandle.tell()
+                        offsetInLine[exonId] = exons[exonId] - baseId + length
+                        if offsetInLine[exonId] < 0:
+                            print '%d, %d, %d' % (exons[exonId], baseId, length)
+                            exit()
+                        exonId += 1
+
                 if length == 1:
                     filehandle.write(str(val) + '\n')
                 else:
@@ -469,9 +516,22 @@ class Compressor:
                 val = v
                 length = 1
 
+            if index:
+                baseId += 1
+
+        if index:
+            while exonId < numExons and exons[exonId] < baseId:
+                line[exonId] = filehandle.tell()
+                offsetInLine[exonId] = exons[exonId] - baseId + length
+                if offsetInLine[exonId] < 0:
+                    print '%d, %d, %d' % (exons[exonId], baseId, length)
+                    exit()
+                exonId += 1
         if length == 1:
             filehandle.write(str(val) + '\n')
         else:
             filehandle.write(str(val) + '\t' + str(length) + '\n')
 
+        if index:
+            return line, offsetInLine
         

@@ -10,6 +10,9 @@ class ReadSAM:
     chromosomes = None
 
     def __init__(self, filename, chromosomes):
+        '''
+            Assumes SAM file is sorted
+        '''
         self.filename = filename
         self.chromosomes = chromosomes
 
@@ -19,7 +22,7 @@ class ReadSAM:
             end = self.chromosomes[chrom]
 
         with open(self.filename, 'r') as f:
-            coverage = [0] * (end-start)
+            coverage = [0.0] * (end-start)
 
             for line in f:
                 row = line.rstrip().split('\t')
@@ -34,15 +37,18 @@ class ReadSAM:
                     if readStart < end:
                         exons = self.parseCigar(cigar, readStart)
 
-                        NH = 1.0
-                        for s in row:
-                            if s[:5] == 'NH:i:':
-                                NH = 1.0 / float(s[5:])
+                        if exons[-1][1] > start:
+                            NH = 1.0
+                            for s in row:
+                                if s[:5] == 'NH:i:':
+                                    NH = 1.0 / float(s[5:])
 
-                        for e in exons:
-                            if e[0] < end and e[1] >= start:
-                                for i in xrange(max(start,e[0]), min(end,e[1])):
-                                    coverage[i-start] += NH
+                            for e in exons:
+                                if e[0] < end and e[1] >= start:
+                                    for i in xrange(max(start,e[0]), min(end,e[1])):
+                                        coverage[i-start] += NH
+                    else:
+                        return coverage
 
             return coverage
 

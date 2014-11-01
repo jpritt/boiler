@@ -58,6 +58,7 @@ class Alignments:
     def finalizeExons(self):
         ''' Convert the set of exon boundaries to a list
         '''
+
         self.exons = list(sorted(self.exons))
 
     def finalizeReads(self):
@@ -2079,6 +2080,7 @@ class Alignments:
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
         '''
+
         if read.exons == None:
             print 'Error! Read exons = None'
             exit()
@@ -2137,7 +2139,18 @@ class Alignments:
                                 self.exons.add(alignment[i][1])
                                 self.exons.add(alignment[i+1][0])
 
-                        self.paired.append(pairedread.PairedRead(pair_chrom, match.exons, read.chrom, read.exons, xs, NH))
+                        if self.conflicts(read.exons, match.exons):
+                            if len(read.exons) == 1:
+                                self.addUnspliced(read)
+                            else:
+                                self.addSpliced(read)
+
+                            if len(match.exons) == 1:
+                                self.addUnspliced(match)
+                            else:
+                                self.addSpliced(match)
+                        else:
+                            self.paired.append(pairedread.PairedRead(pair_chrom, match.exons, read.chrom, read.exons, xs, NH))
 
                         foundMatch = True
                         break
@@ -2149,25 +2162,33 @@ class Alignments:
                 else:
                     self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
 
+    def conflicts(self, exonsA, exonsB):
+        '''
+            Returns true if any of the exons from A or B overlaps one of the introns from the other set of exons
+        '''
+        for e in exonsB:
+            if e[0] > exonsA[-1][0]:
+                break
 
-    def RLE(self, vector, filehandle):
-        val = vector[0]
-        length = 0
+            for i in xrange(len(exonsA)-1):
+                if e[0] >= exonsA[-i-1][0]:
+                    break
+                elif e[1] > exonsA[-i-2][1]:
+                    return True
 
-        for v in vector:
-            if v == val:
-                length += 1
-            else:
-                if length == 1:
-                    filehandle.write(str(val) + '\n')
-                else:
-                    filehandle.write(str(val) + '\t' + str(length) + '\n')
-                val = v
-                length = 1
-        if length == 1:
-            filehandle.write(str(val) + '\n')
-        else:
-            filehandle.write(str(val) + '\t' + str(length) + '\n')
+        countA = len(exonsA)
+        for i in xrange(countA):
+            e = exonsA[countA-i-1]
+            if e[1] < exonsB[0][0]:
+                break
+
+            for i in xrange(len(exonsB)-1):
+                if e[1] <= exonsB[i][1]:
+                    break
+                elif e[1] > exonsB[i][1] and e[0] < exonsB[i+1][0]:
+                    return True
+
+        return False
 
     def writeSAM(self, filehandle):
         ''' Write all alignments to a SAM file
@@ -2194,18 +2215,8 @@ class Alignments:
                     prevLen = int(cigar[-1][:-1])
                     cigar[-1] = str(prevLen + exons[i][1] - exons[i][0]) + 'M'
                 else:
-
-                    ####
-                    if exons[i][1] == exons[i][0]:
-                        print exons
-                        exit()
-
                     cigar += [str(exons[i][0] - exons[i-1][1]) + 'N']
                     cigar += [str(exons[i][1] - exons[i][0]) + 'M']
-
-                    if exons[i][0] < exons[i-1][1]:
-                        print exons
-                        exit()
             cigar = ''.join(cigar)
 
             chrom = read.chrom

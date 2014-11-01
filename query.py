@@ -3,10 +3,11 @@ import sys
 import argparse
 
 import readSAM
-import readCompressed
+import expand
 import readPRO
 import time
 import re
+import random
 
 def parseCigar(cigar, offset):
     ''' Parse the cigar string starting at the given index of the genome
@@ -66,13 +67,55 @@ def go(args):
 
 
         sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
-        compressed = readCompressed.ReadCompressed(args['compressed'] + '.unspliced.txt', args['compressed'] + '.spliced.txt', chromosomes)
+        expander = expand.Expander()
         pro = readPRO.ReadPRO(args['pro'])
 
         #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
-        intervals = [['2L', None, None]]
+        intervals = [['3L', 100000, 200000]]
+        #intervals = [['2L', None, None]]
+
+        lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
+        chroms = ['2R', '2L', '3R', '3L', 'X']
+        chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
         
-        
+        for l in lens:
+            timeTrue = 0.0
+            timePred = 0.0
+
+            numIters = 10
+            for c in xrange(len(chroms)):
+                chrom = chroms[c]
+
+                for _ in xrange(numIters):
+                    start = random.randint(0, chromLens[c]-l)
+
+                    startTime = time.time()
+                    trueCov = sam.getCoverage(chrom, start, start+l)
+                    endTime = time.time()
+                    timeTrue += float(endTime - startTime)
+
+                    startTime = time.time()
+                    predCov = expander.getCoverage(args['compressed'], chrom, start, start+l)
+                    endTime = time.time()
+                    timePred += float(endTime - startTime)
+
+                    for x in xrange(len(trueCov)):
+                        if abs(trueCov[x] - predCov[x]) > 0.0001:
+                            print 'Error!'
+                            print '%s (%d, %d)' % (chrom, start, start+l)
+                            print x
+                            for n in xrange(x-3,x+3):
+                                print str(trueCov[n]) + '\t' + str(predCov[n])
+                            exit()
+
+            timeTrueAvg = timeTrue / float(numIters*len(chroms))
+            timePredAvg = timePred / float(numIters*len(chroms))
+            print 'Length %d:' % l
+            print '  SAM:        %0.3f s' % timeTrueAvg
+            print '  Compressed: %0.3f s' % timePredAvg
+
+        exit()
+
         print 'Querying coverage...'
         for i in intervals:
             chrom = i[0]
@@ -94,20 +137,22 @@ def go(args):
             print '%fs, %d bases (%f bases/s)' % (trueTime, length, float(length)/trueTime)
 
             startTime = time.time()
-            predCov = compressed.getCoverage(chrom, start, end)
+            predCov = expander.getCoverage(args['compressed'], chrom, start, end)
             endTime = time.time()
+            predTime = float(endTime - startTime)
+            print '%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime)
 
             correct = 0
             for x in xrange(len(trueCov)):
                 if abs(trueCov[x] - predCov[x]) < 0.0001:
                     correct += 1
-                #else:
-                #    for y in xrange(x-10, x+40):
-                #        print '%0.2f\t%0.2f' % (trueCov[y], predCov[y])
-                #    exit()
-            predTime = float(endTime - startTime)
-            print '%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime)
-            print '%0.3f correct' % (float(correct) / float(len(trueCov)))
+                elif x > 17300:
+                    print abs(trueCov[x]-predCov[x])
+                    print x
+                    for n in xrange(x-3,x+3):
+                        print str(trueCov[n]) + '\t' + str(predCov[n])
+                    exit()
+            print '%d wrong - %0.3f correct' % (len(trueCov)-correct, float(correct) / float(len(trueCov)))
             print ''
         
         '''
@@ -125,7 +170,7 @@ def go(args):
             trueGenes = pro.getGenes(chrom, start, end)
 
             startTime = time.time()
-            predGenes = compressed.getGenes(chrom, start, end)
+            predGenes = expander.getGenes(args['compressed'], chrom, start, end)
             endTime = time.time()
 
             correct = 0
@@ -142,6 +187,7 @@ def go(args):
             print predGenes[:10]
             print ''
         '''
+        
 def go_profile(args):
    pr = None
    if args['profile']:
