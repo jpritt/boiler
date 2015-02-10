@@ -65,6 +65,9 @@ class Alignments:
         ''' Now that all exon boundaries are known, fix unspliced regions that cross exon boundaries
             and finalized paired-end reads
         '''
+        loc = 78844331
+        starts = 0
+
 
         # Splice any regions of unspliced reads that cross exon boundaries
         x = 0
@@ -548,7 +551,7 @@ class Alignments:
         while i < j and starts[i] <= 0:
             i += 1
         while j > i and ends[j] <= 0:
-            j -= 1
+            j -= 1 
 
         if debug:
             print '%d, %d' % (i, j)
@@ -2115,12 +2118,11 @@ class Alignments:
 
             if (pair_index, pair_chrom, read.exons[0][0], read.chrom) in self.unmatched:
                 foundMatch = False
-                for match in self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)]:
+                for i in xrange(len(self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)])):
+                    match = self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][i]
+
                     if read.NH == match.NH:
-                        if len(self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)]) == 1:
-                            del self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)]
-                        else:
-                            del self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][0]
+                        del self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][i]
 
                         xs = read.xs or match.xs
 
@@ -2152,18 +2154,19 @@ class Alignments:
                         else:
                             self.paired.append(pairedread.PairedRead(pair_chrom, match.exons, read.chrom, read.exons, xs, NH))
 
+
                         foundMatch = True
                         break
                 if not foundMatch:
-                    if not (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
-                        self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
-                    else:
+                    if (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
                         self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
+                    else:
+                        self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
             else:
-                if not (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
-                    self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
-                else:
+                if (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
                     self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
+                else:
+                    self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
 
     def conflicts(self, exonsA, exonsB):
         '''

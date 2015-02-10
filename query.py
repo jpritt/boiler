@@ -67,14 +67,17 @@ def go(args):
 
 
         sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
+        #sam2 = readSAM.ReadSAM(args['pro'], chromosomes)
         expander = expand.Expander()
         pro = readPRO.ReadPRO(args['pro'])
 
-        #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
-        intervals = [['3L', 100000, 200000]]
-        #intervals = [['2L', None, None]]
+        intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
+        #intervals = [['3L', 24543840, 24543860]]
+        #intervals = [['3R', None, None]]
 
+        '''
         lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
+        #lens = [10000,100000]
         chroms = ['2R', '2L', '3R', '3L', 'X']
         chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
         
@@ -113,9 +116,9 @@ def go(args):
             print 'Length %d:' % l
             print '  SAM:        %0.3f s' % timeTrueAvg
             print '  Compressed: %0.3f s' % timePredAvg
-
-        exit()
-
+        '''
+        
+        '''
         print 'Querying coverage...'
         for i in intervals:
             chrom = i[0]
@@ -138,24 +141,41 @@ def go(args):
 
             startTime = time.time()
             predCov = expander.getCoverage(args['compressed'], chrom, start, end)
+            #predCov = sam2.getCoverage(chrom, start, end)
             endTime = time.time()
             predTime = float(endTime - startTime)
             print '%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime)
 
             correct = 0
+            trueBig = 0
+            predBig = 0
             for x in xrange(len(trueCov)):
+                
+                if trueCov[x] > predCov[x]+0.0001:
+                    trueBig += 1
+                elif predCov[x] > trueCov[x]+0.0001:
+                    predBig += 1
+                #print str(trueCov[x]) + '\t' + str(predCov[x])
+
+                
                 if abs(trueCov[x] - predCov[x]) < 0.0001:
                     correct += 1
-                elif x > 17300:
+                else:
                     print abs(trueCov[x]-predCov[x])
                     print x
                     for n in xrange(x-3,x+3):
                         print str(trueCov[n]) + '\t' + str(predCov[n])
                     exit()
+                
+                
+            #print trueBig
+            #print predBig
+            #exit()
             print '%d wrong - %0.3f correct' % (len(trueCov)-correct, float(correct) / float(len(trueCov)))
             print ''
-        
         '''
+        
+        
         print 'Querying genes...'
         for i in intervals:
             chrom = i[0]
@@ -170,23 +190,49 @@ def go(args):
             trueGenes = pro.getGenes(chrom, start, end)
 
             startTime = time.time()
+            origGenes = sam.getGenes(chrom, start, end)
+            endTime = time.time()
+            origTime = endTime - startTime
+
+            startTime = time.time()
             predGenes = expander.getGenes(args['compressed'], chrom, start, end)
             endTime = time.time()
+            predTime = endTime - startTime
+
+            print origGenes[:10]
+            print predGenes[:10]
 
             correct = 0
-            for i in trueGenes:
-                if i in predGenes:
+            for g in predGenes:
+                if g in origGenes:
                     correct += 1
+            print '%d / %d (%d)' % (correct, len(origGenes), len(predGenes))
 
+            '''
+            numEnclosed = 0
+            numSplit = 0
+            numNotFound = 0
+            for i in trueGenes:
+                enclosed = False
+                split = False
+                for j in predGenes:
+                    if i[0] >= j[0] and i[1] <= j[1]:
+                        enclosed = True
+                    elif i[0] < j[1] and i[1] > j[0]:
+                        split = True
+
+                if enclosed:
+                    numEnclosed += 1
+                elif split:
+                    numSplit += 1
+                else:
+                    numNotFound += 1
+            '''
             predTime = float(endTime - startTime)
             print '%0.3fs' % predTime
-            print '%d / %d of true genes were predicted' % (correct, len(trueGenes))
-            print '%d / %d of predicted genes were true' % (correct, len(predGenes))
-
-            print trueGenes[:10]
-            print predGenes[:10]
+            #print '%d correctly enclosed, %d split, %d not found' % (numEnclosed, numSplit, numNotFound)
             print ''
-        '''
+        
         
 def go_profile(args):
    pr = None

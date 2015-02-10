@@ -5,15 +5,18 @@ import read
 import pairedread
 import junction
 import bisect
+import cPickle as pickle
 
 class Compressor:
     aligned = None
 
-    def compress(self, samFilename, compressedFilename, binary=False):
+    def compress(self, samFilename, compressedFilename, binary=False, protocol=2):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
 
             file_prefix: Prefix for all output file names
         '''
+
+        self.protocol = protocol
 
         # Read header
         header = ''
@@ -29,33 +32,56 @@ class Compressor:
         with open(samFilename, 'r') as f:
             self.parseAlignments(f)
         
-        with open(compressedFilename, 'w') as f:
-            if len(self.aligned.spliced) > 0:
-                self.compressSpliced(f)
+        if binary:
+            #with open(compressedFilename, 'wb') as f:
+            with open('compressed/compressSpliced.txt', 'wb') as f:
+                if len(self.aligned.spliced) > 0:
+                    self.compressSpliced(f, binary)
 
-            f.write('/\n')
+            with open('compressed/compressUnspliced.txt', 'wb') as f:
+                if len(self.aligned.unspliced) > 0:
+                    self.compressUnspliced(f, binary)
+            exit()
+        else:
+            with open(compressedFilename, 'w') as f:
+                if len(self.aligned.spliced) > 0:
+                    self.compressSpliced(f, binary)
 
-            if len(self.aligned.unspliced) > 0:
-                self.compressUnspliced(f)
+                f.write('/\n')
+
+                if len(self.aligned.unspliced) > 0:
+                    self.compressUnspliced(f, binary)
 
         # Write exons and index information
-        compressed = None
-        with open(compressedFilename, 'r') as f:
-            compressed = f.read()
-        with open(compressedFilename, 'w') as f:
-            chroms = []
-            for k,v in self.aligned.chromosomes.items():
-                chroms.append(str(k)+','+str(v))
-            f.write('\t'.join(chroms) + '\n')
+        if binary:
+            compressed = None
+            with open(compressedFilename, 'rb') as f:
+                compressed = f.read()
+            with open(compressedFilename, 'wb') as f:
+                pickle.dump(self.aligned.chromosomes, f, self.protocol)
+                pickle.dump(self.aligned.exons, f, self.protocol)
+                pickle.dump(self.splicedIndex, f, self.protocol)
+                pickle.dump(self.unsplicedIndex, f, self.protocol)
 
-            f.write('\t'.join([str(e) for e in self.aligned.exons]) + '\n')
+                f.write(compressed)
+        else:
+            compressed = None
+            with open(compressedFilename, 'r') as f:
+                compressed = f.read()
+            with open(compressedFilename, 'w') as f:
+                chroms = []
+                for k,v in self.aligned.chromosomes.items():
+                    chroms.append(str(k)+','+str(v))
+                f.write('\t'.join(chroms) + '\n')
 
-            f.write('#' + '\t' + '\t'.join([str(i) for i in self.splicedIndex]) + '\n')
+                f.write('\t'.join([str(e) for e in self.aligned.exons]) + '\n')
 
-            for k,v in self.unsplicedIndex.items():
-                f.write('#' + str(k) + '\t' + '\t'.join([str(i) for i in v]) + '\n')
+                f.write('#' + '\t' + '\t'.join([str(i) for i in self.splicedIndex]) + '\n')
 
-            f.write(compressed)
+                for k,v in self.unsplicedIndex.items():
+                    f.write('#' + str(k) + '\t' + '\t'.join([str(i) for i in v]) + '\n')
+
+                f.write(compressed)
 
     def compressSpliced(self, filehandle, binary=False):
         ''' Compress the spliced alignments to a single file
@@ -135,6 +161,10 @@ class Compressor:
                     j.lensRight[r.lenRight] = 1
 
         # Write junction information
+        sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
+        if binary:
+            pickle.dump(sortedJuncs, filehandle, self.protocol)
+
         #for key in sorted(junctions.keys(), key=lambda x: min([int(n) for n in x.split('\t')[:-2]])):
         for key in sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]]):
             # get offset in file
@@ -146,18 +176,24 @@ class Compressor:
 
             junc = junctions[key]
 
-            # write junction information
-            filehandle.write('>' + key + '\n')
+            if binary:
+                if len(junc.lensLeft) == 0 and len(junc.lensRight) == 0:
+                    pickle.dump((junc.readLens, self.RLE(junc.coverage)), filehandle, self.protocol)
+                else:
+                    pickle.dump((junc.readLens, junc.lensLeft, junc.lensRight, self.RLE(junc.coverage)), filehandle, self.protocol)
+            else:
+                # write junction information
+                filehandle.write('>' + key + '\n')
 
-            # write read lengths
-            filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.readLens.items()] ) + '\n')
+                # write read lengths
+                filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.readLens.items()] ) + '\n')
 
-            # Write left and right read lengths
-            filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensLeft.items()]) + '\n')
-            filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensRight.items()]) + '\n')
+                # Write left and right read lengths
+                filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensLeft.items()]) + '\n')
+                filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensRight.items()]) + '\n')
 
-            # write coverage
-            self.writeRLE(junc.coverage, filehandle)
+                # write coverage
+                self.writeRLE(junc.coverage, filehandle)
 
     def compressUnspliced(self, filehandle, binary=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
@@ -210,23 +246,27 @@ class Compressor:
                     coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.lenLeft, 1)
                     coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-r.lenRight, r.lenRight, 1)
 
-        for NH in readExons.keys():
+        for NH in sorted(readExons.keys()):
             cov = coverages[NH]
             reads = readExons[NH]
 
-            filehandle.write('#' + str(NH) + '\n')
+            if not binary:
+                filehandle.write('#' + str(NH) + '\n')
 
             # Write coverage vector
             if NH == 1:
                 offsets = [0] * len(breakpoints)
-                #for i in xrange(len(self.aligned.exons)-1):
-                #    offsets[i] = filehandle.tell()
-                #    self.writeRLE(cov[self.aligned.exons[i]:self.aligned.exons[i+1]], filehandle)
                 for i in xrange(len(breakpoints)-1):
                     offsets[i] = filehandle.tell()
-                    self.writeRLE(cov[breakpoints[i]:breakpoints[i+1]], filehandle)
+                    if binary:
+                        pickle.dump(self.RLE(cov[breakpoints[i]:breakpoints[i+1]]), filehandle, self.protocol)
+                    else:
+                        self.writeRLE(cov[breakpoints[i]:breakpoints[i+1]], filehandle)
                 offsets[-1] = filehandle.tell()
-                self.writeRLE(cov[breakpoints[-1]:], filehandle)
+                if binary:
+                    pickle.dump(self.RLE(cov[breakpoints[-1]:]), filehandle, self.protocol)
+                else:
+                    self.writeRLE(cov[breakpoints[-1]:], filehandle)
 
                 self.unsplicedIndex[NH] = offsets
             else:
@@ -234,29 +274,50 @@ class Compressor:
 
                 pos = 0
                 currBreakpoint = 0
+                segmentRLE = []
                 for c in cov:
                     if breakpoints[currBreakpoint] == pos:
                         offsets[currBreakpoint] = filehandle.tell()
                         currBreakpoint += 1
 
+                        if binary and len(segmentRLE) > 0:
+                            pickle.dump(segmentRLE, f, self.protocol)
+                            segmentRLE = []
+
                     segmentEnd = pos+c[1]
                     while currBreakpoint < len(breakpoints) and breakpoints[currBreakpoint] < segmentEnd:
                         length = breakpoints[currBreakpoint] - pos
-                        if length == 1:
-                            filehandle.write(str(c[0]) + '\n')
+                        if binary:
+                            if length == 1:
+                                segmentRLE.append([c[0]])
+                            else:
+                                segmentRLE.append([c[0], length])
+                            pickle.dump(segmentRLE, filehandle, self.protocol)
+                            segmentRLE = []
                         else:
-                            filehandle.write(str(c[0]) + '\t' + str(length) + '\n')
+                            if length == 1:
+                                filehandle.write(str(c[0]) + '\n')
+                            else:
+                                filehandle.write(str(c[0]) + '\t' + str(length) + '\n')
                         c[1] -= length
                         pos += length
                         offsets[currBreakpoint] = filehandle.tell()
                         currBreakpoint += 1
 
-                    if c[1] == 1:
-                        filehandle.write(str(c[0]) + '\n')
+                    if binary:
+                        if c[1] == 1:
+                            segmentRLE.append([c[0]])
+                        else:
+                            segmentRLE.append(c)
                     else:
-                        filehandle.write(str(c[0]) + '\t' + str(c[1]) + '\n')
+                        if c[1] == 1:
+                            filehandle.write(str(c[0]) + '\n')
+                        else:
+                            filehandle.write(str(c[0]) + '\t' + str(c[1]) + '\n')
                     pos += c[1]
-                offsets[-1] = filehandle.tell()
+                if binary and len(segmentRLE) > 0:
+                    pickle.dump(segmentRLE, filehandle, self.protocol)
+                #offsets[-1] = filehandle.tell()
 
                 self.unsplicedIndex[NH] = offsets
 
@@ -303,15 +364,25 @@ class Compressor:
                             else:
                                 lensRight[read.lenRight] = 1
 
-                    # Write bounds
-                    filehandle.write('>' + str(i) + '\n')
+                    if binary:
+                        #print (i, readLens, lensLeft, lensRight)
+                        if len(lensLeft) == 0 and len(lensRight) == 0:
+                            pickle.dump((i, readLens), filehandle, self.protocol)
+                        else:
+                            pickle.dump((i, readLens, lensLeft, lensRight), filehandle, self.protocol)
+                    else:
+                        # Write bounds
+                        filehandle.write('>' + str(i) + '\n')
 
-                    # Write read lengths
-                    filehandle.write('\t'.join([str(k)+','+str(v) for k,v in readLens.items()]) + '\n')
+                        # Write read lengths
+                        filehandle.write('\t'.join([str(k)+','+str(v) for k,v in readLens.items()]) + '\n')
 
-                    # Write left and right read lengths
-                    filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensLeft.items()]) + '\n')
-                    filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensRight.items()]) + '\n')
+                        # Write left and right read lengths
+                        filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensLeft.items()]) + '\n')
+                        filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensRight.items()]) + '\n')
+            if binary:
+                pickle.dump([], filehandle, self.protocol)
+
 
     def parseAlignments(self, filehandle):
         ''' Parse a file in SAM format
@@ -323,6 +394,8 @@ class Compressor:
         # paired reads that have not yet found their partner
         unpaired = dict()
 
+        print 'Parsing alignments'
+
         for line in filehandle:
             row = line.strip().split('\t')
             if len(row) < 5:
@@ -330,11 +403,19 @@ class Compressor:
 
             chromosome = str(row[2])
             
+
+            debug = False
+            if row[2] == '3R' and row[3] == '10142522' and row[5] == '68M2D4M':
+                debug = True
+
             if not row[2] in self.chromosomes.keys():
                 print 'Chromosome ' + str(row[2]) + ' not found!'
                 continue
 
             exons = self.parseCigar(row[5], int(row[3]))
+
+            if debug:
+                print exons
 
             # find XS value:
             xs = None
@@ -345,15 +426,26 @@ class Compressor:
                 elif r[0:3] == 'NH:':
                     NH = int(r[5:])
 
+            '''
             if not row[6] == '*':
                 if row[6] == '=':
                     pair_chrom = chromosome
                 else:
                     pair_chrom = row[6]
                 pair_index = int(row[7])
+
                 self.aligned.processRead(read.Read(chromosome, exons, xs, NH), pair_chrom, pair_index)
             else:
                 self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
+            '''
+
+            if row[6] == '=':
+                pair_index = int(row[7])
+                self.aligned.processRead(read.Read(chromosome, exons, xs, NH), chromosome, pair_index)
+            else:
+                self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
+
+
 
         self.aligned.finalizeExons()
         self.aligned.finalizeReads()
