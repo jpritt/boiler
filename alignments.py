@@ -2155,7 +2155,10 @@ class Alignments:
                         foundMatch = True
                         break
                 if not foundMatch:
-                    self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
+                    if not (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
+                        self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
+                    else:
+                        self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
             else:
                 if not (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
                     self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
