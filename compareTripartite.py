@@ -217,8 +217,8 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
     print '%d / %d transcripts from file 2' % (matches, len(transcriptsCompB))
     print 'Score: %f' % (score / matches)
 
-    plt.scatter(xs, ys)
-    plt.show()
+    #plt.scatter(xs, ys)
+    #plt.show()
 
 
 def parsePro(filename):

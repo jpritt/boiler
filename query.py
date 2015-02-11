@@ -194,19 +194,27 @@ def go(args):
             endTime = time.time()
             origTime = endTime - startTime
 
+            print 'Orig:'
+            print origGenes[:10]
+
             startTime = time.time()
             predGenes = expander.getGenes(args['compressed'], chrom, start, end)
             endTime = time.time()
             predTime = endTime - startTime
 
-            print origGenes[:10]
-            print predGenes[:10]
+            print len(origGenes)
 
             correct = 0
             for g in predGenes:
                 if g in origGenes:
                     correct += 1
             print '%d / %d (%d)' % (correct, len(origGenes), len(predGenes))
+
+            print ''
+            print origGenes[:10]
+            print predGenes[:10]
+
+            exit()
 
             '''
             numEnclosed = 0

@@ -646,14 +646,26 @@ class Expander:
             end += chromOffset
 
             genes = self.getSplicedGeneBounds(f, start, end, overlapRadius, splicedIndex, startPos)
-            genes += self.getUnsplicedGeneBounds(f, start, end, overlapRadius, unsplicedIndex, startPos)
+            print 'Spliced genes:'
+            print [(g[0]-chromOffset, g[1]-chromOffset) for g in sorted(genes)[:10]]
+            genes2 = self.getUnsplicedGeneBounds(f, start, end, overlapRadius, unsplicedIndex, startPos)
+            print 'Unspliced genes:'
+            print [(g[0]-chromOffset, g[1]-chromOffset) for g in sorted(genes2)[:10]]
+            genes += genes2
 
             genes.sort()
 
             i = 0
             while i < (len(genes)-1):
                 while i < (len(genes)-1) and genes[i+1][0] - genes[i][1] <= overlapRadius:
-                    genes[i] = (genes[i][0], genes[i+1][1])
+                    genes[i] = (genes[i][0], max(genes[i][1], genes[i+1][1]))
+                    del genes[i+1]
+                i += 1
+
+            i = 0
+            while i < (len(genes)-1):
+                while i < (len(genes)-1) and genes[i+1][0] - genes[i][1] <= overlapRadius:
+                    genes[i] = (genes[i][0], max(genes[i][1], genes[i+1][1]))
                     del genes[i+1]
                 i += 1
 

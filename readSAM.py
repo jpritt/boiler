@@ -66,13 +66,16 @@ class ReadSAM:
                 if len(row) < 10:
                     continue
 
-                if row[2] == chrom and (row[6] == '=' or row[6] == '*'):
+                if row[2] == chrom:
                     readStart = int(row[3])
+
                     if readStart >= end:
                         break
 
                     if row[6] == '=' and int(row[7]) > readStart:
                         genes.append((readStart, int(row[7])))
+                        if readStart < 19300072 and int(row[7]) > 19299986:
+                            print line
                     else:
                         cigar = row[5]
                         if readStart >= start and readStart < end:
@@ -80,13 +83,16 @@ class ReadSAM:
 
                             if exons[-1][1] <= end:
                                 genes.append((exons[0][0], exons[-1][1]))
+                                if exons[0][0] < 19300072 and exons[-1][1] > 19299986:
+                                    print line
+
 
             genes.sort()
 
             i = 0
             while i < (len(genes)-1):
                 while i < (len(genes)-1) and genes[i+1][0] - genes[i][1] <= overlapRadius:
-                    genes[i] = (genes[i][0], genes[i+1][1])
+                    genes[i] = (genes[i][0], max(genes[i][1], genes[i+1][1]))
                     del genes[i+1]
                 i += 1
 
