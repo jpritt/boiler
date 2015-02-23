@@ -1,14 +1,17 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 import alignments
 import read
 import pairedread
 import junction
 import time
-import math 
-import cPickle as pickle
+import math
+import zlib
+import binaryIO
 
 class Expander:
     aligned = None
+
+    sectionLen = 100000
 
     def expand(self, compressedFilename, uncompressedFilename, binary=False):
         ''' Expand both spliced and unspliced alignments
@@ -18,22 +21,20 @@ class Expander:
 
         if binary:
             with open(compressedFilename, 'rb') as f:
-                self.aligned = alignments.Alignments(pickle.load(f))
-                self.aligned.exons = pickle.load(f)
+                self.skipIndexBinary(f)
 
-                # spliced and unspliced indexes (not used)
-                _ = pickle.load(f)
-                unsplicedIndex = pickle.load(f)
+                chroms = binaryIO.readChroms(f)
+                self.aligned = alignments.Alignments(chroms)
+                exonBytes, self.aligned.exons = binaryIO.readExons(f)
 
-                self.expandSplicedBinary(f)
-                self.expandUnsplicedBinary(f, sorted(unsplicedIndex.keys()))
+                self.expandSplicedBinary(f, exonBytes)
+                self.expandUnsplicedBinary(f)
 
         else:
             with open(compressedFilename, 'r') as f:
                 self.aligned = alignments.Alignments(self.readHeader(f))
 
                 self.aligned.exons = self.readExons(f)
-                self.skipIndex(f)
 
                 self.expandSpliced(f)
                 self.expandUnspliced(f)
@@ -67,7 +68,7 @@ class Expander:
                     mapping = [0]
                     # offsets of start of each exon in junction
                     offsets = [0]
-                    for j in xrange(1,len(juncBounds)):
+                    for j in range(1,len(juncBounds)):
                         mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
                         offsets.append(juncBounds[j][0] - juncBounds[0][0])
 
@@ -90,7 +91,7 @@ class Expander:
                         else:
                             readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
 
-                            for x in xrange(i+1,j):
+                            for x in range(i+1,j):
                                 readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
 
                             readExons.append( [offsets[j]+juncOffset, end+juncOffset] ) 
@@ -116,7 +117,7 @@ class Expander:
                         else:
                             readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
 
-                            for x in xrange(i+1,j):
+                            for x in range(i+1,j):
                                 readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
 
                             readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
@@ -139,7 +140,7 @@ class Expander:
                         else:
                             readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
 
-                            for x in xrange(i+1,j):
+                            for x in range(i+1,j):
                                 readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
 
                             readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
@@ -200,45 +201,22 @@ class Expander:
                     junc.coverage += [val] * length
                     #junc.coverage += [[val, length]]
 
-    def expandSplicedBinary(self, f):
+    def expandSplicedBinary(self, f, exonBytes):
         ''' Expand a file containing compressed spliced alignments
         '''
 
-        junctions = pickle.load(f)
-        for j in junctions:
-            key = j.split('\t')
-            junctionExons = [int(e) for e in key[:-2]]
-            length = 0
+        #fragLenBytes = binaryIO.readVal(f, 1)
+        readLenBytes = binaryIO.readVal(f, 1)
 
-            for e in junctionExons:
-                length += self.aligned.exons[e+1] - self.aligned.exons[e]
+        numJunctions = binaryIO.readVal(f, 2*exonBytes)
 
-            xs = key[-2]
-            NH = int(key[-1])
+        for _ in range(numJunctions):
+            junc = binaryIO.readJunction(f, exonBytes, readLenBytes, self.aligned.exons)
 
-            junc = pickle.load(f)
-            if len(junc) == 2:
-                (readLens, cov) = junc
-                lensLeft = {}
-                lensRight = {}
-            else:
-                (readLens, lensLeft, lensRight, cov) = junc
-
-            coverage = []
-            for c in cov:
-                if len(c) == 1:
-                    coverage += [c[0]]
-                else:
-                    coverage += [c[0]] * c[1]
-
-            #print readLens
-            #print lensLeft
-            #print lensRight
-            #print cov
-            unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage)
+            unpaired, paired = self.aligned.findReads(junc.readLens, junc.lensLeft, junc.lensRight, junc.coverage)
 
             juncBounds = []
-            for j in junctionExons:
+            for j in junc.exons:
                 juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
 
             # Offset of start of junction from beginning of chromosome
@@ -248,7 +226,7 @@ class Expander:
             mapping = [0]
             # offsets of start of each exon in junction
             offsets = [0]
-            for j in xrange(1,len(juncBounds)):
+            for j in range(1,len(juncBounds)):
                 mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
                 offsets.append(juncBounds[j][0] - juncBounds[0][0])
 
@@ -271,12 +249,12 @@ class Expander:
                 else:
                     readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
 
-                    for x in xrange(i+1,j):
+                    for x in range(i+1,j):
                         readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
 
                     readExons.append( [offsets[j]+juncOffset, end+juncOffset] ) 
 
-                self.aligned.spliced.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, xs, NH))
+                self.aligned.spliced.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
 
             for p in paired:
                 start = p[0][0]
@@ -297,7 +275,7 @@ class Expander:
                 else:
                     readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
 
-                    for x in xrange(i+1,j):
+                    for x in range(i+1,j):
                         readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
 
                     readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
@@ -320,13 +298,13 @@ class Expander:
                 else:
                     readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
 
-                    for x in xrange(i+1,j):
+                    for x in range(i+1,j):
                         readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
 
                     readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
                 self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                         self.aligned.getChromosome(readExonsB[0][0]), readExonsB, xs, NH))
+                                                         self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
 
     def expandUnspliced(self, f):
         ''' Expand a file containing compressed unspliced alignments
@@ -421,51 +399,55 @@ class Expander:
                 self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
                                                          self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
 
-    def expandUnsplicedBinary(self, f, NHs):
+    def expandUnsplicedBinary(self, f):
         ''' Expand a file containing compressed unspliced alignments
         '''
 
-        sectionLen = 100000
-        numSections = int(math.ceil(self.aligned.exons[-1] / float(sectionLen)))
+        NHs = binaryIO.readVal(f, 2)
+        self.sectionLen = binaryIO.readVal(f, 4)
+        fragLenBytes = binaryIO.readVal(f, 1)
+        readLenBytes = binaryIO.readVal(f, 1)
 
-        for NH in NHs:
+        numSections = int(math.ceil(self.aligned.exons[-1] / float(self.sectionLen)))
+
+        for _ in range(NHs):
+            NH = binaryIO.readVal(f, 2)
             coverage = []
-            for s in xrange(numSections):
-                cov = pickle.load(f)
+            for s in range(numSections):
+                coverage += binaryIO.readCov(f)
 
+                '''
                 for c in cov:
                     if len(c) == 1:
                         coverage += [c[0]]
                     else:
                         coverage += [c[0]] * c[1]
+                '''
 
-            
-            exon = pickle.load(f)
-            while len(exon) > 0:
-                if len(exon) == 2:
-                    (i, readLens) = exon
-                    lensLeft = {}
-                    lensRight = {}
-                else:
-                    (i, readLens, lensLeft, lensRight) = exon
-                exonStart = self.aligned.exons[i]
-                exonEnd = self.aligned.exons[i+1]
-                unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+            for e in range(len(self.aligned.exons)-1):
+                readLens = binaryIO.readLens(f, fragLenBytes)
 
-                for r in unpaired:
-                    self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
-                for p in paired:
-                    self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
-                                                             self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
+                if len(readLens) > 0:
+                    lensLeft = binaryIO.readLens(f, readLenBytes)
+                    if len(lensLeft) > 0:
+                        lensRight = binaryIO.readLens(f, readLenBytes)
 
-                exon = pickle.load(f)
+                    exonStart = self.aligned.exons[e]
+                    exonEnd = self.aligned.exons[e+1]
+                    unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+
+                    for r in unpaired:
+                        self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
+                    for p in paired:
+                        self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
+                                                                 self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
 
     def getCoverage(self, compressedFile, chrom, start=None, end=None):
         with open(compressedFile, 'r') as f:
             chromosomes = self.readHeader(f)
             if not chrom in chromosomes:
-                print 'Error! Chromosome name not recognized!'
-                print 'Chromosomes: ' + ', '.join(chromosomes.keys())
+                print('Error! Chromosome name not recognized!')
+                print('Chromosomes: ' + ', '.join(chromosomes.keys()))
                 exit()
 
             self.aligned = alignments.Alignments(chromosomes)
@@ -502,7 +484,7 @@ class Expander:
                 j += 1
 
             minPos = splicedIndex[i]
-            for n in xrange(i,j):
+            for n in range(i,j):
                 if splicedIndex[n] < minPos:
                     minPos = splicedIndex[n]
             filehandle.seek(startPos + minPos)
@@ -561,7 +543,7 @@ class Expander:
                         if junctionExons[currExon] >= relevantExonsStart and junctionExons[currExon] < relevantExonsEnd:
                             val = float(row[0]) * NH
                             if val > 0:
-                                for i in xrange(max(prevOffset, self.aligned.exons[junctionExons[currExon]]), self.aligned.exons[junctionExons[currExon]+1]):
+                                for i in range(max(prevOffset, self.aligned.exons[junctionExons[currExon]]), self.aligned.exons[junctionExons[currExon]+1]):
                                     if i >= start and i < end:
                                         coverage[i-start] += val
 
@@ -572,7 +554,7 @@ class Expander:
                     if junctionExons[currExon] >= relevantExonsStart and junctionExons[currExon] < relevantExonsEnd:
                         val = float(row[0]) * NH
                         if val > 0:
-                            for i in xrange(max(prevOffset, self.aligned.exons[junctionExons[currExon]]), self.aligned.exons[junctionExons[currExon]]+offsetInExon):
+                            for i in range(max(prevOffset, self.aligned.exons[junctionExons[currExon]]), self.aligned.exons[junctionExons[currExon]]+offsetInExon):
                                 if i >= start and i < end:
                                     coverage[i-start] += val
         return coverage
@@ -583,7 +565,7 @@ class Expander:
         sectionLen = 100000
         breakpointId = int(start / sectionLen)
 
-        #for exonId in xrange(len(self.aligned.exons)):
+        #for exonId in range(len(self.aligned.exons)):
         #    if self.aligned.exons[exonId] > start:
         #        break
         #exonId -= 1
@@ -606,7 +588,7 @@ class Expander:
                 if newOffset > start:
                     val = float(row[0]) * NH
                     if val > 0:
-                        for i in xrange(max(offset-start, 0), min(newOffset-start, segmentLength)):
+                        for i in range(max(offset-start, 0), min(newOffset-start, segmentLength)):
                             coverage[i] += val
                 offset = newOffset
                 line = filehandle.readline().rstrip()
@@ -622,8 +604,8 @@ class Expander:
         with open(compressedFile, 'r') as f:
             chromosomes = self.readHeader(f)
             if not chrom in chromosomes:
-                print 'Error! Chromosome name not recognized!'
-                print 'Chromosomes: ' + ', '.join(chromosomes.keys())
+                print('Error! Chromosome name not recognized!')
+                print('Chromosomes: ' + ', '.join(chromosomes.keys()))
                 exit()
 
             self.aligned = alignments.Alignments(chromosomes)
@@ -646,11 +628,11 @@ class Expander:
             end += chromOffset
 
             genes = self.getSplicedGeneBounds(f, start, end, overlapRadius, splicedIndex, startPos)
-            print 'Spliced genes:'
-            print [(g[0]-chromOffset, g[1]-chromOffset) for g in sorted(genes)[:10]]
+            #print('Spliced genes:')
+            #print([(g[0]-chromOffset, g[1]-chromOffset) for g in sorted(genes)[:10]])
             genes2 = self.getUnsplicedGeneBounds(f, start, end, overlapRadius, unsplicedIndex, startPos)
-            print 'Unspliced genes:'
-            print [(g[0]-chromOffset, g[1]-chromOffset) for g in sorted(genes2)[:10]]
+            #print('Unspliced genes:')
+            #print([(g[0]-chromOffset, g[1]-chromOffset) for g in sorted(genes2)[:10]])
             genes += genes2
 
             genes.sort()
@@ -669,7 +651,7 @@ class Expander:
                     del genes[i+1]
                 i += 1
 
-        for i in xrange(len(genes)):
+        for i in range(len(genes)):
             genes[i] = (genes[i][0]-chromOffset, genes[i][1]-chromOffset)
         return genes
 
@@ -684,7 +666,7 @@ class Expander:
                 j += 1
 
             minPos = splicedIndex[i]
-            for n in xrange(i,j):
+            for n in range(i,j):
                 if splicedIndex[n] < minPos:
                     minPos = splicedIndex[n]
             filehandle.seek(startPos + minPos)
@@ -711,7 +693,7 @@ class Expander:
                 # Store bounds from last junction
                 if not geneStart == None:
                     if geneEnd == None:
-                        print 'Error! Start but no end!'
+                        print('Error! Start but no end!')
                         exit()
                     geneBounds.append((geneStart, geneEnd))
                 return geneBounds
@@ -720,7 +702,7 @@ class Expander:
                 # Store bounds from last junction
                 if not geneStart == None:
                     if geneEnd == None:
-                        print 'Error! Start but no end!'
+                        print('Error! Start but no end!')
                         exit()
                     if geneStart >= start and geneEnd <= end:
                         geneBounds.append((geneStart, geneEnd))
@@ -902,6 +884,18 @@ class Expander:
         while True:
             offset = filehandle.tell()
             if not filehandle.readline()[0] == '#':
+                # reset pointer
+                filehandle.seek(offset)
+
+                return
+
+    def skipIndexBinary(self, filehandle):
+        '''
+            All index lines begin with #
+        '''
+        while True:
+            offset = filehandle.tell()
+            if not filehandle.readline().decode('ascii')[0] == '#':
                 # reset pointer
                 filehandle.seek(offset)
 

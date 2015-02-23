@@ -18,5 +18,4 @@ class Junction:
         self.lensLeft = dict()
         self.lensRight = dict()
 
-        print length
         self.coverage = [0] * length

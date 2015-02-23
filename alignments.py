@@ -51,7 +51,7 @@ class Alignments:
 
         # update list of exons
         alignment = read.exons
-        for i in xrange(len(alignment)-1):
+        for i in range(len(alignment)-1):
             self.exons.add(alignment[i][1])
             self.exons.add(alignment[i+1][0])
 
@@ -65,10 +65,7 @@ class Alignments:
         ''' Now that all exon boundaries are known, fix unspliced regions that cross exon boundaries
             and finalized paired-end reads
         '''
-        loc = 78844331
-        starts = 0
-
-
+        
         # Splice any regions of unspliced reads that cross exon boundaries
         x = 0
         while x < len(self.unspliced):
@@ -80,7 +77,7 @@ class Alignments:
             if len(spliceSites) > 0:
                 newExons = []
                 newExons.append([exons[0], spliceSites[0]])
-                for i in xrange(1, len(spliceSites)):
+                for i in range(1, len(spliceSites)):
                     newExons.append([spliceSites[i-1], spliceSites[i]])
                 newExons.append([spliceSites[-1], exons[1]])
 
@@ -142,7 +139,7 @@ class Alignments:
                 spliceSites = [self.exons[e] for e in exonIds[1:]]
                 if len(spliceSites) > 0:
                     newExons.append([segment[0], spliceSites[0]])
-                    for i in xrange(1, len(spliceSites)):
+                    for i in range(1, len(spliceSites)):
                         newExons.append([spliceSites[i-1], spliceSites[i]])
                     newExons.append([spliceSites[-1], segment[1]])
                 else:
@@ -168,7 +165,7 @@ class Alignments:
                 spliceSites = [self.exons[e] for e in exonIds[1:]]
                 if len(spliceSites) > 0:
                     newExons.append([segment[0], spliceSites[0]])
-                    for i in xrange(1, len(spliceSites)):
+                    for i in range(1, len(spliceSites)):
                         newExons.append([spliceSites[i-1], spliceSites[i]])
                     newExons.append([spliceSites[-1], segment[1]])
                 else:
@@ -187,7 +184,7 @@ class Alignments:
             if n > 0:
                 newRead = read.Read(pair.chromA, exonsA[:-1] + [[exonsA[-1][0], exonsB[n-1][1]]] + exonsB[n:], pair.xs, pair.NH)
                 gap = 0
-                for i in xrange(n):
+                for i in range(n):
                     gap += exonsB[i][0] - exonsA[i-n][1]
                 #gap = exonsB[n-1][0] - exonsA[-1][1]
             else:
@@ -229,7 +226,7 @@ class Alignments:
 
         len1 = len(list1)
         len2 = len(list2)
-        for i in xrange(len1):
+        for i in range(len1):
             while (minRange+1) < len2 and list2[minRange+1] < list1[i]:
                 minRange += 1
             dist1 = abs(list2[minRange] - list1[i])
@@ -264,7 +261,6 @@ class Alignments:
             while i < len(starts) and starts[i] == 0:
                 i += 1
 
-        print 'Score: %d' % score
         return unpaired, paired, score
 
 
@@ -299,10 +295,10 @@ class Alignments:
         bestPaired = None
         bestUnpaired = None
         bestSingle = None
-        for k in xrange(len(readLensSorted)):
+        for k in range(len(readLensSorted)):
             l = readLensSorted[k]
             if ends[i+l] > 0:
-                for id2 in xrange(len(reads)):
+                for id2 in range(len(reads)):
                     if reads[id2][1] == i+l:
                         # update reads, readLens, starts
                         if id1 == id2:
@@ -417,16 +413,6 @@ class Alignments:
         paired = []
         unpaired = []
 
-        debug = False
-        #if len(reads) > 5:
-        #    debug = True
-
-        if debug:
-            print ''
-            print 'Reads: ' + str(sorted(reads))
-            print 'Read lengths: ' + str(readLens)
-            print ''
-
         unmatched = []
 
         i = 0
@@ -443,7 +429,7 @@ class Alignments:
                 del reads[id1]
 
                 foundRead = False
-                for j in xrange(len(readLensSorted)):
+                for j in range(len(readLensSorted)):
                     l = readLensSorted[j]
                     if i+l <= length and ends[i+l] > 0:
                         readLens[l] -= 1
@@ -471,7 +457,7 @@ class Alignments:
 
                         readLens[readLen] -= 1
                         if readLens[readLen] == 0:
-                            for j in xrange(len(readLensSorted)):
+                            for j in range(len(readLensSorted)):
                                 if readLensSorted[j] == readLen:
                                     del readLensSorted[j]
                                     break
@@ -480,13 +466,6 @@ class Alignments:
                 
             if starts[i] <= 0:
                 i += 1
-
-
-        #if debug:
-            #print 'Intermediate paired:   ' + str(paired)
-            #print 'Intermediate unpaired: ' + str(unpaired)
-            #print 'Unmatched:             ' + str(unmatched)
-            #print ''
 
         if len(unmatched) > 0:
             countReadLens = 0
@@ -504,21 +483,9 @@ class Alignments:
             for r in unmatched:
                 unpaired += [r]
 
-
-
-        if debug:
-            print 'Final paired:   ' + str(paired)
-            print 'Final unpaired: ' + str(unpaired)
-            print ''
-            #exit()
         return unpaired, paired
 
     def findPairs(self, length, reads, readLens):#pairedLens, unpairedLens):
-
-        debug = False
-        #if len(reads) == 1 and reads[0][1]-reads[0][0] == 76:
-        #    debug = True
-
         # Sort read lengths from largest to smallest
         readLensSorted = sorted(readLens, reverse=True)
 
@@ -526,22 +493,12 @@ class Alignments:
         ends = [0] * (length+1)
 
 
-        #print 'Length: ' + str(length)
         for r in reads:
-            if debug:
-                print '(%d, %d)' % (r[0], r[1])
             starts[r[0]] += 1
             ends[r[1]] += 1
 
         paired = []
         unpaired = []
-
-
-        if debug:
-            print ''
-            print 'Reads: ' + str(sorted(reads))
-            print 'Read lengths: ' + str(readLens)
-            print ''
 
         unmatched = []
 
@@ -552,9 +509,6 @@ class Alignments:
             i += 1
         while j > i and ends[j] <= 0:
             j -= 1 
-
-        if debug:
-            print '%d, %d' % (i, j)
 
         while i < j:
             id1 = 0
@@ -568,7 +522,7 @@ class Alignments:
             del reads[id1]
 
             foundRead = False
-            for r in xrange(len(readLensSorted)):
+            for r in range(len(readLensSorted)):
                 l = readLensSorted[r]
                 if i+l <= length and ends[i+l] > 0:
                     readLens[l] -= 1
@@ -596,7 +550,7 @@ class Alignments:
 
                     readLens[readLen] -= 1
                     if readLens[readLen] == 0:
-                        for r in xrange(len(readLensSorted)):
+                        for r in range(len(readLensSorted)):
                             if readLensSorted[r] == readLen:
                                 del readLensSorted[r]
                                 break
@@ -620,7 +574,7 @@ class Alignments:
                 del reads[id1]
 
                 foundRead = False
-                for r in xrange(len(readLensSorted)):
+                for r in range(len(readLensSorted)):
                     l = readLensSorted[r]
                     if j-l >= 0 and starts[j-l] > 0:
                         readLens[l] -= 1
@@ -648,7 +602,7 @@ class Alignments:
 
                         readLens[readLen] -= 1
                         if readLens[readLen] == 0:
-                            for r in xrange(len(readLensSorted)):
+                            for r in range(len(readLensSorted)):
                                 if readLensSorted[r] == readLen:
                                     del readLensSorted[r]
                                     break
@@ -659,13 +613,6 @@ class Alignments:
                     i += 1
                 while j > i and ends[j] <= 0:
                     j -= 1
-
-
-        #if debug:
-            #print 'Intermediate paired:   ' + str(paired)
-            #print 'Intermediate unpaired: ' + str(unpaired)
-            #print 'Unmatched:             ' + str(unmatched)
-            #print ''
 
         if len(unmatched) > 0:
             countReadLens = 0
@@ -683,13 +630,6 @@ class Alignments:
             for r in unmatched:
                 unpaired += [r]
 
-
-
-        if debug:
-            print 'Final paired:   ' + str(paired)
-            print 'Final unpaired: ' + str(unpaired)
-            print ''
-            #exit()
         return unpaired, paired
 
     def findReads(self, readLens, lensLeft, lensRight, coverage, boundaries=None):
@@ -748,69 +688,7 @@ class Alignments:
 
         unpaired, paired = self.findPairs(len(coverage), reads, readLens)
 
-
         return unpaired, paired
-
-        '''
-        starts = [0] * (len(coverage)+1)
-        ends = [0] * (len(coverage)+1)
-        for r in reads:
-            starts[r[0]] += 1
-            ends[r[1]] += 1
-
-        i = 0
-        while starts[i] == 0:
-            i += 1
-        print 'Pairing %d fragments' % len(reads)
-        unpaired, paired, score = self.findPairsSemiRecursive(starts, ends, reads, readLens, readLensSorted, i)
-        return unpaired, paired
-        '''
-
-        
-        '''
-        if reads == None:
-            print 'Error finding reads!'
-            exit()
-
-        # Pair left and right read lengths with long fragments
-        # First sort reads and lengths by decreasing length
-        reads.sort(key=lambda r: r[1]-r[0], reverse=True)
-        lensLeftSorted = sorted(lensLeft.keys(), reverse=True)
-        lensRightSorted = sorted(lensRight.keys(), reverse=True)
-
-        pairedReads = []
-
-        readId = 0
-
-        while len(lensLeftSorted) > 0 and readId < len(reads):
-            #if readId >= len(reads):
-            #    print 'Error! More left/right lengths than fragments!'
-            #    exit()
-
-            start = reads[readId][0]
-            end = reads[readId][1]
-            fragmentLen = end-start
-
-            lenLeftId = 0
-            lenLeft = lensLeftSorted[lenLeftId]
-            lenRightId = 0
-            lenRight = lensRightSorted[lenRightId]
-
-
-            pairedReads.append( [[start, start+lenLeft], [end-lenRight, end]] )
-
-            lensLeft[lenLeft] -= 1
-            if lensLeft[lenLeft] == 0:
-                del lensLeftSorted[lenLeftId]
-
-            lensRight[lenRight] -= 1
-            if lensRight[lenRight] == 0:
-                del lensRightSorted[lenRightId]
-
-            readId += 1
-
-        return reads[readId:], pairedReads
-        '''
         
 
     def findBestLeftLen(self, coverage, start, end, lensLeftSorted):
@@ -818,7 +696,7 @@ class Alignments:
         bestScore = 0
         leftScores = [0]*len(lensLeftSorted)
         scoreWeight = 1
-        for i in xrange(lensLeftSorted[0]):
+        for i in range(lensLeftSorted[0]):
             # penalize scores for fragments containing zeros
             if start+i > end or coverage[start+i] == 0:
                 if coverages[start+i-1] > 0:
@@ -834,7 +712,7 @@ class Alignments:
                         leftScores[j] = 0.8 * scoreWeight
                     if leftScores[j] > bestScore:
                         bestScore = leftScores[j]
-        for i in xrange(len(leftScores)):
+        for i in range(len(leftScores)):
             if leftScores[i] == bestScore:
                 return i, bestScore
 
@@ -842,7 +720,7 @@ class Alignments:
         bestScore = 0
         rightScores = [0]*len(lensRightSorted)
         scoreWeight = 1
-        for i in xrange(min(end-start, lensRightSorted[0])):
+        for i in range(min(end-start, lensRightSorted[0])):
             if coverage[start+l-i] == 0:
                 if coverages[start+l-i+1] > 0:
                     scoreWeight *= 0.5
@@ -857,7 +735,7 @@ class Alignments:
                         rightScores[j] = 0.8 * scoreWeight
                     if rightScores[j] > bestScore:
                         bestScore = rightScores[j]
-        for i in xrange(len(rightScores)):
+        for i in range(len(rightScores)):
             if rightScores[i] == bestScore:
                 return i, bestScore
 
@@ -865,7 +743,7 @@ class Alignments:
         bestScore = 0
         bestFragmentLen = 0
         bestLenRight = 0
-        for i in xrange(len(fragmentLensSorted)):
+        for i in range(len(fragmentLensSorted)):
             l = fragmentLensSorted[i]
 
             if start+l > end:
@@ -893,7 +771,6 @@ class Alignments:
 
             OverlapLen is the length of overlap between paired ends at the beginning of this read
         '''
-        #print 'Scoring (%d, %d)' % (start, end)
         # reward if ends are a step above outside region
         startReward = False
         endReward = False
@@ -923,7 +800,6 @@ class Alignments:
         if numZeros > 0:
             length = end-start
             score *= float(length - numZeros) / (2*length)
-        #print '  ' + str(score)
 
         return score
 
@@ -938,7 +814,6 @@ class Alignments:
             fragmentLens: Dictionary containing the distribution of all read lengths in the coverage vector
             boundaries: Indicies in the coverage vector which reads cannot cross (e.g. exon boundaries in the unspliced coverage vector)
         '''
-        print ''
         countFragments = 0
         for _,count in fragmentLens.items():
             countFragments += count
@@ -967,8 +842,6 @@ class Alignments:
         lensLeftSorted = sorted(lensLeft, reverse=True)
         lensRightSorted = sorted(lensRight, reverse=True)
 
-        print 'Expanding %d fragments (%d unique, %d left, %d right)' % (countFragments, len(fragmentLensSorted), len(lensLeftSorted), len(lensRightSorted))
-
         # create separate list with unpaired lengths
         unpairedLens = dict()
         unpairedLensSorted = []
@@ -989,11 +862,6 @@ class Alignments:
 
         unpaired = []
         paired = []
-
-        print 'Unpaired: ' + str(unpairedLens)
-        print 'Paired:   ' + str(fragmentLens)
-        print 'Left:     ' + str(lensLeft)
-        print 'Right:    ' + str(lensRight)
 
         # start and end of coverage window
         # Keep finding reads from both ends until they meet in the middle
@@ -1016,15 +884,13 @@ class Alignments:
         unpairedWeight = 0.5
 
         while end > start and (len(fragmentLensSorted) + len(unpairedLensSorted) > 0):
-            print coverage
-
             # find a read from the beginning
             # find best unpaired read
             bestUnpairedId = 0
             bestUnpairedScore = 0
 
             # penalty for unpaired reads to encourage paired-end reads
-            for i in xrange(len(unpairedLensSorted)):
+            for i in range(len(unpairedLensSorted)):
                 score = unpairedWeight * self.scoreFragment(coverage, startOffset, startOffset+unpairedLensSorted[i])**2
                 if score > bestUnpairedScore:
                     bestUnpairedScore = score
@@ -1034,7 +900,7 @@ class Alignments:
             # find best left length for paired reads
             bestLeftId = 0
             bestLeftScore = 0
-            for i in xrange(len(lensLeftSorted)):
+            for i in range(len(lensLeftSorted)):
                 score = self.scoreFragment(coverage, startOffset, startOffset+lensLeftSorted[i])
                 if score > bestLeftScore:
                     bestLeftScore = score
@@ -1045,8 +911,8 @@ class Alignments:
                 bestFragmentId = 0
                 bestRightId = 0
                 bestFragmentScore = 0
-                for i in xrange(len(fragmentLensSorted)):
-                    for j in xrange(len(lensRightSorted)):
+                for i in range(len(fragmentLensSorted)):
+                    for j in range(len(lensRightSorted)):
                         score = self.scoreFragment(coverage, startOffset+fragmentLensSorted[i]-lensRightSorted[j], startOffset+fragmentLensSorted[i])
                         if score > bestFragmentScore:
                             bestFragmentScore = score
@@ -1063,8 +929,6 @@ class Alignments:
                 fragmentLen = fragmentLensSorted[bestFragmentId]
                 lenRight = lensRightSorted[bestRightId]
                 paired.append([[startOffset, startOffset+lenLeft], [startOffset+fragmentLen-lenRight, startOffset+fragmentLen]])
-
-                print '  Found paired read (%d, %d), (%d, %d)' % (startOffset, startOffset+lenLeft, startOffset+fragmentLen-lenRight, startOffset+fragmentLen)
 
                 # Update coverage vector
                 if lenLeft+lenRight > fragmentLen:
@@ -1096,8 +960,6 @@ class Alignments:
                 length = unpairedLensSorted[bestUnpairedId]
                 unpaired.append([startOffset, startOffset+length])
 
-                print '  Found unpaired read (%d, %d)' % (startOffset, startOffset+length)
-
                 # Update coverage vector
                 coverage = self.updateRLE(coverage, startOffset, min(length, len(coverage)-startOffset), -1)
 
@@ -1112,14 +974,12 @@ class Alignments:
                     # Add right as unpaired
                     length = lensLeftSorted[bestLeftId]
                     unpaired.append([startOffset, startOffset+length])
-                    print '  Found unpaired read (%d, %d)' % (startOffset, startOffset+length)
 
                     # Update coverage vector
                     coverage = self.updateRLE(coverage, startOffset, min(length, len(coverage)-startOffset), -1)
 
                 else:
                     # No decent matches
-                    print 'No matches found, skipping'
                     coverage[start][0] = 0
 
             # update start and end
@@ -1135,8 +995,6 @@ class Alignments:
                 endOffset -= coverage[end-1][1]
                 end -= 1
 
-            print coverage
-
             if end > start and (len(fragmentLensSorted) + len(unpairedLensSorted) > 0):
                 # find a read from the end
                 # find best unpaired read
@@ -1144,7 +1002,7 @@ class Alignments:
                 bestUnpairedScore = 0
 
                 # penalty for unpaired reads to encourage paired-end reads
-                for i in xrange(len(unpairedLensSorted)):
+                for i in range(len(unpairedLensSorted)):
                     score = unpairedWeight * self.scoreFragment(coverage, endOffset-unpairedLensSorted[i], endOffset)**2
                     if score > bestUnpairedScore:
                         bestUnpairedScore = score
@@ -1154,7 +1012,7 @@ class Alignments:
                 # find best left length for paired reads
                 bestRightId = 0
                 bestRightScore = 0
-                for i in xrange(len(lensRightSorted)):
+                for i in range(len(lensRightSorted)):
                     score = self.scoreFragment(coverage, endOffset-lensRightSorted[i], endOffset)
                     if score > bestRightScore:
                         bestRightScore = score
@@ -1165,8 +1023,8 @@ class Alignments:
                     bestFragmentId = 0
                     bestLeftId = 0
                     bestFragmentScore = 0
-                    for i in xrange(len(fragmentLensSorted)):
-                        for j in xrange(len(lensLeftSorted)):
+                    for i in range(len(fragmentLensSorted)):
+                        for j in range(len(lensLeftSorted)):
                             score = self.scoreFragment(coverage, endOffset-fragmentLensSorted[i], endOffset-fragmentLensSorted[i]+lensLeftSorted[j])
                             if score > bestFragmentScore:
                                 bestFragmentScore = score
@@ -1178,15 +1036,11 @@ class Alignments:
                     bestPairedScore = 0
 
                 if bestPairedScore > scoreThreshold and bestPairedScore >= bestUnpairedScore:
-                    print 'Found best paired alignment'
                     # Add paired read
                     lenLeft = lensLeftSorted[bestLeftId]
                     fragmentLen = fragmentLensSorted[bestFragmentId]
                     lenRight = lensRightSorted[bestRightId]
                     paired.append([[endOffset-fragmentLen, endOffset-fragmentLen+lenLeft], [endOffset-lenRight, endOffset]])
-
-                    print '  Found paired read (%d, %d), (%d, %d)' % (endOffset-fragmentLen, endOffset-fragmentLen+lenLeft, endOffset-lenRight, endOffset)
-
 
                     # Update coverage vector
                     if lenLeft+lenRight > fragmentLen:
@@ -1194,15 +1048,6 @@ class Alignments:
                     else:
                         coverage = self.updateRLE(coverage, endOffset-fragmentLen, lenLeft, -1)
                         coverage = self.updateRLE(coverage, endOffset-lenRight, lenRight, -1)
-                    
-                    '''# Update coverage vector
-                    for i in xrange(start, min(start+lenLeft, len(coverage))):
-                        if coverage[i] > 0:
-                            coverage[i] -= 1
-                    for i in xrange(start+fragmentLen-lenRight, min(start+fragmentLen, len(coverage))):
-                        if coverage[i] > 0:
-                            coverage[i] -= 1
-                    '''
 
                     # remove from length distributions
                     if fragmentLens[fragmentLen] == 1:
@@ -1226,16 +1071,9 @@ class Alignments:
                     # Add unpaired read
                     length = unpairedLensSorted[bestUnpairedId]
                     unpaired.append([endOffset-length, endOffset])
-                    print '  Found unpaired read (%d, %d)' % (endOffset-length, endOffset)
 
                     # Update coverage vector
                     coverage = self.updateRLE(coverage, max(0,endOffset-length), min(length, endOffset), -1)
-
-                    '''# Update coverage vector
-                    for i in xrange(start, min(start+length, len(coverage))):
-                        if coverage[i] > 0:
-                            coverage[i] -= 1
-                    '''
 
                     # remove from length distribution
                     if unpairedLens[length] == 1:
@@ -1248,14 +1086,12 @@ class Alignments:
                         # Add right as unpaired
                         length = lensRightSorted[bestRightId]
                         unpaired.append([endOffset-length, endOffset])
-                        print '  Found unpaired read (%d, %d)' % (endOffset-length, endOffset)
 
                         # Update coverage vector
                         coverage = self.updateRLE(coverage, max(0,endOffset-length), min(length, endOffset), -1)
 
                     else:
                         # No decent matches
-                        print 'No matches found at all!'
                         coverage[end-1][0] = 0
 
                 # update start and end
@@ -1271,7 +1107,7 @@ class Alignments:
                     endOffset -= coverage[end-1][1]
                     end -= 1
         if (len(fragmentLensSorted) + len(unpairedLensSorted) > 0) or (len(unpaired)+len(paired) < totalFragments):
-            print 'Found %d of %d, %d left' % (len(unpaired) + len(paired), totalFragments, len(fragmentLensSorted) + len(unpairedLensSorted))
+            print('Found %d of %d, %d left' % (len(unpaired) + len(paired), totalFragments, len(fragmentLensSorted) + len(unpairedLensSorted)))
             exit()
         return unpaired, paired
 
@@ -1287,35 +1123,22 @@ class Alignments:
             boundaries: Indicies in the coverage vector which reads cannot cross (e.g. exon boundaries in the unspliced coverage vector)
         '''
 
-
-        #countReads = 0
-        #for k,v in readLens.items():
-        #    countReads += v
-        #print 'Searching for %d reads' % countReads
-        #self.RLE(coverage, sys.stdout)
-
         if boundaries == None:
             boundaries = [0, len(coverage)]
         else:
             boundaries = list(boundaries)
         if not len(boundaries) == 2:
-            print '%d boundaries' % len(boundaries)
+            print('%d boundaries' % len(boundaries))
         boundBottom = 0
         boundTop = len(boundaries)-1
 
         lens = readLens.keys()
-
-        #if len(lens) == 0:
-        #    self.RLE(coverage, sys.stdout)
-        #    print 'Read lens: ' + str(readLens)
-        #    exit()
 
         # Find max and mode read lengths
         maxLen = max(lens)
 
         # Read lengths sorted by frequency, largest to smallest
         lensSorted = sorted(readLens, key=readLens.get, reverse=True)
-
 
         reads = []
 
@@ -1339,12 +1162,7 @@ class Alignments:
             currMaxLen = maxLen
 
             closestEndpoint = None
-            #if len(coverage) == 391:
-            #    print '  Read lens: ' + str(readLens)
-            #    print maxLen
-            #    print len(lens)
-            #    print '  (%d, %d)' % (1,min(maxLen+1, boundaries[boundBottom]-start))
-            for length in xrange(1, min(maxLen+1, boundaries[boundBottom]-start)):
+            for length in range(1, min(maxLen+1, boundaries[boundBottom]-start)):
                 if (readStart+length == end) or (readStart+length < end and coverage[readStart + length] < coverage[readStart + length - 1]):
                     if length in readLens:
                         readEnd = readStart + length
@@ -1353,7 +1171,7 @@ class Alignments:
                         readLens[length] -= 1
 
                         # reorder sorted lengths
-                        for i in xrange(len(lensSorted)):
+                        for i in range(len(lensSorted)):
                             if lensSorted[i] == length:
                                 break
                         j = i+1
@@ -1394,7 +1212,7 @@ class Alignments:
                         readLens[length] -= 1
 
                         # reorder sorted lengths
-                        for i in xrange(len(lensSorted)):
+                        for i in range(len(lensSorted)):
                             if lensSorted[i] == length:
                                 break
                         j = i+1
@@ -1410,8 +1228,7 @@ class Alignments:
                     reads.append([readStart, readEnd])
 
             # Update coverage vector
-            #print '(%d,%d) / %d' % (readStart, readEnd, len(coverage))
-            for i in xrange(readStart, readEnd):
+            for i in range(readStart, readEnd):
                 coverage[i] -= 1
 
             # update start
@@ -1430,8 +1247,8 @@ class Alignments:
                 readStart = end
 
                 closestEndpoint = None
-                for length in xrange(1, min(maxLen+1, end-boundaries[boundTop])):
-                #for length in xrange(1, maxLen+1):
+                for length in range(1, min(maxLen+1, end-boundaries[boundTop])):
+                #for length in range(1, maxLen+1):
                     if (end-length == start) or (end-length > start and coverage[end - length] > coverage[end - length - 1]):
                         if length in readLens:
                             readStart = readEnd - length
@@ -1441,7 +1258,7 @@ class Alignments:
                                 
 
                             # reorder sorted lengths
-                            for i in xrange(len(lensSorted)):
+                            for i in range(len(lensSorted)):
                                 if lensSorted[i] == length:
                                     break
                             j = i+1
@@ -1470,7 +1287,7 @@ class Alignments:
                             readLens[length] -= 1
 
                             # reorder sorted lengths
-                            for i in xrange(len(lensSorted)):
+                            for i in range(len(lensSorted)):
                                 if lensSorted[i] == length:
                                     break
 
@@ -1486,7 +1303,7 @@ class Alignments:
                         readStart = closestEndpoint
                         reads.append([readStart, readEnd])
 
-                for i in xrange(readStart, readEnd):
+                for i in range(readStart, readEnd):
                     coverage[i] -= 1
 
                 # update end
@@ -1521,7 +1338,7 @@ class Alignments:
 
         # Read lengths sorted first by frequency, largest to smallest, then by length (smallest to largest)
         #lensSorted = sorted(readLens, key=readLens.get, reverse=True)
-        lensSorted = [v[0] for v in sorted(readLens.iteritems(), key = lambda(k,v): (v, -k), reverse=True)]
+        lensSorted = [v[0] for v in sorted(readLens.iteritems(), key = lambda k,v: (v, -k), reverse=True)]
 
 
         reads = []
@@ -1535,12 +1352,7 @@ class Alignments:
         while end >= start and coverage[end-1] <= 0:
             end -= 1
 
-        #print 'Coverage: ' + ','.join([str(c) for c in coverage[start:end]])
-        #print 'Read lengths: ' + str(readLens)
-        #print 'Lengths sorted: ' + str(lensSorted)
-
         while end > start and len(lensSorted) > 0:
-            #print 'Adding from start'
             while boundaries[boundBottom] <= start:
                 boundBottom += 1
 
@@ -1559,7 +1371,7 @@ class Alignments:
                     readLens[length] -= 1
 
                     # reorder sorted lengths
-                    for i in xrange(len(lensSorted)):
+                    for i in range(len(lensSorted)):
                         if lensSorted[i] == length:
                             break
 
@@ -1579,7 +1391,6 @@ class Alignments:
                     readFound = True
                     break
             if not readFound:
-                #print '  No good endpoint found'
                 # No good end point found; add the most common read from from the readLen distribution
                 
                 i = 0
@@ -1596,7 +1407,7 @@ class Alignments:
                 readLens[length] -= 1
 
                 # reorder sorted lengths
-                for i in xrange(len(lensSorted)):
+                for i in range(len(lensSorted)):
                     if lensSorted[i] == length:
                         break
 
@@ -1610,14 +1421,8 @@ class Alignments:
                     if j > 1:
                         lensSorted = lensSorted[:i] + lensSorted[i+1:j] + [lensSorted[i]] + lensSorted[j:]
 
-                #if readLens[length] == 0:
-                #    del readLens[length]
-            #print '  Adding read (%d, %d)' % (readStart, readEnd)
-            #print '  Lengths sorted: ' + str(lensSorted)
-            #print '  Read Lengths: ' + str(readLens)
-
             # Update coverage vector
-            for i in xrange(readStart, readEnd):
+            for i in range(readStart, readEnd):
                 coverage[i] -= 1
 
             # update start
@@ -1628,8 +1433,6 @@ class Alignments:
 
 
             if end > start and len(lensSorted) > 0:
-                #print 'Adding from end'
-
                 while boundaries[boundTop] >= end:
                     boundTop -= 1
 
@@ -1649,7 +1452,7 @@ class Alignments:
                             
 
                         # reorder sorted lengths
-                        for i in xrange(len(lensSorted)):
+                        for i in range(len(lensSorted)):
                             if lensSorted[i] == length:
                                 break
 
@@ -1670,7 +1473,6 @@ class Alignments:
                         break
 
                 if not readFound:
-                    #print '  No good endpoint found'
                     # No good end point found; add the most common read from from the readLen distribution
                 
                     i = 0
@@ -1687,7 +1489,7 @@ class Alignments:
                     readLens[length] -= 1
 
                     # reorder sorted lengths
-                    for i in xrange(len(lensSorted)):
+                    for i in range(len(lensSorted)):
                         if lensSorted[i] == length:
                             break
 
@@ -1701,13 +1503,7 @@ class Alignments:
                         if j > 1:
                             lensSorted = lensSorted[:i] + lensSorted[i+1:j] + [lensSorted[i]] + lensSorted[j:]
 
-                    #if readLens[length] == 0:
-                    #    del readLens[length]
-                #print '  Adding read (%d, %d)' % (readStart, readEnd)
-                #print '  Lengths sorted: ' + str(lensSorted)
-                #print '  Read Lengths: ' + str(readLens)
-
-                for i in xrange(readStart, readEnd):
+                for i in range(readStart, readEnd):
                     coverage[i] -= 1
 
                 # update end
@@ -1717,327 +1513,9 @@ class Alignments:
                     start += 1
 
         if not len(reads) == countReads:
-            print 'Error! %d =/= %d!' % (countReads, len(reads))
+            print('Error! %d =/= %d!' % (countReads, len(reads)))
             exit()
-        #print ''
         return reads
-
-    
-    def findReadsInCoverage_v3(self, coverage, readLens, boundaries=None):
-        ''' Given a coverage vector, return a set of reads that exactly fits the coverage vector as well the distribution of read lengths.
-            Uses brute force to find the an set of reads that fits the read length distribution and matches the coverage vector
-
-            coverage: Coverage vector containing the accumulation of many reads
-            readLens: Dictionary containing the distribution of all read lengths in the coverage vector
-            boundaries: Indicies in the coverage vector which reads cannot cross (e.g. exon boundaries in the unspliced coverage vector)
-        '''
-
-        start = 0
-        while coverage[start] == 0 and start < len(coverage):
-            start += 1
-        end = len(coverage)
-        while coverage[end-1] == 0:
-            end -= 1
-        if start == end:
-            return []
-
-        print 'Coverage:'
-        self.RLE(coverage, sys.stdout)
-        print 'Read Lengths: ' + str(readLens)
-        reads = self.findReadsInCoverage_BruteForce2(coverage, start, end, readLens)
-        print 'Reads: ' + str(reads)
-        print ''
-        return reads
-
-    
-    def findReadsInCoverage_BruteForce(self, coverage, start, end, readLens, level=0):
-        #self.RLE(coverage, sys.stdout)
-
-        '''
-        totalLen = 0
-        for r,num in readLens.items():
-            totalLen += r*num
-        covLen = sum(coverage)
-        if not totalLen == sum(coverage):
-            print 'Error! %d =/= %d' % (covLen, totalLen)
-            exit()
-        '''
-
-        length = end-start
-
-        firstLength = readLens.keys()[0]
-        # Only 1 read left: return that read iff coverage[start:end] is all 1s of the correct length
-        if len(readLens) == 1 and readLens[firstLength] == 1:
-            #print '  '*level + 'Coverage: ' + ','.join([str(c) for c in coverage])
-            #print '  '*level + 'Read lengths: ' + str(readLens)
-            if length == firstLength:
-                for i in xrange(start,end):
-                    if not coverage[i] == 1:
-                        return None
-                return [[start,end]]
-
-        # More than 1 read left: pick 1 recursively
-        iteration = 0
-        uniqueReads = readLens.keys()
-        for r in uniqueReads:
-            #print '  '*level + 'Testing ' + str(r)
-            #print '  '*level + 'Coverage: ' + ','.join([str(c) for c in coverage])
-            #print '  '*level + 'Read lengths: ' + str(readLens)
-            #print '  '*level + 'Trying read ' + str(r)
-
-
-            iteration += 1
-            if level < 2:
-                print str(level) + '  '*(level+1) + str(iteration) + ' / ' + str(len(uniqueReads))
-            if iteration > len(readLens):
-                print 'Error!'
-                exit()
-
-            # make sure read is short enough for available space
-            if length >= r:
-                readFits = True
-
-                # Subtract read from coverage
-                for i in xrange(start, start+r):
-                    if coverage[i] == 0:
-                        readFits = False
-                        break
-                    coverage[i] -= 1
-
-                if not readFits:
-                    #print '  '*level + 'Read doesn\'t fit'
-                    for j in xrange(start, i):
-                        coverage[j] += 1
-                else:
-                    # Update bounds of nonzero portion of coverage
-                    #print '  '*level + 'New Coverage: ' + ','.join([str(c) for c in coverage])
-                    newStart = start
-                    while coverage[newStart] == 0 and newStart < end:
-                        newStart += 1
-                    newEnd = end
-                    while coverage[newEnd-1] == 0 and newEnd > newStart:
-                        newEnd -= 1
-                    #print 'Start = %d, End = %d' % (newStart, newEnd)
-
-                    readLens[r] -= 1
-                    if readLens[r] == 0:
-                        del readLens[r]
-
-                    reads = self.findReadsInCoverage_BruteForce(coverage, newStart, newEnd, readLens, level+1)
-                    # Add read back to coverage
-                    for i in xrange(start, start+r):
-                        coverage[i] += 1
-
-                    if r in readLens:
-                        readLens[r] += 1
-                    else:
-                        readLens[r] = 1
-        
-                    '''
-                    if reads == None:
-                        #print '  '*level + 'Doesn\'t work'
-                        # Undo all the changes above
-
-                        # Add read back to coverage
-                        for i in xrange(r):
-                            coverage[i] += 1
-
-                        if r in readLens:
-                            readLens[r] += 1
-                        else:
-                            readLens[r] = 1
-                    '''
-                    if not reads == None:
-                        #print '  '*level + 'Works!'
-                        return [[start, start+r]] + reads
-        return None
-
-    def findReadsInCoverage_v4(self, coverage, readLens, boundaries=None):
-        ''' Given a coverage vector, return a set of reads that exactly fits the coverage vector as well the distribution of read lengths.
-            Uses brute force to find the an set of reads that fits the read length distribution and matches the coverage vector
-
-            coverage: Coverage vector containing the accumulation of many reads
-            readLens: Dictionary containing the distribution of all read lengths in the coverage vector
-            boundaries: Indicies in the coverage vector which reads cannot cross (e.g. exon boundaries in the unspliced coverage vector)
-        '''
-
-        start = 0
-        end = len(coverage)
-        while coverage[start] == 0 and start < end:
-            start += 1
-        while coverage[end-1] == 0 and end > start:
-            end -= 1
-        if start == end:
-            return []
-
-        print 'Coverage:'
-        self.RLE(coverage, sys.stdout)
-        print 'Read Lengths: ' + str(readLens)
-        
-        reads = []
-        while start < end:
-            newReads = self.findReadsInCoverage_BruteForce2(coverage, start, end, readLens)
-            if newReads == None:
-                print 'Error! No reads found!'
-                exit()
-            reads.append(newReads)
-
-            while coverage[start] == 0 and start < end:
-                start += 1
-            while coverage[end-1] == 0 and end > start:
-                end -= 1
-        
-        print 'Reads: ' + str(reads)
-        print ''
-        return reads
-
-    def findReadsInCoverage_BruteForce2(self, coverage, start, end, readLens, level=0):
-
-        
-        totalLen = 0
-        for r,num in readLens.items():
-            totalLen += r*num
-        covLen = sum(coverage)
-        if not totalLen == sum(coverage):
-            print 'Error! %d =/= %d' % (covLen, totalLen)
-            exit()
-        
-
-        
-        #if level == 5:
-        #    for i in xrange(start,end):
-        #        if coverage[i] == 0:
-        #            return None
-        #    return [[start,end]]
-        
-
-        length = end-start
-
-        firstLength = readLens.keys()[0]
-        # Only 1 read left: return that read iff coverage[start:end] is all 1s of the correct length
-        if len(readLens) == 1 and readLens[firstLength] == 1:
-            if length == firstLength:
-                for i in xrange(start,end):
-                    if not coverage[i] == 1:
-                        return None
-                return [[start,end]]
-
-        # More than 1 read left: pick 1 recursively
-        iteration = 0
-
-        # separate reads into likely and unlike for efficiency
-        likely = []
-        unlikely = []
-
-        for r in readLens.keys():
-            if coverage[r] > coverage[r+1]:
-                likely += [r]
-            else:
-                unlikely += [r]
-
-        for r in likely:
-            iteration += 1
-            if level < 2:
-                print str(level) + '  '*(level+1) + str(iteration) + ' / ' + str(len(likely) + len(unlikely))
-            if iteration > len(readLens):
-                print 'Error!'
-                exit()
-
-            # make sure read is short enough for available space
-            if length >= r:
-                readFits = True
-
-                # Subtract read from coverage
-                for i in xrange(start, start+r):
-                    if coverage[i] == 0:
-                        readFits = False
-                        break
-                    coverage[i] -= 1
-
-                if not readFits:
-                    #print '  '*level + 'Read doesn\'t fit'
-                    for j in xrange(start, i):
-                        coverage[j] += 1
-                else:
-                    # Update bounds of nonzero portion of coverage
-                    #print '  '*level + 'New Coverage: ' + ','.join([str(c) for c in coverage])
-                    newStart = start
-                    while coverage[newStart] == 0 and newStart < end:
-                        newStart += 1
-                    newEnd = end
-                    while coverage[newEnd-1] == 0 and newEnd > newStart:
-                        newEnd -= 1
-                    #print 'Start = %d, End = %d' % (newStart, newEnd)
-
-                    readLens[r] -= 1
-                    if readLens[r] == 0:
-                        del readLens[r]
-
-                    reads = self.findReadsInCoverage_BruteForce2(coverage, newStart, newEnd, readLens, level+1)
-                    # Add read back to coverage
-                    for i in xrange(start, start+r):
-                        coverage[i] += 1
-
-                    if r in readLens:
-                        readLens[r] += 1
-                    else:
-                        readLens[r] = 1
-        
-                    if not reads == None:
-                        #print '  '*level + 'Works!'
-                        return [[start, start+r]] + reads
-        for r in unlikely:
-            iteration += 1
-            if level < 2:
-                print str(level) + '  '*(level+1) + str(iteration) + ' / ' + str(len(likely) + len(unlikely))
-            if iteration > len(readLens):
-                print 'Error!'
-                exit()
-
-            # make sure read is short enough for available space
-            if length >= r:
-                readFits = True
-
-                # Subtract read from coverage
-                for i in xrange(start, start+r):
-                    if coverage[i] == 0:
-                        readFits = False
-                        break
-                    coverage[i] -= 1
-
-                if not readFits:
-                    #print '  '*level + 'Read doesn\'t fit'
-                    for j in xrange(start, i):
-                        coverage[j] += 1
-                else:
-                    # Update bounds of nonzero portion of coverage
-                    #print '  '*level + 'New Coverage: ' + ','.join([str(c) for c in coverage])
-                    newStart = start
-                    while coverage[newStart] == 0 and newStart < end:
-                        newStart += 1
-                    newEnd = end
-                    while coverage[newEnd-1] == 0 and newEnd > newStart:
-                        newEnd -= 1
-                    #print 'Start = %d, End = %d' % (newStart, newEnd)
-
-                    readLens[r] -= 1
-                    if readLens[r] == 0:
-                        del readLens[r]
-
-                    reads = self.findReadsInCoverage_BruteForce2(coverage, newStart, newEnd, readLens, level+1)
-                    # Add read back to coverage
-                    for i in xrange(start, start+r):
-                        coverage[i] += 1
-
-                    if r in readLens:
-                        readLens[r] += 1
-                    else:
-                        readLens[r] = 1
-        
-                    if not reads == None:
-                        #print '  '*level + 'Works!'
-                        return [[start, start+r]] + reads
-        return None
 
     def  findSpliceSites(self, start, end):
         ''' Look for any exon boundaries crossed by the given interval. 
@@ -2085,29 +1563,27 @@ class Alignments:
         '''
 
         if read.exons == None:
-            print 'Error! Read exons = None'
+            print('Error! Read exons = None')
             exit()
         if len(read.exons) == 0:
-            print 'Error! Exon length = 0'
+            print('Error! Exon length = 0')
 
         # Update read index based on chromosome
         offset = self.chromOffsets[read.chrom]
-        for i in xrange(len(read.exons)):
+        for i in range(len(read.exons)):
             read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
 
         if pair_chrom == None:
             # unpaired read
             if len(read.exons) == 1:
-                #print '  Adding unspliced'
                 self.addUnspliced(read)
             else:
-                #print '  Adding spliced'
                 self.addSpliced(read)
 
                 # update list of exons
                 alignment = read.exons
                 if len(alignment) > 1:
-                    for i in xrange(len(alignment)-1):
+                    for i in range(len(alignment)-1):
                         self.exons.add(alignment[i][1])
                         self.exons.add(alignment[i+1][0])
         else:
@@ -2118,7 +1594,7 @@ class Alignments:
 
             if (pair_index, pair_chrom, read.exons[0][0], read.chrom) in self.unmatched:
                 foundMatch = False
-                for i in xrange(len(self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)])):
+                for i in range(len(self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)])):
                     match = self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][i]
 
                     if read.NH == match.NH:
@@ -2131,13 +1607,13 @@ class Alignments:
                         # update list of exons
                         alignment = match.exons
                         if len(alignment) > 1:
-                            for i in xrange(len(alignment)-1):
+                            for i in range(len(alignment)-1):
                                 self.exons.add(alignment[i][1])
                                 self.exons.add(alignment[i+1][0])
 
                         alignment = read.exons
                         if len(alignment) > 1:
-                            for i in xrange(len(alignment)-1):
+                            for i in range(len(alignment)-1):
                                 self.exons.add(alignment[i][1])
                                 self.exons.add(alignment[i+1][0])
 
@@ -2176,19 +1652,19 @@ class Alignments:
             if e[0] > exonsA[-1][0]:
                 break
 
-            for i in xrange(len(exonsA)-1):
+            for i in range(len(exonsA)-1):
                 if e[0] >= exonsA[-i-1][0]:
                     break
                 elif e[1] > exonsA[-i-2][1]:
                     return True
 
         countA = len(exonsA)
-        for i in xrange(countA):
+        for i in range(countA):
             e = exonsA[countA-i-1]
             if e[1] < exonsB[0][0]:
                 break
 
-            for i in xrange(len(exonsB)-1):
+            for i in range(len(exonsB)-1):
                 if e[1] <= exonsB[i][1]:
                     break
                 elif e[1] > exonsB[i][1] and e[0] < exonsB[i+1][0]:
@@ -2216,7 +1692,7 @@ class Alignments:
         for read in self.spliced:
             exons = read.exons
             cigar = [str(exons[0][1] - exons[0][0]) + 'M']
-            for i in xrange(1, len(exons)):
+            for i in range(1, len(exons)):
                 if exons[i][0] - exons[i-1][1] == 0:
                     prevLen = int(cigar[-1][:-1])
                     cigar[-1] = str(prevLen + exons[i][1] - exons[i][0]) + 'M'
@@ -2237,13 +1713,13 @@ class Alignments:
         for pair in self.paired:
             exonsA = pair.exonsA
             cigarA = [str(exonsA[0][1] - exonsA[0][0]) + 'M']
-            for i in xrange(1, len(exonsA)):
+            for i in range(1, len(exonsA)):
                 if exonsA[i][0] - exonsA[i-1][1] == 0:
                     prevLen = int(cigarA[-1][:-1])
                     cigarA[-1] = str(prevLen + exonsA[i][1] - exonsA[i][0]) + 'M'
                 else:
                     if exonsA[i][1] == exonsA[i][0]:
-                        print exons
+                        print(exonsA)
                         exit()
 
                     cigarA += [str(exonsA[i][0] - exonsA[i-1][1]) + 'N']
@@ -2252,14 +1728,14 @@ class Alignments:
 
             exonsB = pair.exonsB
             cigarB = [str(exonsB[0][1] - exonsB[0][0]) + 'M']
-            for i in xrange(1, len(exonsB)):
+            for i in range(1, len(exonsB)):
                 if exonsB[i][0] - exonsB[i-1][1] == 0:
                     prevLen = int(cigarB[-1][:-1])
                     cigarB[-1] = str(prevLen + exonsB[i][1] - exonsB[i][0]) + 'M'
                 else:
                     ####
                     if exonsB[i][1] == exonsB[i][0]:
-                        print exonsB
+                        print(exonsB)
                         exit()
 
                     cigarB += [str(exonsB[i][0] - exonsB[i-1][1]) + 'N']
