@@ -9,16 +9,24 @@ import zlib
 import binaryIO
 import math
 
+import huffman
+
+import os
+
 class Compressor:
     aligned = None
 
     sectionLen = 100000
+    exonChunkSize = 100
+    junctionChunkSize = 20
 
-    def compress(self, samFilename, compressedFilename, binary=False):
+    def compress(self, samFilename, compressedFilename, binary=False, huffman=False):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
 
             file_prefix: Prefix for all output file names
         '''
+
+        self.huffman = huffman
 
         # Read header
         header = ''
@@ -37,24 +45,37 @@ class Compressor:
         if binary:
             # Write spliced and unspliced information
             with open(compressedFilename, 'wb') as f:                
-                binaryIO.writeChroms(f, self.aligned.chromosomes)
-                exonBytes = binaryIO.writeExons(f, self.aligned.exons)
+                s = binaryIO.writeChroms(self.aligned.chromosomes)
+                f.write(s)
+                s, self.exonBytes = binaryIO.writeExons(self.aligned.exons)
+                f.write(s)
 
-                self.compressSpliced(f, binary, exonBytes)
+                size = os.stat('compressed/compressed_binary.txt').st_size
+                print('Chroms + Exons size: %d bytes' % size)
+
+                print('Computing junctions')
+                junctions, maxReadLen = self.computeJunctions()
+
+                print('Compressing unspliced')
                 self.compressUnspliced(f, binary)
+                size = os.stat('compressed/compressed_binary.txt').st_size - size
+                print('Unspliced size: %d bytes' % size)
 
+                print('Compressing spliced')
+                self.compressSpliced(junctions, maxReadLen, f, binary)
+                size = os.stat('compressed/compressed_binary.txt').st_size - size
+                print('Spliced size: %d bytes' % size)
+            
             # Write exons and index information
             compressed = None
             with open(compressedFilename, 'rb') as f:
                 compressed = f.read()
             with open(compressedFilename, 'wb') as f:
-                f.write(bytes('#' + '\t' + '\t'.join([str(i) for i in self.splicedIndex]) + '\n', 'UTF-8'))
-                for k,v in self.unsplicedIndex.items():
-                    f.write(bytes('#' + str(k) + '\t' + '\t'.join([str(i) for i in v]) + '\n', 'UTF-8'))
-                for k,v in self.unsplicedExonsIndex.items():
-                    f.write(bytes('#' + str(k) + '\t' + '\t'.join([str(i) for i in v]) + '\n', 'UTF-8'))
-
+                self.writeIndexBinary(f)
+                size = os.stat('compressed/compressed_binary.txt').st_size
+                print('Index size: %d bytes' % size)
                 f.write(compressed)
+        
         else:
             # Write spliced and unspliced information
             with open(compressedFilename, 'w') as f:
@@ -78,24 +99,12 @@ class Compressor:
 
                 f.write('\t'.join([str(e) for e in self.aligned.exons]) + '\n')
 
-                f.write('#' + '\t' + '\t'.join([str(i) for i in self.splicedIndex]) + '\n')
-
-                for k,v in self.unsplicedIndex.items():
-                    f.write('#' + str(k) + '\t' + '\t'.join([str(i) for i in v]) + '\n')
-
+                self.writeIndex(f)
                 f.write(compressed)
 
-    def compressSpliced(self, filehandle, binary=False, exonBytes=0):
-        ''' Compress the spliced alignments to a single file
-
-            filehandle: File to write to
-        '''
-
+    def computeJunctions(self):
         # Compute coverage levels across every exon junction
         junctions = dict()
-
-        # For each exon, offset in file of first junction containing that exon
-        self.splicedIndex = [-1] * len(self.aligned.exons)
 
         # Keep track of maximum read and fragment lengths
         maxReadLen = 0
@@ -179,32 +188,64 @@ class Compressor:
                     if r.lenRight > maxReadLen:
                         maxReadLen = r.lenRight
 
-        # Determine the number of bytes for fragment and read lengths
-        #fragLenBytes = binaryIO.findNumBytes(maxFragLen)
-        readLenBytes = binaryIO.findNumBytes(maxReadLen)
+        # Compute difference run-length encoding for junctions and update huffman index
+        if self.huffman:
+            self.huffmanFreqs = dict()
 
-        #binaryIO.writeVal(filehandle, 1, fragLenBytes)
+            for j in junctions.values():
+                j.differenceEncode()
+
+                # Increment huffman frequencies
+                for row in j.covDRLE:
+                    if row[0] in self.huffmanFreqs:
+                        self.huffmanFreqs[row[0]] += 1
+                    else:
+                        self.huffmanFreqs[row[0]] = 1
+
+        return junctions, maxReadLen
+
+
+    def compressSpliced(self, junctions, maxReadLen, filehandle, binary=False):
+        ''' Compress the spliced alignments to a single file
+
+            filehandle: File to write to
+        '''
+
+        # Determine the number of bytes for read lengths
+        readLenBytes = binaryIO.findNumBytes(maxReadLen)
         binaryIO.writeVal(filehandle, 1, readLenBytes)
 
-        # Write number of junctions
-        binaryIO.writeVal(filehandle, 2*exonBytes, len(junctions))
+        # Junction index: list of junctions and length of each chunk
+        self.sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
+        self.junctionChunkLens = [0] * int(math.ceil(len(self.sortedJuncs) / self.junctionChunkSize))
 
-        # Write junction information
-        sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
         i = 0
-        for key in sortedJuncs:
-
-            # get offset in file
-            offset = filehandle.tell()
-            exons = [int(e) for e in key.split('\t')[:-2]]
-            for e in exons:
-                if self.splicedIndex[e] == -1:
-                    self.splicedIndex[e] = offset
+        s = b''
+        chunkId = 0
+        for key in self.sortedJuncs:
+            i += 1
 
             junc = junctions[key]
 
             if binary:
-                binaryIO.writeJunction(filehandle, exonBytes, readLenBytes, junc)
+                if self.huffman:
+                    s += binaryIO.writeJunction(readLenBytes, junc, self.huffmanIndex)
+                else:
+                    s += binaryIO.writeJunction(readLenBytes, junc)
+
+                if i == self.junctionChunkSize:
+                    start = filehandle.tell()
+
+                    # Write to file
+                    filehandle.write(s)
+                    #filehandle.write(zlib.compress(s))
+
+                    # save length of chunk in file to index
+                    self.junctionChunkLens[chunkId] = filehandle.tell()-start
+                    chunkId += 1
+
+                    i = 0
+                    s = b''
             else:
                 # write junction information
                 filehandle.write('>' + key + '\n')
@@ -218,6 +259,16 @@ class Compressor:
 
                 # write coverage
                 self.writeRLE(junc.coverage, filehandle)
+        if binary and i > 0:
+            # Write final junctions
+            start = filehandle.tell()
+
+            # Write to file
+            filehandle.write(s)
+            #filehandle.write(zlib.compress(s))
+
+            # save length of chunk in file to index
+            self.junctionChunkLens[chunkId] = filehandle.tell()-start
 
     def compressUnspliced(self, filehandle, binary=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
@@ -257,22 +308,46 @@ class Compressor:
             j = bisect.bisect_right(self.aligned.exons, r.exons[0][0])-1
             readExons[r.NH][j] += [len(self.aligned.unspliced) - i - 1]
 
-            # update coverage vector
             if r.NH == 1:
-                if r.lenLeft == 0 and r.lenRight == 0:
-                    for base in range(r.exons[0][0], r.exons[0][1]):
-                        coverages[r.NH][base] += 1
+                # update coverage vector
+                if (r.lenLeft == 0 and r.lenRight == 0):
+                    for n in range(r.exons[0][0], r.exons[0][1]):
+                        coverages[r.NH][n] += 1
                 else:
-                    for base in range(r.exons[0][0], r.exons[0][0]+r.lenLeft):
-                        coverages[r.NH][base] += 1
-                    for base in range(r.exons[0][1]-r.lenRight, r.exons[0][1]):
-                        coverages[r.NH][base] += 1
+                    for n in range(r.exons[0][0], r.exons[0][0]+r.lenLeft):
+                        coverages[r.NH][n] += 1
+                    for n in range(r.exons[0][1]-r.lenRight, r.exons[0][1]):
+                        coverages[r.NH][n] += 1
             else:
-                if (r.lenLeft == 0 and r.lenRight == 0):# or (r.exons[0][0]+r.lenLeft > r.exons[0][1]-r.lenRight):
+                # update coverage vector
+                if (r.lenLeft == 0 and r.lenRight == 0):
                     coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.exons[0][1]-r.exons[0][0], 1)
                 else:
                     coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.lenLeft, 1)
                     coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-r.lenRight, r.lenRight, 1)
+
+        coverages[1] = self.RLE(coverages[1])
+
+        # Compute difference run-length encoding for junctions and update huffman index
+        if self.huffman:
+            for cov in coverages.values():
+                # Add first value
+                if cov[0][0] in self.huffmanFreqs:
+                    self.huffmanFreqs[cov[0][0]] += 1
+                else:
+                    self.huffmanFreqs[cov[0][0]] = 1
+
+                for i in range(1,len(cov)):
+                    val = cov[i][0] - cov[i-1][0]
+                    cov[i][0] = val
+                    if val in self.huffmanFreqs:
+                        self.huffmanFreqs[val] += 1
+                    else:
+                        self.huffmanFreqs[val] = 1
+
+            # Create huffman index from frequencies
+            freqs = [(k,v) for k,v in self.huffmanFreqs.items()]
+            self.huffmanIndex = huffman.createHuffmanIndex(freqs)
 
         if binary:
             # find length in bytes to fit fragment and read lengths
@@ -412,59 +487,64 @@ class Compressor:
             reads = readExons[NH]
 
             # Write coverage vector
-            if NH == 1:
-                offsets = [0] * len(breakpoints)
-                for i in range(len(breakpoints)-1):
-                    offsets[i] = filehandle.tell()
-                    binaryIO.writeCov(filehandle, binaryIO.RLE(cov[breakpoints[i]:breakpoints[i+1]]))
-                offsets[-1] = filehandle.tell()
-                binaryIO.writeCov(filehandle, binaryIO.RLE(cov[breakpoints[-1]:]))
+            offsets = [0] * len(breakpoints)
 
-                self.unsplicedIndex[NH] = offsets
-            else:
-                offsets = [0] * len(breakpoints)
-
-                pos = 0
-                currBreakpoint = 0
-                segmentRLE = []
-                for c in cov:
-                    if breakpoints[currBreakpoint] == pos:
-                        if len(segmentRLE) > 0:
-                            binaryIO.writeCov(filehandle, segmentRLE)
-                            segmentRLE = []
-                        offsets[currBreakpoint] = filehandle.tell()
-                        currBreakpoint += 1
-
-                    segmentEnd = pos+c[1]
-                    while currBreakpoint < len(breakpoints) and breakpoints[currBreakpoint] < segmentEnd:
-                        length = breakpoints[currBreakpoint] - pos
+            pos = 0
+            currBreakpoint = 0
+            start = filehandle.tell()
+            segmentRLE = []
+            for c in cov:
+                segmentEnd = pos+c[1]
+                while currBreakpoint < len(breakpoints)-1 and breakpoints[currBreakpoint+1] <= segmentEnd:
+                    length = breakpoints[currBreakpoint+1] - pos
+                    if length > 0:
                         segmentRLE.append([c[0], length])
-                        
-                        binaryIO.writeCov(filehandle, segmentRLE)
-                        segmentRLE = []
+                    
+                    if len(segmentRLE) == 1 and segmentRLE[0][0] == 0:
+                        offsets[currBreakpoint] = 0
+                    else:
+                        if self.huffman:
+                            s = binaryIO.writeCovHuffman(segmentRLE, self.huffmanIndex)
+                        else:
+                            s = binaryIO.writeCov(segmentRLE)
+                        filehandle.write(s)
+                        #filehandle.write(zlib.compress(s))
+                        offsets[currBreakpoint] = filehandle.tell() - start
+                    currBreakpoint += 1
+                    segmentRLE = []
 
-                        c[1] -= length
-                        pos += length
-                        offsets[currBreakpoint] = filehandle.tell()
-                        currBreakpoint += 1
+                    c[1] -= length
+                    pos += length
+                    start = filehandle.tell()
 
+                if c[1] > 0:
                     segmentRLE.append(c)
-
                     pos += c[1]
-                if len(segmentRLE) > 0:
-                    binaryIO.writeCov(filehandle, segmentRLE)
+            if len(segmentRLE) > 0:
+                if len(segmentRLE) == 1 and segmentRLE[0][0] == 0:
+                    offsets[currBreakpoint] = 0
+                else:
+                    if self.huffman:
+                        s += binaryIO.writeCovHuffman(segmentRLE, self.huffmanIndex)
+                    else:
+                        s = binaryIO.writeCov(segmentRLE)
+                    filehandle.write(s)
+                    #filehandle.write(zlib.compress(s))
+                    offsets[currBreakpoint] = filehandle.tell() - start
 
-                self.unsplicedIndex[NH] = offsets
+            self.unsplicedIndex[NH] = offsets
+
+
+
 
             # Write lengths for each exon
-            exonsIndex = [0] * len(reads)
-            exonsIndex[0] = filehandle.tell()
+            exonsIndex = []
+            chunkId = 0
+            chunkString = b''
             for i in range(len(reads)):
-                if i > 0:
-                    exonsIndex[i] = filehandle.tell() - exonsIndex[i-1]
+                chunkId += 1
 
                 length = self.aligned.exons[i+1] - self.aligned.exons[i]
-
                 exonStart = self.aligned.exons[i]
 
                 # Distribution of all read lengths
@@ -501,14 +581,21 @@ class Compressor:
                         else:
                             lensRight[read.lenRight] = 1
 
-                self.unsplicedExonsIndex[NH] = exonsIndex
-
-                binaryIO.writeLens(filehandle, fragLenBytes, readLens)
+                chunkString += binaryIO.writeLens(fragLenBytes, readLens)
                 if len(readLens) > 0:
-                    binaryIO.writeLens(filehandle, readLenBytes, lensLeft)
+                    chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
                     if len(lensLeft) > 0:
-                        binaryIO.writeLens(filehandle, readLenBytes, lensRight)
+                        chunkString += binaryIO.writeLens(readLenBytes, lensRight)
 
+                if chunkId == self.exonChunkSize or i == len(reads)-1:
+                    startPos = filehandle.tell()
+                    filehandle.write(chunkString)
+                    #filehandle.write(zlib.compress(chunkString))
+                    exonsIndex.append(filehandle.tell() - startPos)
+                    chunkId = 0
+                    chunkString = b''
+
+            self.unsplicedExonsIndex[NH] = exonsIndex
 
     def parseAlignments(self, filehandle):
         ''' Parse a file in SAM format
@@ -619,17 +706,11 @@ class Compressor:
             if v == val:
                 length += 1
             else:
-                if length == 1:
-                    rle.append([val])
-                else:
-                    rle.append([val, length])
+                rle.append([val, length])
                 val = v
                 length = 1
 
-        if length == 1:
-            rle.append([val])
-        else:
-            rle.append([val, length])
+        rle.append([val, length])
 
         return rle
 
@@ -682,4 +763,46 @@ class Compressor:
         else:
             filehandle.write(str(val) + '\t' + str(length) + '\n')
 
+    def writeIndex(self, f):
+        # Write junctions index
+        f.write(bytes('#' + str(self.exonChunkSize) + '\n', 'UTF-8'))
+        f.write(bytes('#' + ' '.join([str(k)+','+str(v) for (k,v) in self.junctionIndex]) + '\n', 'UTF-8'))
+
+        for k,v in self.unsplicedIndex.items():
+            # Write unspliced coverage index
+            f.write(bytes('#' + str(k) + '\t' + '\t'.join([str(i) for i in v]) + '\n', 'UTF-8'))
+        
+            # Write unspliced exon reads index
+            f.write(bytes('#' + str(k) + '\t' + '\t'.join([str(i) for i in self.unsplicedExonsIndex[k]]) + '\n', 'UTF-8'))
+
+    def writeIndexBinary(self, f):
+        s = binaryIO.valToBinary(4, self.exonChunkSize)
+        s += binaryIO.valToBinary(4, self.junctionChunkSize)
+
+        # Write junction names
+        s += binaryIO.writeJunctionsList(self.sortedJuncs, self.exonBytes)
+
+        # Write length of junction chunks
+        s += binaryIO.writeList(self.junctionChunkLens)
+
+        # Number of NH values
+        s += binaryIO.valToBinary(4, len(self.unsplicedIndex.items()))
+        for k in self.unsplicedIndex.keys():
+            # NH value
+            s += binaryIO.valToBinary(4, k)
+
+            # Write unspliced coverage index
+            s += binaryIO.writeList(self.unsplicedIndex[k])
+        
+            # Write unspliced exon reads index
+            s += binaryIO.writeList(self.unsplicedExonsIndex[k])
+
+        # Write huffman index
+        if self.huffman:
+            s += binaryIO.writeHuffmanIndex(self.huffmanIndex)
+
+        # Compress and write to file
+        #s = zlib.compress(s)
+        binaryIO.writeVal(f, 4, len(s))
+        f.write(s)
         

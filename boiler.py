@@ -15,6 +15,8 @@ if __name__ == '__main__':
         help='Full path of SAM file containing aligned reads')
     parser.add_argument("--binary", help="Write in binary format",
         action="store_true")
+    parser.add_argument("--huffman", help="Use huffman coding to compress coverage vectors",
+        action="store_true")
     
     args = parser.parse_args(sys.argv[1:])
 
@@ -22,17 +24,21 @@ if __name__ == '__main__':
     if args.binary:
         binary = True
 
+    huffman = False
+    if args.huffman:
+        huffman = True
+
     compressedName = 'compressed/compressed_binary.txt'
     expandedName = 'expanded.sam'
 
     compressor = compress.Compressor()
     startTime = time.time()
-    compressor.compress(args.alignments, compressedName, binary)
+    compressor.compress(args.alignments, compressedName, binary, huffman)
     endTime = time.time()
     print('Compression time: %0.3f s' % (endTime-startTime))
 
     expander = expand.Expander()
     startTime = time.time()
-    expander.expand(compressedName, expandedName, binary)
+    expander.expand(compressedName, expandedName, binary, huffman)
     endTime = time.time()
     print('Decompression time: %0.3f s' % (endTime-startTime))

@@ -207,7 +207,6 @@ class Alignments:
             else:
                 self.spliced += [newRead]
 
-
     # Returns the element from list1 and the element from list2 with the smallest distance between them
     def findClosestVals(self, list1, list2):
         if list1[0] == list2[0]:
