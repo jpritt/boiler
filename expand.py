@@ -9,6 +9,9 @@ import binaryIO
 import operator
 import huffman
 
+from guppy import hpy
+h = hpy()
+
 class Expander:
     aligned = None
     sectionLen = 100000    
@@ -42,7 +45,11 @@ class Expander:
                 self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
 
                 self.expandUnsplicedBinary(f)
+                print('Finished expanding unspliced')
+                print(h.heap())
                 self.expandSplicedBinary(f, self.exonBytes)
+                print('Finished expanding spliced')
+                print(h.heap())
         else:
             with open(compressedFilename, 'r') as f:
                 self.aligned = alignments.Alignments(self.readHeader(f))

@@ -8,6 +8,9 @@ import bisect
 import binaryIO
 import math
 
+from guppy import hpy
+h = hpy()
+
 import huffman
 
 import os
@@ -50,6 +53,9 @@ class Compressor:
                     break
         self.chromosomes = self.parseSAMHeader(header)
         self.aligned = alignments.Alignments(self.chromosomes)
+
+        print('Finished processing alignments')
+        print(h.heap())
 
         with open(samFilename, 'r') as f:
             self.parseAlignments(f)
