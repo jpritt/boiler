@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 import sys
 import argparse
 
@@ -49,7 +49,7 @@ def go(args):
     with open(alignmentsFile) as f:
         form = args['alignments'][-3:len(alignmentsFile)]
         if (form != 'sam'):
-            print 'Only .sam files are supported'
+            print('Only .sam files are supported')
 
         alignments = f.read().split('\n')
         header = ''
@@ -65,17 +65,14 @@ def go(args):
                 row = line.strip().split('\t')
                 chromosomes[row[1][3:]] = int(row[2][3:])
 
-
         sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
-        #sam2 = readSAM.ReadSAM(args['pro'], chromosomes)
         expander = expand.Expander()
         pro = readPRO.ReadPRO(args['pro'])
 
-        intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
-        #intervals = [['3L', 24543840, 24543860]]
-        #intervals = [['3R', None, None]]
+        #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
+        #intervals = [['2R', 100000, 200000]]
 
-        '''
+        
         lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
         #lens = [10000,100000]
         chroms = ['2R', '2L', '3R', '3L', 'X']
@@ -86,10 +83,10 @@ def go(args):
             timePred = 0.0
 
             numIters = 10
-            for c in xrange(len(chroms)):
+            for c in range(len(chroms)):
                 chrom = chroms[c]
 
-                for _ in xrange(numIters):
+                for _ in range(numIters):
                     start = random.randint(0, chromLens[c]-l)
 
                     startTime = time.time()
@@ -102,33 +99,33 @@ def go(args):
                     endTime = time.time()
                     timePred += float(endTime - startTime)
 
-                    for x in xrange(len(trueCov)):
+                    for x in range(len(trueCov)):
                         if abs(trueCov[x] - predCov[x]) > 0.0001:
-                            print 'Error!'
-                            print '%s (%d, %d)' % (chrom, start, start+l)
-                            print x
+                            print('Error!')
+                            print('%s (%d, %d)' % (chrom, start, start+l))
+                            print(x)
                             for n in xrange(x-3,x+3):
-                                print str(trueCov[n]) + '\t' + str(predCov[n])
+                                print(str(trueCov[n]) + '\t' + str(predCov[n]))
                             exit()
 
             timeTrueAvg = timeTrue / float(numIters*len(chroms))
             timePredAvg = timePred / float(numIters*len(chroms))
-            print 'Length %d:' % l
-            print '  SAM:        %0.3f s' % timeTrueAvg
-            print '  Compressed: %0.3f s' % timePredAvg
+            print('Length %d:' % l)
+            print('  SAM:        %0.3f s' % timeTrueAvg)
+            print('  Compressed: %0.3f s' % timePredAvg)
         '''
+
         
-        '''
-        print 'Querying coverage...'
+        print('Querying coverage...')
         for i in intervals:
             chrom = i[0]
             start = i[1]
             end = i[2]
 
             if start == None or end == None:
-                print '%s: (%d, %d)' % (chrom, 0, chromosomes[chrom])
+                print('%s: (%d, %d)' % (chrom, 0, chromosomes[chrom]))
             else:
-                print '%s: (%d, %d)' % (chrom, start, end)
+                print('%s: (%d, %d)' % (chrom, start, end))
             if start == None or end == None:
                 length = chromosomes[chrom]
             else:
@@ -137,19 +134,19 @@ def go(args):
             trueCov = sam.getCoverage(chrom, start, end)
             endTime = time.time()
             trueTime = float(endTime - startTime)
-            print '%fs, %d bases (%f bases/s)' % (trueTime, length, float(length)/trueTime)
+            print('%fs, %d bases (%f bases/s)' % (trueTime, length, float(length)/trueTime))
 
             startTime = time.time()
             predCov = expander.getCoverage(args['compressed'], chrom, start, end)
-            #predCov = sam2.getCoverage(chrom, start, end)
             endTime = time.time()
             predTime = float(endTime - startTime)
-            print '%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime)
+            print('%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime))
 
+            
             correct = 0
             trueBig = 0
             predBig = 0
-            for x in xrange(len(trueCov)):
+            for x in range(len(trueCov)):
                 
                 if trueCov[x] > predCov[x]+0.0001:
                     trueBig += 1
@@ -160,86 +157,16 @@ def go(args):
                 
                 if abs(trueCov[x] - predCov[x]) < 0.0001:
                     correct += 1
-                else:
-                    print abs(trueCov[x]-predCov[x])
-                    print x
-                    for n in xrange(x-3,x+3):
-                        print str(trueCov[n]) + '\t' + str(predCov[n])
+                elif predCov[x] >= 0.1:
+                    print(x)
+                    for n in range(x-3,x+3):
+                        print(str(trueCov[n]) + '\t' + str(predCov[n]))
                     exit()
                 
-                
-            #print trueBig
-            #print predBig
-            #exit()
-            print '%d wrong - %0.3f correct' % (len(trueCov)-correct, float(correct) / float(len(trueCov)))
-            print ''
+            print('%d wrong - %0.3f correct' % (len(trueCov)-correct, float(correct) / float(len(trueCov))))
+            print('')
         '''
-        
-        
-        print 'Querying genes...'
-        for i in intervals:
-            chrom = i[0]
-            start = i[1]
-            end = i[2]
-
-            if start == None or end == None:
-                print '%s: (%d, %d)' % (chrom, 0, chromosomes[chrom])
-            else:
-                print '%s: (%d, %d)' % (chrom, start, end)
-
-            trueGenes = pro.getGenes(chrom, start, end)
-
-            startTime = time.time()
-            origGenes = sam.getGenes(chrom, start, end)
-            endTime = time.time()
-            origTime = endTime - startTime
-
-            print 'Orig:'
-            print origGenes[:10]
-
-            startTime = time.time()
-            predGenes = expander.getGenes(args['compressed'], chrom, start, end)
-            endTime = time.time()
-            predTime = endTime - startTime
-
-            print len(origGenes)
-
-            correct = 0
-            for g in predGenes:
-                if g in origGenes:
-                    correct += 1
-            print '%d / %d (%d)' % (correct, len(origGenes), len(predGenes))
-
-            print ''
-            print origGenes[:10]
-            print predGenes[:10]
-
-            exit()
-
-            '''
-            numEnclosed = 0
-            numSplit = 0
-            numNotFound = 0
-            for i in trueGenes:
-                enclosed = False
-                split = False
-                for j in predGenes:
-                    if i[0] >= j[0] and i[1] <= j[1]:
-                        enclosed = True
-                    elif i[0] < j[1] and i[1] > j[0]:
-                        split = True
-
-                if enclosed:
-                    numEnclosed += 1
-                elif split:
-                    numSplit += 1
-                else:
-                    numNotFound += 1
-            '''
-            predTime = float(endTime - startTime)
-            print '%0.3fs' % predTime
-            #print '%d correctly enclosed, %d split, %d not found' % (numEnclosed, numSplit, numNotFound)
-            print ''
+            
         
         
 def go_profile(args):
@@ -247,17 +174,17 @@ def go_profile(args):
    if args['profile']:
        import cProfile
        import pstats
-       import StringIO
+       import io
        pr = cProfile.Profile()
        pr.enable()
    go(args)
    if args['profile']:
        pr.disable()
-       s = StringIO.StringIO()
+       s = io.StringIO()
        sortby = 'tottime'
        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
        ps.print_stats(30)
-       print s.getvalue()
+       print(s.getvalue())
 
 if __name__ == '__main__':
     # Print file's docstring if -h is invokedc

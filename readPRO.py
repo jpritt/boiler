@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 import sys
 
 class ReadPRO:
@@ -31,7 +31,7 @@ class ReadPRO:
 
                     geneType = row[2]
                     if not geneType == 'CDS':
-                        print geneType
+                        print(geneType)
 
                     genes.add((int(bounds[0]), int(bounds[1])))
         return sorted(list(genes))

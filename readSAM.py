@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 import re
 
 class ReadSAM:
@@ -45,12 +45,13 @@ class ReadSAM:
 
                             for e in exons:
                                 if e[0] < end and e[1] >= start:
-                                    for i in xrange(max(start,e[0]), min(end,e[1])):
+                                    for i in range(max(start,e[0]), min(end,e[1])):
+                                        #if i-start == 123828:
+                                        #    print(line)
                                         coverage[i-start] += NH
                     else:
                         return coverage
 
-            print ''
             return coverage
 
     def getGenes(self, chrom, start=None, end=None, overlapRadius=50):
@@ -74,8 +75,6 @@ class ReadSAM:
 
                     if row[6] == '=' and int(row[7]) > readStart:
                         genes.append((readStart, int(row[7])))
-                        if readStart < 19300072 and int(row[7]) > 19299986:
-                            print line
                     else:
                         cigar = row[5]
                         if readStart >= start and readStart < end:
@@ -83,8 +82,6 @@ class ReadSAM:
 
                             if exons[-1][1] <= end:
                                 genes.append((exons[0][0], exons[-1][1]))
-                                if exons[0][0] < 19300072 and exons[-1][1] > 19299986:
-                                    print line
 
 
             genes.sort()

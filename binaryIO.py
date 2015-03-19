@@ -3,6 +3,7 @@ import sys
 import math
 import junction
 import huffman
+import time
 from struct import *
 
 # Reading/writing formats
@@ -13,6 +14,8 @@ def valToBinary(numBytes, val):
     ''' Convert a value to a byte string which can then be written to a file
     '''
 
+    return (val).to_bytes(numBytes, byteorder='big')
+    '''
     s = b''
     while numBytes > 0:
         v = val % byteVal
@@ -25,17 +28,22 @@ def valToBinary(numBytes, val):
         exit()
 
     return s
+    '''
 
-def binaryToVal(s, numBytes):
+def binaryToVal(s, numBytes, start=0):
     ''' Convert a byte string from a file to an integer value
     '''
 
+    return int.from_bytes(s[start:start+numBytes], byteorder='big'), numBytes+start
+
+    '''
     # Compute value for each character and add it to val
     val = 0
     #b = unpack('B'*numBytes, s[:numBytes])
     for i in range(numBytes):
-        val += s[i] << (8*i)
-    return val, s[numBytes:]
+        val += s[start+i] << (8*i)
+    return val, start+numBytes
+    '''
 
 def writeVal(f, numBytes, val):
     f.write(valToBinary(numBytes, val))
@@ -43,17 +51,6 @@ def writeVal(f, numBytes, val):
 def readVal(f, numBytes):
     v,_ = binaryToVal(f.read(numBytes), numBytes)
     return v
-    '''
-    val = 0
-    bs = unpack('B'*numBytes, f.read(numBytes))
-
-    # Compute value for each character and add it to val
-    for i in range(numBytes):
-        val += bs[i] << (8*i)
-
-    return val
-    #return unpack(formats[numBytes], f.read(numBytes))[0]
-    '''
 
 def writeChroms(chroms):
     names = []
@@ -110,25 +107,25 @@ def writeDict(d):
         s += valToBinary(valBytes, v)
     return s
 
-def readDict(s):
+def readDict(s, start=0):
     ''' Generic method to read a dictionary with string keys and integer values in the format written by writeDict() '''
 
     d = []
 
     # Read length of keys string
-    keyLen, s = binaryToVal(s, 4)
+    keyLen, start = binaryToVal(s, 4, start)
 
     # Read keys
     keyStr = s[:keyLen].decode('ascii').rstrip()
     keys = keyStr.split(',')
-    s = s[keyLen:]
+    start += keyLen
 
     # Read number of bytes for each value
-    valBytes, s = binaryToVal(s, 1)
+    valBytes, start = binaryToVal(s, 1, start)
 
     # Read values
     for k in keys:
-        v, s = binaryToVal(s, valBytes)
+        v, start = binaryToVal(s, valBytes, start)
         d.append((k,v))
 
     return d
@@ -147,15 +144,15 @@ def writeList(vals):
         s += valToBinary(valBytes, v)
     return s
 
-def readList(s):
+def readList(s, start=0):
     ''' Generic method to read a list of integers in the format written by writeList() '''
-    valBytes, s = binaryToVal(s, 1)
-    numVals, s = binaryToVal(s, 4)
+    valBytes, start = binaryToVal(s, 1, start)
+    numVals, start = binaryToVal(s, 4, start)
 
     vals = [0] * numVals
     for i in range(numVals):
-        vals[i], s = binaryToVal(s, valBytes)
-    return vals, s
+        vals[i], start = binaryToVal(s, valBytes, start)
+    return vals, start
 
 def writeExons(exons):
     ''' Write the list of exons. More specific version of writeList() above '''
@@ -178,41 +175,42 @@ def writeExons(exons):
 def readExons(f, numExonBytes):
     ''' Read the list of exons '''
     exonBytes = readVal(f, 1)
-    #numExonBytes = readVal(f, 1)
     numExons = readVal(f, numExonBytes)
 
     exons = []
     for _ in range(numExons):
         exons.append(readVal(f, exonBytes))
-    return numExonBytes, exons
+    return exons
 
 def writeJunctionsList(junctions, exonBytes):
     s = valToBinary(4, len(junctions))
     s += valToBinary(1, exonBytes)
 
     for j in junctions:
-        #print(j)
         j = j.split('\t')
 
-        # First value: Number of exons in junction, +/- depending on XS value
+        # First value: Number of exons in junction
+        # Second value: 0 for negative XS, 1 for positive
         if j[-2] == '-':
             s += pack('b', 2-len(j))
         else:
             s += pack('b', len(j)-2)
+        
         for e in j[:-2]:
             s += valToBinary(exonBytes, int(e))
         s += valToBinary(2, int(j[-1]))
 
     return s
 
-def readJunctionsList(s):
-    numJunctions, s = binaryToVal(s, 4)
-    exonBytes, s = binaryToVal(s, 1)
+def readJunctionsList(s, start=0):
+    numJunctions, start = binaryToVal(s, 4, start)
+    exonBytes, start = binaryToVal(s, 1, start)
 
-    junctions = [''] * numJunctions
+    junctions = [[]] * numJunctions
     for j in range(numJunctions):
         # Read number of exons
-        v = unpack_from('b', s)[0]
+        v = unpack_from('b', s[start:start+1])[0]
+        start += 1
         numExons = abs(v)
 
         # Read XS value
@@ -220,20 +218,20 @@ def readJunctionsList(s):
             xs = '-'
         else:
             xs = '+'
+        
 
         # Read exons
-        s = s[1:]
         juncExons = [0] * numExons
         for e in range(numExons):
-            juncExons[e], s = binaryToVal(s, exonBytes)
+            juncExons[e], start = binaryToVal(s, exonBytes, start)
 
         # Read NH value
-        NH, s = binaryToVal(s, 2)
+        NH, start = binaryToVal(s, 2, start)
 
         # Create junction string
-        junctions[j] = '\t'.join([str(e) for e in juncExons]) + '\t' + xs + '\t' + str(NH)
+        junctions[j] = juncExons + [xs, NH]
 
-    return junctions, exonBytes, s
+    return junctions, exonBytes, start
 
 def writeJunction(readLenBytes, junc, huffmanIndex=None):
     # More cost efficient to calculate/save the number of bytes needed for fragments for each junction
@@ -257,21 +255,34 @@ def writeJunction(readLenBytes, junc, huffmanIndex=None):
 
     return s
 
-def readJunction(s, junc, readLenBytes, huffmanTree=None):
-    fragLenBytes, s = binaryToVal(s, 1)
+def readJunction(s, junc, readLenBytes, start=0, huffmanTree=None):
+    fragLenBytes, start = binaryToVal(s, 1, start)
 
-    junc.readLens, s = readLens(s, fragLenBytes)
+    junc.readLens, start = readLens(s, fragLenBytes, start)
     if len(junc.readLens) > 0:
-        junc.lensLeft, s = readLens(s, readLenBytes)
+        junc.lensLeft, start = readLens(s, readLenBytes, start)
         if len(junc.lensLeft) > 0:
-            junc.lensRight, s = readLens(s, readLenBytes)
+            junc.lensRight, start = readLens(s, readLenBytes, start)
 
     if not huffmanTree == None:
-        junc.coverage, s = readCovHuffman(s, huffmanTree)
+        junc.coverage, start = readCovHuffman(s, huffmanTree, start)
     else:
-        junc.coverage, s = readCov(s)
+        junc.coverage, start = readCov(s, start)
 
-    return junc, s
+    return junc, start
+
+def skipJunction(s, readLenBytes, start=0):
+    fragLenBytes, start = binaryToVal(s, 1, start)
+
+    lens, start = readLens(s, fragLenBytes, start)
+    if len(lens) > 0:
+        lens, start = readLens(s, readLenBytes, start)
+        if len(lens) > 0:
+            _, start = readLens(s, readLenBytes, start)
+
+    _, start = readCov(s, start)
+
+    return start
 
 def writeLens(lenBytes, lens):
     # Write number of lengths
@@ -288,21 +299,21 @@ def writeLens(lenBytes, lens):
 
     return s
 
-def readLens(s, lenBytes):
+def readLens(s, lenBytes, start=0):
     # Read number of lengths
-    numLens, s = binaryToVal(s, 2)
+    numLens, start = binaryToVal(s, 2, start)
     lens = dict()
 
     if numLens > 0:
         # Read number of bytes for each frequency
-        freqBytes, s = binaryToVal(s, 1)
+        freqBytes, start = binaryToVal(s, 1, start)
 
         for _ in range(numLens):
-            l, s = binaryToVal(s, lenBytes)
-            n, s = binaryToVal(s, freqBytes)
+            l, start = binaryToVal(s, lenBytes, start)
+            n, start = binaryToVal(s, freqBytes, start)
             lens[l] = n
 
-    return lens, s
+    return lens, start
 
 def writeCov(cov):
     maxLen = 0
@@ -332,22 +343,22 @@ def writeCov(cov):
 
     return s
 
-def readCov(s):
+def readCov(s, start=0):
     # Read size of length and cov in bytes
-    lenBytes, s = binaryToVal(s, 1)
-    covBytes, s = binaryToVal(s, 1)
+    lenBytes, start = binaryToVal(s, 1, start)
+    covBytes, start = binaryToVal(s, 1, start)
 
     # Read the length of the vector
-    lenCov, s = binaryToVal(s, 2)
+    lenCov, start = binaryToVal(s, 2, start)
 
     cov = []
     for _ in range(lenCov):
-        c, s = binaryToVal(s, covBytes)
-        l, s = binaryToVal(s, lenBytes)
-        #cov.append([l,c])
-        cov += [c] * l
+        c, start = binaryToVal(s, covBytes, start)
+        l, start = binaryToVal(s, lenBytes, start)
+        cov.append([c,l])
+        #cov += [c] * l
 
-    return cov, s
+    return cov, start
 
 def writeCovHuffman(cov, huffmanIndex):
     maxLen = 0
@@ -377,30 +388,30 @@ def writeCovHuffman(cov, huffmanIndex):
     #print('Finished writing')
     return s
 
-def readCovHuffman(s, huffmanTree):
+def readCovHuffman(s, huffmanTree, start=0):
     # Read size of length and cov in bytes
-    lenBytes, s = binaryToVal(s, 1)
+    lenBytes, start = binaryToVal(s, 1, start)
 
     # Read the length of the vector
-    lenCov, s = binaryToVal(s, 2)
+    lenCov, start = binaryToVal(s, 2, start)
 
     # Read lengths
     lengths = [0] * lenCov
     for i in range(lenCov):
-        l, s = binaryToVal(s, lenBytes)
+        l, start = binaryToVal(s, lenBytes, start)
         lengths[i] = l
 
     # Read coverage 
     #l = binaryToVal(s, 4)
     #c, s = huffman.decode(huffman.bytesToBits(s, lenCov), huffmanTree, lenCov)
 
-    c, s = huffman.decode(s, huffmanTree, lenCov)
+    c, start = huffman.decode(s, huffmanTree, lenCov, start)
 
     cov = []
     for i in range(lenCov):
         cov += [c[i]] * lengths[i]
 
-    return cov, s
+    return cov, start
 
 
 def writeHuffmanIndex(index):
@@ -424,28 +435,28 @@ def writeHuffmanIndex(index):
 
     return s
 
-def readHuffmanIndex(s):
+def readHuffmanIndex(s, start=0):
     # Read number of values
-    numVals, s = binaryToVal(s, 4)
+    numVals, start = binaryToVal(s, 4, start)
 
     # Read the number of bytes used to write each value
-    valBytes, s = binaryToVal(s, 1)
+    valBytes, start = binaryToVal(s, 1, start)
 
     index = dict()
     for _ in range(numVals):
         # Read the value
-        val, s = binaryToVal(s, valBytes)
+        val, start = binaryToVal(s, valBytes, start)
 
         # Read the number of bits in the encoding
-        numBits, s = binaryToVal(s, 1)
+        numBits, start = binaryToVal(s, 1, start)
 
         # Read the bits
         numBytes = math.ceil(numBits / 8)
         bits = huffman.bytesToBits(s[:numBytes])
-        s = s[numBytes:]
+        start += numBytes
 
         index[val] = bits[:numBits]
-    return index, s
+    return index, start
 
 def RLE(vector):
     rle = []
