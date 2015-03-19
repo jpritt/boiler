@@ -4,3 +4,4 @@ paper/paper.log
 paper/paper.out
 paper/paper.synctex.gz
 paper/paper.aux
+*.pyc
