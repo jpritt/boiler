@@ -134,6 +134,11 @@ class Compressor:
                     self.compressUnspliced(f, binary)
 
         print('Finished compressing')
+        print('Unspliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.unspliced)/1000000))
+        print('Spliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.spliced)/1000000))
+        print('Exons alignments size: %f\n' % (asizeof.asizeof(self.aligned.exons)/1000000))
+        print('Unmatched alignments size: %f\n' % (asizeof.asizeof(self.aligned.unmatched)/1000000))
+        print('Paired alignments size: %f\n' % (asizeof.asizeof(self.aligned.paired)/1000000))
         print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
     def computeJunctions(self):
