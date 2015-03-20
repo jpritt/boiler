@@ -245,6 +245,9 @@ class Compressor:
             filehandle: File to write to
         '''
 
+        print('Writing junctions')
+        print('Junctions length: %f' % (asizeof.asizeof(junctions)/1000000))
+
         if binary:
             # Determine the number of bytes for read lengths
             readLenBytes = binaryIO.findNumBytes(maxReadLen)
@@ -502,6 +505,10 @@ class Compressor:
 
             filename: Name of file to compress to
         '''
+
+        print('Writing unspliced')
+        print('Read exons length: %f' % (asizeof.asizeof(readExons)/1000000))
+        print('Coverages length: %f' % (asizeof.asizeof(coverages)/1000000))
 
         # For each NH value and for each exon, store the byte offset in the file for the given exon in the coverage vector
         self.unsplicedIndex = dict()
