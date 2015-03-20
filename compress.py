@@ -133,6 +133,9 @@ class Compressor:
                 if len(self.aligned.unspliced) > 0:
                     self.compressUnspliced(f, binary)
 
+        print('Finished compressing')
+        print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+
     def computeJunctions(self):
         # Compute coverage levels across every exon junction
         junctions = dict()
