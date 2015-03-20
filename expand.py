@@ -9,8 +9,7 @@ import binaryIO
 import operator
 import huffman
 
-from guppy import hpy
-h = hpy()
+from pympler import asizeof
 
 class Expander:
     aligned = None
@@ -46,10 +45,10 @@ class Expander:
 
                 self.expandUnsplicedBinary(f)
                 print('Finished expanding unspliced')
-                print(h.heap())
+                print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
                 self.expandSplicedBinary(f, self.exonBytes)
                 print('Finished expanding spliced')
-                print(h.heap())
+                print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
         else:
             with open(compressedFilename, 'r') as f:
                 self.aligned = alignments.Alignments(self.readHeader(f))

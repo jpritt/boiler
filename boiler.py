@@ -6,8 +6,7 @@ import time
 import expand
 import compress
 
-from guppy import hpy
-h = hpy()
+from pympler import asizeof
 
 if __name__ == '__main__':
     # Print file's docstring if -h is invoked
@@ -38,14 +37,11 @@ if __name__ == '__main__':
     compressor.compress(args.alignments, compressedName, binary, huffman)
     endTime = time.time()
     print('Compression time: %0.3f s' % (endTime-startTime))
-
-
-    print(h.heap())
+    print('Alignments size: %f\n' % (asizeof.asizeof(compressor.aligned)/1000000))
 
     expander = expand.Expander()
     startTime = time.time()
     expander.expand(compressedName, expandedName, binary, huffman)
     endTime = time.time()
     print('Decompression time: %0.3f s' % (endTime-startTime))
-
-    print(h.heap())
+    print('Alignments size: %f\n' % (asizeof.asizeof(expander.aligned)/1000000))

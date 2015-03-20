@@ -8,8 +8,7 @@ import bisect
 import binaryIO
 import math
 
-from guppy import hpy
-h = hpy()
+from pympler import asizeof
 
 import huffman
 
@@ -55,7 +54,7 @@ class Compressor:
         self.aligned = alignments.Alignments(self.chromosomes)
 
         print('Finished processing alignments')
-        print(h.heap())
+        print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
         with open(samFilename, 'r') as f:
             self.parseAlignments(f)
