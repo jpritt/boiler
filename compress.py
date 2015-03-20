@@ -73,6 +73,9 @@ class Compressor:
                 #print('Computing junctions')
                 junctions, maxReadLen = self.computeJunctions()
 
+                print('%d junctions' % len(junctions))
+                print('Junctions size: %f' % (asizeof.asizeof(junctions)/1000000))
+
                 #print('Compressing unspliced')
                 self.compressUnspliced(f, binary)
                 #size = os.stat('compressed/compressed_binary.txt').st_size - size
@@ -331,8 +334,8 @@ class Compressor:
                     readExons[r.NH] += [[]]
 
 
-                print('Adding NH = %d' % r.NH)
-                print('  Coverages size: %f' % (asizeof.asizeof(coverages/1000000)))
+                #print('Adding NH = %d' % r.NH)
+                #print('  Coverages size: %f' % (asizeof.asizeof(coverages)/1000000))
                 if r.NH == 1:
                     coverages[r.NH] = [0] * self.aligned.exons[-1]
                 else:
