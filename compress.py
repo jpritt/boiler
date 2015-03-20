@@ -309,6 +309,9 @@ class Compressor:
         # sort reads into exons
         readExons = dict()
         coverages = dict()
+
+        print('Length: %d' % self.aligned.exons[-1])
+
         for i in range(len(self.aligned.unspliced)):
             r = self.aligned.unspliced[len(self.aligned.unspliced) - i - 1]
 
@@ -327,10 +330,14 @@ class Compressor:
                 for n in range(len(self.aligned.exons)-1):
                     readExons[r.NH] += [[]]
 
+
+                print('Adding NH = %d' % r.NH)
+                print('  Coverages size: %f' % (asizeof.asizeof(coverages/1000000)))
                 if r.NH == 1:
                     coverages[r.NH] = [0] * self.aligned.exons[-1]
                 else:
                     coverages[r.NH] = [ [0, self.aligned.exons[-1]] ]
+
 
             j = bisect.bisect_right(self.aligned.exons, r.exons[0][0])-1
             readExons[r.NH][j] += [len(self.aligned.unspliced) - i - 1]
@@ -663,8 +670,12 @@ class Compressor:
                 self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
             '''
 
+        print('Finished processing - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+
         self.aligned.finalizeExons()
+        print('Finalized Exons - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
         self.aligned.finalizeReads()
+        print('Finalized Reads - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome

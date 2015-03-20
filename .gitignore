@@ -5,3 +5,4 @@ paper/paper.out
 paper/paper.synctex.gz
 paper/paper.aux
 *.pyc
+__pycache__/
