@@ -6,6 +6,8 @@ import time
 import expand
 import compress
 
+import objgraph
+
 from pympler import asizeof
 
 if __name__ == '__main__':
@@ -33,15 +35,18 @@ if __name__ == '__main__':
     expandedName = 'expanded.sam'
 
     compressor = compress.Compressor()
+    objgraph.show_growth(limit=3)
     startTime = time.time()
     compressor.compress(args.alignments, compressedName, binary, huffman)
     endTime = time.time()
-    #print('Compression time: %0.3f s' % (endTime-startTime))
+    objgraph.show_growth()
+    exit()
+    print('Compression time: %0.3f s' % (endTime-startTime))
     #print('Alignments size: %f\n' % (asizeof.asizeof(compressor.aligned)/1000000))
 
     expander = expand.Expander()
     startTime = time.time()
     expander.expand(compressedName, expandedName, binary, huffman)
     endTime = time.time()
-    #print('Decompression time: %0.3f s' % (endTime-startTime))
+    print('Decompression time: %0.3f s' % (endTime-startTime))
     #print('Alignments size: %f\n' % (asizeof.asizeof(expander.aligned)/1000000))

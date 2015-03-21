@@ -643,7 +643,7 @@ class Compressor:
             filehandle: SAM filehandle containing aligned reads
         '''
 
-        with open(samFilename, 'r') as filehandle:
+        with open(filename, 'r') as filehandle:
             for line in filehandle:
                 row = line.strip().split('\t')
                 if len(row) < 5:
