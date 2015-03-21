@@ -53,8 +53,8 @@ class Compressor:
         self.chromosomes = self.parseSAMHeader(header)
         self.aligned = alignments.Alignments(self.chromosomes)
 
-        print('Finished processing alignments')
-        print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+        #print('Finished processing alignments')
+        #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
         with open(samFilename, 'r') as f:
             self.parseAlignments(f)
@@ -73,15 +73,15 @@ class Compressor:
                 #print('Computing junctions')
                 junctions, maxReadLen = self.computeJunctions()
 
-                print('%d junctions' % len(junctions))
-                print('Junctions size: %f' % (asizeof.asizeof(junctions)/1000000))
+                #print('%d junctions' % len(junctions))
+                #print('Junctions size: %f' % (asizeof.asizeof(junctions)/1000000))
 
                 #print('Compressing unspliced')
                 self.compressUnspliced(f, binary)
                 #size = os.stat('compressed/compressed_binary.txt').st_size - size
                 #print('Unspliced size: %d bytes' % size)
 
-                print('Unspliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.unspliced)/1000000))
+                #print('Unspliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.unspliced)/1000000))
 
                 #print('Compressing spliced')
                 self.compressSpliced(junctions, maxReadLen, f, binary)
@@ -135,13 +135,13 @@ class Compressor:
                 if len(self.aligned.unspliced) > 0:
                     self.compressUnspliced(f, binary)
 
-        print('Finished compressing')
-        print('Unspliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.unspliced)/1000000))
-        print('Spliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.spliced)/1000000))
-        print('Exons alignments size: %f\n' % (asizeof.asizeof(self.aligned.exons)/1000000))
-        print('Unmatched alignments size: %f\n' % (asizeof.asizeof(self.aligned.unmatched)/1000000))
-        print('Paired alignments size: %f\n' % (asizeof.asizeof(self.aligned.paired)/1000000))
-        print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+        #print('Finished compressing')
+        #print('Unspliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.unspliced)/1000000))
+        #print('Spliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.spliced)/1000000))
+        #print('Exons alignments size: %f\n' % (asizeof.asizeof(self.aligned.exons)/1000000))
+        #print('Unmatched alignments size: %f\n' % (asizeof.asizeof(self.aligned.unmatched)/1000000))
+        #print('Paired alignments size: %f\n' % (asizeof.asizeof(self.aligned.paired)/1000000))
+        #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
     def computeJunctions(self):
         # Compute coverage levels across every exon junction
@@ -252,8 +252,8 @@ class Compressor:
             filehandle: File to write to
         '''
 
-        print('Writing junctions')
-        print('Junctions length: %f' % (asizeof.asizeof(junctions)/1000000))
+        #print('Writing junctions')
+        #print('Junctions length: %f' % (asizeof.asizeof(junctions)/1000000))
 
         if binary:
             # Determine the number of bytes for read lengths

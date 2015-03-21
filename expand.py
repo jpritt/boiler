@@ -44,11 +44,11 @@ class Expander:
                 self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
 
                 self.expandUnsplicedBinary(f)
-                print('Finished expanding unspliced')
-                print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+                #print('Finished expanding unspliced')
+                #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
                 self.expandSplicedBinary(f, self.exonBytes)
-                print('Finished expanding spliced')
-                print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+                #print('Finished expanding spliced')
+                #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
         else:
             with open(compressedFilename, 'r') as f:
                 self.aligned = alignments.Alignments(self.readHeader(f))
