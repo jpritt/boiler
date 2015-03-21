@@ -81,6 +81,8 @@ class Compressor:
                 #size = os.stat('compressed/compressed_binary.txt').st_size - size
                 #print('Unspliced size: %d bytes' % size)
 
+                print('Unspliced alignments size: %f\n' % (asizeof.asizeof(self.aligned.unspliced)/1000000))
+
                 #print('Compressing spliced')
                 self.compressSpliced(junctions, maxReadLen, f, binary)
                 #size = os.stat('compressed/compressed_binary.txt').st_size - size
