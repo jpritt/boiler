@@ -56,8 +56,7 @@ class Compressor:
         #print('Finished processing alignments')
         #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
-        with open(samFilename, 'r') as f:
-            self.parseAlignments(f)
+        self.parseAlignments(samFilename)
         
         if binary:
             # Write spliced and unspliced information
@@ -637,58 +636,56 @@ class Compressor:
 
             self.unsplicedExonsIndex[NH] = exonsIndex
 
-    def parseAlignments(self, filehandle):
+    def parseAlignments(self, filename):
         ''' Parse a file in SAM format
             Add the exonic region indices for each read to the correct ChromosomeAlignments object
             
             filehandle: SAM filehandle containing aligned reads
         '''
 
-        # paired reads that have not yet found their partner
-        unpaired = dict()
+        with open(samFilename, 'r') as filehandle:
+            for line in filehandle:
+                row = line.strip().split('\t')
+                if len(row) < 5:
+                    continue
 
-        for line in filehandle:
-            row = line.strip().split('\t')
-            if len(row) < 5:
-                continue
+                chromosome = str(row[2])
+                
 
-            chromosome = str(row[2])
-            
+                if not row[2] in self.chromosomes.keys():
+                    print('Chromosome ' + str(row[2]) + ' not found!')
+                    continue
 
-            if not row[2] in self.chromosomes.keys():
-                print('Chromosome ' + str(row[2]) + ' not found!')
-                continue
+                exons = self.parseCigar(row[5], int(row[3]))
 
-            exons = self.parseCigar(row[5], int(row[3]))
+                # find XS value:
+                xs = None
+                NH = 1
+                for r in row[11 : len(row)]:
+                    if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                        xs = r[5]
+                    elif r[0:3] == 'NH:':
+                        NH = int(r[5:])
 
-            # find XS value:
-            xs = None
-            NH = 1
-            for r in row[11 : len(row)]:
-                if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
-                    xs = r[5]
-                elif r[0:3] == 'NH:':
-                    NH = int(r[5:])
+                
+                if not row[6] == '*':
+                    if row[6] == '=':
+                        pair_chrom = chromosome
+                    else:
+                        pair_chrom = row[6]
+                    pair_index = int(row[7])
 
-            
-            if not row[6] == '*':
-                if row[6] == '=':
-                    pair_chrom = chromosome
+                    self.aligned.processRead(read.Read(chromosome, exons, xs, NH), pair_chrom, pair_index)
                 else:
-                    pair_chrom = row[6]
-                pair_index = int(row[7])
+                    self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
 
-                self.aligned.processRead(read.Read(chromosome, exons, xs, NH), pair_chrom, pair_index)
-            else:
-                self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
-
-            '''
-            if row[6] == '=':
-                pair_index = int(row[7])
-                self.aligned.processRead(read.Read(chromosome, exons, xs, NH), chromosome, pair_index)
-            else:
-                self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
-            '''
+                '''
+                if row[6] == '=':
+                    pair_index = int(row[7])
+                    self.aligned.processRead(read.Read(chromosome, exons, xs, NH), chromosome, pair_index)
+                else:
+                    self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
+                '''
 
         #print('Finished processing - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
