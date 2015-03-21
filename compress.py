@@ -513,9 +513,9 @@ class Compressor:
             filename: Name of file to compress to
         '''
 
-        print('Writing unspliced')
-        print('Read exons length: %f' % (asizeof.asizeof(readExons)/1000000))
-        print('Coverages length: %f' % (asizeof.asizeof(coverages)/1000000))
+        #print('Writing unspliced')
+        #print('Read exons length: %f' % (asizeof.asizeof(readExons)/1000000))
+        #print('Coverages length: %f' % (asizeof.asizeof(coverages)/1000000))
 
         # For each NH value and for each exon, store the byte offset in the file for the given exon in the coverage vector
         self.unsplicedIndex = dict()
@@ -690,12 +690,12 @@ class Compressor:
                 self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
             '''
 
-        print('Finished processing - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+        #print('Finished processing - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
         self.aligned.finalizeExons()
-        print('Finalized Exons - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+        #print('Finalized Exons - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
         self.aligned.finalizeReads()
-        print('Finalized Reads - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+        #print('Finalized Reads - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome
