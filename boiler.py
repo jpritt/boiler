@@ -7,6 +7,8 @@ import expand
 import compress
 
 import objgraph
+import random
+import inspect
 
 from pympler import asizeof
 
@@ -35,12 +37,20 @@ if __name__ == '__main__':
     expandedName = 'expanded.sam'
 
     compressor = compress.Compressor()
-    objgraph.show_growth(limit=3)
+    #print('Initial')
+    #objgraph.show_growth(limit=3)
     startTime = time.time()
     compressor.compress(args.alignments, compressedName, binary, huffman)
     endTime = time.time()
-    objgraph.show_growth()
-    exit()
+    compressor = None
+
+    #print('Final')
+    #objgraph.show_growth()
+    #objgraph.show_chain(
+    #    objgraph.find_backref_chain(
+    #    random.choice(objgraph.by_type('LpVariable')),
+    #    inspect.ismodule))
+    #exit()
     print('Compression time: %0.3f s' % (endTime-startTime))
     #print('Alignments size: %f\n' % (asizeof.asizeof(compressor.aligned)/1000000))
 

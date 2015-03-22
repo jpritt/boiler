@@ -206,6 +206,7 @@ class Alignments:
                 self.unspliced += [newRead]
             else:
                 self.spliced += [newRead]
+        del self.paired
 
     # Returns the element from list1 and the element from list2 with the smallest distance between them
     def findClosestVals(self, list1, list2):
@@ -1572,6 +1573,7 @@ class Alignments:
         for i in range(len(read.exons)):
             read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
 
+        
         if pair_chrom == None:
             # unpaired read
             if len(read.exons) == 1:
@@ -1591,13 +1593,18 @@ class Alignments:
             # TODO: Use binary search here for speed
             #self.unmatched = dict()
 
-            if (pair_index, pair_chrom, read.exons[0][0], read.chrom) in self.unmatched:
+            key = (pair_index, pair_chrom, read.exons[0][0], read.chrom)
+
+            if key in self.unmatched:
                 foundMatch = False
-                for i in range(len(self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)])):
-                    match = self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][i]
+                for i in range(len(self.unmatched[key])):
+                    match = self.unmatched[key][i]
 
                     if read.NH == match.NH:
-                        del self.unmatched[(pair_index, pair_chrom, read.exons[0][0], read.chrom)][i]
+                        if len(self.unmatched[key]) == 1:
+                            del self.unmatched[key]
+                        else:
+                            del self.unmatched[key][i]
 
                         xs = read.xs or match.xs
 

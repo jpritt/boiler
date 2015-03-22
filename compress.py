@@ -8,6 +8,10 @@ import bisect
 import binaryIO
 import math
 
+import objgraph
+import random
+import inspect
+
 from pympler import asizeof
 
 import huffman
@@ -325,8 +329,6 @@ class Compressor:
         readExons = dict()
         coverages = dict()
 
-        print('Length: %d' % self.aligned.exons[-1])
-
         for i in range(len(self.aligned.unspliced)):
             r = self.aligned.unspliced[len(self.aligned.unspliced) - i - 1]
 
@@ -643,11 +645,18 @@ class Compressor:
             filehandle: SAM filehandle containing aligned reads
         '''
 
+        #objgraph.show_growth(limit=4)
+
+        i = 0
         with open(filename, 'r') as filehandle:
             for line in filehandle:
                 row = line.strip().split('\t')
                 if len(row) < 5:
                     continue
+
+
+                #objgraph.show_growth(limit=4)
+                #print('\n>>Parsing read')
 
                 chromosome = str(row[2])
                 
@@ -675,24 +684,42 @@ class Compressor:
                         pair_chrom = row[6]
                     pair_index = int(row[7])
 
+                    #objgraph.show_growth(limit=4)
+                    #print('\n>>Processing')
                     self.aligned.processRead(read.Read(chromosome, exons, xs, NH), pair_chrom, pair_index)
                 else:
+                    #objgraph.show_growth(limit=4)
+                    #print('\n>>Processing')
                     self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
 
-                '''
-                if row[6] == '=':
-                    pair_index = int(row[7])
-                    self.aligned.processRead(read.Read(chromosome, exons, xs, NH), chromosome, pair_index)
-                else:
-                    self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
-                '''
+
+                #objgraph.show_growth(limit=4)
+                #print('\n>>Finished')
+                #print('\n')
+                #i += 1
+                #if i == 3:
+                #    exit()
 
         #print('Finished processing - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
+        #print('Finished aligning reads')
+        #objgraph.show_growth(limit=4)
+
+        #print('>>>')
+        #print(random.choice(objgraph.by_type('dict')))
+        #print('')
+
         self.aligned.finalizeExons()
+
+        #print('Finished finalizing exons')
+        #objgraph.show_growth()
         #print('Finalized Exons - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+
+        #print('Finished finalizing reads')
         self.aligned.finalizeReads()
         #print('Finalized Reads - size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+        #objgraph.show_growth()
+        #exit()
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome
