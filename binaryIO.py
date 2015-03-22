@@ -249,9 +249,11 @@ def writeJunction(readLenBytes, junc, huffmanIndex=None):
             s += writeLens(readLenBytes, junc.lensRight)
 
     if not huffmanIndex == None:
-        s += writeCovHuffman(RLE(junc.coverage), huffmanIndex)
+        #s += writeCovHuffman(RLE(junc.coverage), huffmanIndex)
+        s += writeCovHuffman(junc.coverage, huffmanIndex)
     else:
-        s += writeCov(RLE(junc.coverage))
+        #s += writeCov(RLE(junc.coverage))
+        s += writeCov(junc.coverage)
 
     return s
 

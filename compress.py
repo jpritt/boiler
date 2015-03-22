@@ -147,6 +147,11 @@ class Compressor:
         #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
 
     def computeJunctions(self):
+
+        #print('>>>Computing junctions')
+        #objgraph.show_growth()
+
+
         # Compute coverage levels across every exon junction
         junctions = dict()
 
@@ -197,13 +202,18 @@ class Compressor:
             
             # update junction coverage vector in dictionary
             if (r.lenLeft == 0 and r.lenRight == 0):
-                for i in range(r.startOffset, len(j.coverage)-r.endOffset):
-                    j.coverage[i] += 1
+                j.coverage = self.updateRLE(j.coverage, r.startOffset, j.length-r.endOffset-r.startOffset, 1)
+
+                #for i in range(r.startOffset, len(j.coverage)-r.endOffset):
+                #    j.coverage[i] += 1
             else:
-                for i in range(r.startOffset, r.startOffset+r.lenLeft):
-                    j.coverage[i] += 1
-                for i in range(len(j.coverage)-r.endOffset-r.lenRight, len(j.coverage)-r.endOffset):
-                    j.coverage[i] += 1
+                j.coverage = self.updateRLE(j.coverage, r.startOffset, r.lenLeft, 1)
+                j.coverage = self.updateRLE(j.coverage, j.length-r.endOffset-r.lenRight, r.lenRight, 1)
+
+                #for i in range(r.startOffset, r.startOffset+r.lenLeft):
+                #    j.coverage[i] += 1
+                #for i in range(len(j.coverage)-r.endOffset-r.lenRight, len(j.coverage)-r.endOffset):
+                #    j.coverage[i] += 1
 
             # update readLens
             if r.readLen in j.readLens:
@@ -812,24 +822,12 @@ class Compressor:
         return RLE
 
     def writeRLE(self, vector, filehandle):
-        val = vector[0]
-        length = 0
-
+        ''' Write vector that is already run-length encoded '''
         for v in vector:
-            if v == val:
-                length += 1
+            if v[1] == 1:
+                filehandle.write(str(v[0]) + '\n')
             else:
-                if length == 1:
-                    filehandle.write(str(val) + '\n')
-                else:
-                    filehandle.write(str(val) + '\t' + str(length) + '\n')
-                val = v
-                length = 1
-
-        if length == 1:
-            filehandle.write(str(val) + '\n')
-        else:
-            filehandle.write(str(val) + '\t' + str(length) + '\n')
+                filehandle.write(str(v[0]) + '\t' + str(v[1]) + '\n')
 
     def writeIndex(self, f):
         # Write junctions index

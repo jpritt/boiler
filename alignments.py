@@ -7,6 +7,9 @@ import pairedread
 import os.path
 import sys
 
+import objgraph
+import random
+
 import time
 
 class Alignments:
@@ -65,7 +68,14 @@ class Alignments:
         ''' Now that all exon boundaries are known, fix unspliced regions that cross exon boundaries
             and finalized paired-end reads
         '''
-        
+
+        #print('>> Finalizing reads')
+        #objgraph.show_growth()
+        #print('')
+        #for _ in range(10):
+        #    print(random.choice(objgraph.by_type('list')))
+        #exit()
+
         # Splice any regions of unspliced reads that cross exon boundaries
         x = 0
         while x < len(self.unspliced):
@@ -88,6 +98,10 @@ class Alignments:
                 self.spliced += [r]
             else:
                 x += 1
+
+        #print('>> Finalized unspliced')
+        #objgraph.show_growth()
+        #print('')
 
 
         # Compute list of junctions crossed by each spliced read

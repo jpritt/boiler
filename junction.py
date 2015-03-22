@@ -18,7 +18,7 @@ class Junction:
         self.lensLeft = dict()
         self.lensRight = dict()
 
-        self.coverage = [0] * length
+        self.coverage = [[0, length]]
 
     def differenceEncode(self):
         ''' Difference run-length encode this junctions coverage vector
