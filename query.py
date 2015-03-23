@@ -51,6 +51,7 @@ def go(args):
         if (form != 'sam'):
             print('Only .sam files are supported')
 
+        '''
         alignments = f.read().split('\n')
         header = ''
         for line in alignments:
@@ -58,6 +59,7 @@ def go(args):
                 header += line + '\n'
             else:
                 break
+        '''
 
         chromosomes = dict()
         for line in header.split('\n'):
