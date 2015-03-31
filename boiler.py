@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import sys
+import os
 import argparse
 #import genome
 import time
@@ -12,19 +13,7 @@ import inspect
 
 from pympler import asizeof
 
-if __name__ == '__main__':
-    # Print file's docstring if -h is invoked
-    parser = argparse.ArgumentParser(description=__doc__, 
-            formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--alignments', type=str, required=True, 
-        help='Full path of SAM file containing aligned reads')
-    parser.add_argument("--binary", help="Write in binary format",
-        action="store_true")
-    parser.add_argument("--huffman", help="Use huffman coding to compress coverage vectors",
-        action="store_true")
-    
-    args = parser.parse_args(sys.argv[1:])
-
+def run(args):
     binary = False
     if args.binary:
         binary = True
@@ -60,3 +49,22 @@ if __name__ == '__main__':
     endTime = time.time()
     print('Decompression time: %0.3f s' % (endTime-startTime))
     #print('Alignments size: %f\n' % (asizeof.asizeof(expander.aligned)/1000000))
+
+if __name__ == '__main__':
+    # Print file's docstring if -h is invoked
+    parser = argparse.ArgumentParser(description=__doc__, 
+            formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--alignments', type=str, required=True, 
+        help='Full path of SAM file containing aligned reads')
+    parser.add_argument("--binary", help="Write in binary format",
+        action="store_true")
+    parser.add_argument("--huffman", help="Use huffman coding to compress coverage vectors",
+        action="store_true")
+    
+    args = parser.parse_args(sys.argv[1:])
+
+    # Fork and run on child process
+    newpid = os.fork()
+    if newpid == 0:
+        run(args)
+
