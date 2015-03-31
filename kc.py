@@ -66,9 +66,6 @@ def computeWKRandICR(assembly, sequence, transcripts, dataLength, k):
         # Length of assembly
         lenA = 0.0
 
-        numLines = 23370
-        n = 0
-
         for line in f:
             #start_time = time.time()
 

@@ -51,12 +51,14 @@ def go(args):
         if (form != 'sam'):
             print('Only .sam files are supported')
 
+        header = ''
         while True:
             line = f.readline()
             if line[0] == '@':
                 header += line + '\n'
             else:
                 break
+                
 
         chromosomes = dict()
         for line in header.split('\n'):
@@ -64,107 +66,107 @@ def go(args):
                 row = line.strip().split('\t')
                 chromosomes[row[1][3:]] = int(row[2][3:])
 
-        sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
-        expander = expand.Expander()
-        pro = readPRO.ReadPRO(args['pro'])
+    sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
+    expander = expand.Expander()
+    pro = readPRO.ReadPRO(args['pro'])
 
-        #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
-        #intervals = [['2R', 100000, 200000]]
+    #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
+    #intervals = [['2R', 100000, 200000]]
+
+    
+    lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
+    #lens = [10000,100000]
+    chroms = ['2R', '2L', '3R', '3L', 'X']
+    chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
+    
+    for l in lens:
+        timeTrue = 0.0
+        timePred = 0.0
+
+        numIters = 10
+        for c in range(len(chroms)):
+            chrom = chroms[c]
+
+            for _ in range(numIters):
+                start = random.randint(0, chromLens[c]-l)
+
+                startTime = time.time()
+                trueCov = sam.getCoverage(chrom, start, start+l)
+                endTime = time.time()
+                timeTrue += float(endTime - startTime)
+
+                startTime = time.time()
+                predCov = expander.getCoverage(args['compressed'], chrom, start, start+l)
+                endTime = time.time()
+                timePred += float(endTime - startTime)
+
+                for x in range(len(trueCov)):
+                    if abs(trueCov[x] - predCov[x]) > 0.0001:
+                        print('Error!')
+                        print('%s (%d, %d)' % (chrom, start, start+l))
+                        print(x)
+                        for n in xrange(x-3,x+3):
+                            print(str(trueCov[n]) + '\t' + str(predCov[n]))
+                        exit()
+
+        timeTrueAvg = timeTrue / float(numIters*len(chroms))
+        timePredAvg = timePred / float(numIters*len(chroms))
+        print('Length %d:' % l)
+        print('  SAM:        %0.3f s' % timeTrueAvg)
+        print('  Compressed: %0.3f s' % timePredAvg)
+    '''
+
+    
+    print('Querying coverage...')
+    for i in intervals:
+        chrom = i[0]
+        start = i[1]
+        end = i[2]
+
+        if start == None or end == None:
+            print('%s: (%d, %d)' % (chrom, 0, chromosomes[chrom]))
+        else:
+            print('%s: (%d, %d)' % (chrom, start, end))
+        if start == None or end == None:
+            length = chromosomes[chrom]
+        else:
+            length = end-start
+        startTime = time.time()
+        trueCov = sam.getCoverage(chrom, start, end)
+        endTime = time.time()
+        trueTime = float(endTime - startTime)
+        print('%fs, %d bases (%f bases/s)' % (trueTime, length, float(length)/trueTime))
+
+        startTime = time.time()
+        predCov = expander.getCoverage(args['compressed'], chrom, start, end)
+        endTime = time.time()
+        predTime = float(endTime - startTime)
+        print('%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime))
 
         
-        lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
-        #lens = [10000,100000]
-        chroms = ['2R', '2L', '3R', '3L', 'X']
-        chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
-        
-        for l in lens:
-            timeTrue = 0.0
-            timePred = 0.0
-
-            numIters = 10
-            for c in range(len(chroms)):
-                chrom = chroms[c]
-
-                for _ in range(numIters):
-                    start = random.randint(0, chromLens[c]-l)
-
-                    startTime = time.time()
-                    trueCov = sam.getCoverage(chrom, start, start+l)
-                    endTime = time.time()
-                    timeTrue += float(endTime - startTime)
-
-                    startTime = time.time()
-                    predCov = expander.getCoverage(args['compressed'], chrom, start, start+l)
-                    endTime = time.time()
-                    timePred += float(endTime - startTime)
-
-                    for x in range(len(trueCov)):
-                        if abs(trueCov[x] - predCov[x]) > 0.0001:
-                            print('Error!')
-                            print('%s (%d, %d)' % (chrom, start, start+l))
-                            print(x)
-                            for n in xrange(x-3,x+3):
-                                print(str(trueCov[n]) + '\t' + str(predCov[n]))
-                            exit()
-
-            timeTrueAvg = timeTrue / float(numIters*len(chroms))
-            timePredAvg = timePred / float(numIters*len(chroms))
-            print('Length %d:' % l)
-            print('  SAM:        %0.3f s' % timeTrueAvg)
-            print('  Compressed: %0.3f s' % timePredAvg)
-        '''
-
-        
-        print('Querying coverage...')
-        for i in intervals:
-            chrom = i[0]
-            start = i[1]
-            end = i[2]
-
-            if start == None or end == None:
-                print('%s: (%d, %d)' % (chrom, 0, chromosomes[chrom]))
-            else:
-                print('%s: (%d, %d)' % (chrom, start, end))
-            if start == None or end == None:
-                length = chromosomes[chrom]
-            else:
-                length = end-start
-            startTime = time.time()
-            trueCov = sam.getCoverage(chrom, start, end)
-            endTime = time.time()
-            trueTime = float(endTime - startTime)
-            print('%fs, %d bases (%f bases/s)' % (trueTime, length, float(length)/trueTime))
-
-            startTime = time.time()
-            predCov = expander.getCoverage(args['compressed'], chrom, start, end)
-            endTime = time.time()
-            predTime = float(endTime - startTime)
-            print('%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime))
+        correct = 0
+        trueBig = 0
+        predBig = 0
+        for x in range(len(trueCov)):
+            
+            if trueCov[x] > predCov[x]+0.0001:
+                trueBig += 1
+            elif predCov[x] > trueCov[x]+0.0001:
+                predBig += 1
+            #print str(trueCov[x]) + '\t' + str(predCov[x])
 
             
-            correct = 0
-            trueBig = 0
-            predBig = 0
-            for x in range(len(trueCov)):
-                
-                if trueCov[x] > predCov[x]+0.0001:
-                    trueBig += 1
-                elif predCov[x] > trueCov[x]+0.0001:
-                    predBig += 1
-                #print str(trueCov[x]) + '\t' + str(predCov[x])
-
-                
-                if abs(trueCov[x] - predCov[x]) < 0.0001:
-                    correct += 1
-                elif predCov[x] >= 0.1:
-                    print(x)
-                    for n in range(x-3,x+3):
-                        print(str(trueCov[n]) + '\t' + str(predCov[n]))
-                    exit()
-                
-            print('%d wrong - %0.3f correct' % (len(trueCov)-correct, float(correct) / float(len(trueCov))))
-            print('')
-        '''
+            if abs(trueCov[x] - predCov[x]) < 0.0001:
+                correct += 1
+            elif predCov[x] >= 0.1:
+                print(x)
+                for n in range(x-3,x+3):
+                    print(str(trueCov[n]) + '\t' + str(predCov[n]))
+                exit()
+            
+        print('%d wrong - %0.3f correct' % (len(trueCov)-correct, float(correct) / float(len(trueCov))))
+        print('')
+    '''
             
         
         

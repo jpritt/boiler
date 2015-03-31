@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import sys
+from multiprocessing import Process
 import os
 import argparse
 #import genome
@@ -13,7 +14,7 @@ import inspect
 
 from pympler import asizeof
 
-def run(args):
+def go(args):
     binary = False
     if args.binary:
         binary = True
@@ -21,6 +22,10 @@ def run(args):
     huffman = False
     if args.huffman:
         huffman = True
+
+    with open('test.txt', 'w') as f:
+        f.write('Testtttttt')
+
 
     compressedName = 'compressed/compressed_binary.txt'
     expandedName = 'expanded.sam'
@@ -64,7 +69,7 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Fork and run on child process
-    newpid = os.fork()
-    if newpid == 0:
-        run(args)
+    p = Process(target=go, args=(args,))
+    p.start()
+    p.join()
 
