@@ -68,8 +68,5 @@ if __name__ == '__main__':
     
     args = parser.parse_args(sys.argv[1:])
 
-    # Fork and run on child process
-    p = Process(target=go, args=(args,))
-    p.start()
-    p.join()
+    go(args)
 
