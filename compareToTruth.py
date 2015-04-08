@@ -207,6 +207,7 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     #transcriptsPredictedCount = len(transcriptsPredicted)
     totalScore2 = 0.0
     transcriptsPredictedCount = 0
+    transcriptsPredictedCountUnweighted = 0
     line = 0
     for t1 in transcriptsPredicted:
         line += 1
@@ -224,6 +225,7 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
             totalScore2 += closestScore * t1.cov
             #totalScore2 += closestScore
         transcriptsPredictedCount += t1.cov
+        transcriptsPredictedCountUnweighted += 1
         #transcriptsPredictedCount += 1
         
 
@@ -240,6 +242,7 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     precision = float(totalScore2) / float(transcriptsPredictedCount)
     print 'TP = ' + str(totalScore2)
     print 'P  = ' + str(transcriptsPredictedCount)
+    print 'P Unweighted = ' + str(transcriptsPredictedCountUnweighted)
     print 'Precision = TP/T = ' + str(precision)
 
     '''

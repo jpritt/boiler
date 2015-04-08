@@ -8,9 +8,9 @@ import time
 import expand
 import compress
 
-import objgraph
-import random
-import inspect
+#import objgraph
+#import random
+#import inspect
 
 from pympler import asizeof
 
@@ -22,9 +22,6 @@ def go(args):
     huffman = False
     if args.huffman:
         huffman = True
-
-    with open('test.txt', 'w') as f:
-        f.write('Testtttttt')
 
 
     compressedName = 'compressed/compressed_binary.txt'
@@ -40,11 +37,6 @@ def go(args):
 
     #print('Final')
     #objgraph.show_growth()
-    #objgraph.show_chain(
-    #    objgraph.find_backref_chain(
-    #    random.choice(objgraph.by_type('LpVariable')),
-    #    inspect.ismodule))
-    #exit()
     print('Compression time: %0.3f s' % (endTime-startTime))
     #print('Alignments size: %f\n' % (asizeof.asizeof(compressor.aligned)/1000000))
 

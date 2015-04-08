@@ -69,13 +69,6 @@ class Alignments:
             and finalized paired-end reads
         '''
 
-        #print('>> Finalizing reads')
-        #objgraph.show_growth()
-        #print('')
-        #for _ in range(10):
-        #    print(random.choice(objgraph.by_type('list')))
-        #exit()
-
         # Splice any regions of unspliced reads that cross exon boundaries
         x = 0
         while x < len(self.unspliced):
@@ -98,11 +91,6 @@ class Alignments:
                 self.spliced += [r]
             else:
                 x += 1
-
-        #print('>> Finalized unspliced')
-        #objgraph.show_growth()
-        #print('')
-
 
         # Compute list of junctions crossed by each spliced read
         for r in self.spliced:
@@ -1587,6 +1575,13 @@ class Alignments:
         for i in range(len(read.exons)):
             read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
 
+        # update list of exons
+        alignment = read.exons
+        if len(alignment) > 1:
+            for i in range(len(alignment)-1):
+                self.exons.add(offset + alignment[i][1])
+                self.exons.add(offset + alignment[i+1][0])
+
         
         if pair_chrom == None:
             # unpaired read
@@ -1594,13 +1589,6 @@ class Alignments:
                 self.addUnspliced(read)
             else:
                 self.addSpliced(read)
-
-                # update list of exons
-                alignment = read.exons
-                if len(alignment) > 1:
-                    for i in range(len(alignment)-1):
-                        self.exons.add(alignment[i][1])
-                        self.exons.add(alignment[i+1][0])
         else:
             pair_index += self.chromOffsets[pair_chrom]
 
@@ -1621,21 +1609,7 @@ class Alignments:
                             del self.unmatched[key][i]
 
                         xs = read.xs or match.xs
-
                         NH = read.NH
-
-                        # update list of exons
-                        alignment = match.exons
-                        if len(alignment) > 1:
-                            for i in range(len(alignment)-1):
-                                self.exons.add(alignment[i][1])
-                                self.exons.add(alignment[i+1][0])
-
-                        alignment = read.exons
-                        if len(alignment) > 1:
-                            for i in range(len(alignment)-1):
-                                self.exons.add(alignment[i][1])
-                                self.exons.add(alignment[i+1][0])
 
                         if self.conflicts(read.exons, match.exons):
                             if len(read.exons) == 1:
