@@ -482,6 +482,7 @@ class Expander:
 
                         exonStart = self.aligned.exons[e*self.exonChunkSize + i - 1]
                         exonEnd = self.aligned.exons[e*self.exonChunkSize + i]
+
                         unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
 
                         for r in unpaired:
@@ -774,7 +775,7 @@ class Expander:
             self.readIndexBinary(f)
 
             chromosomes = binaryIO.readChroms(f)
-            self.aligned = alignments.Alignments(chromosomes)
+            self.aligned = alignments.Alignments(cxhromosomes)
             self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
 
             if start == None or end == None:

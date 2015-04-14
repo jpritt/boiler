@@ -487,154 +487,154 @@ class Alignments:
 
         return unpaired, paired
 
-    def findPairs(self, length, reads, readLens):#pairedLens, unpairedLens):
-        # Sort read lengths from largest to smallest
-        readLensSorted = sorted(readLens, reverse=True)
-
-        starts = [0] * (length+1)
-        ends = [0] * (length+1)
-
-
-        for r in reads:
-            starts[r[0]] += 1
-            ends[r[1]] += 1
-
+    def findPairs(self, length, reads, pairedLens, unpairedLens):
         paired = []
         unpaired = []
 
-        unmatched = []
+        if len(pairedLens) > 0:
+            # Sort read pairedLensSortedlengths from largest to smallest
+            pairedLensSorted = sorted(pairedLens, reverse=True)
 
-        i = 0
-        j = length
+            starts = [0] * (length+1)
+            ends = [0] * (length+1)
 
-        while i < j and starts[i] <= 0:
-            i += 1
-        while j > i and ends[j] <= 0:
-            j -= 1 
 
-        while i < j:
-            id1 = 0
-            while not reads[id1][0] == i:
-                id1 += 1
+            for r in reads:
+                starts[r[0]] += 1
+                ends[r[1]] += 1
 
-            startRead = reads[id1]
+            unmatched = []
 
-            starts[i] -= 1
-            ends[reads[id1][1]] -= 1
-            del reads[id1]
+            i = 0
+            j = length
 
-            foundRead = False
-            for r in range(len(readLensSorted)):
-                l = readLensSorted[r]
-                if i+l <= length and ends[i+l] > 0:
-                    readLens[l] -= 1
-                    if readLens[l] == 0:
-                        del readLensSorted[r]
-                    foundRead = True
-
-                    # Add paired read to list
-                    id2 = 0
-                    while not reads[id2][1] == i+l:
-                        id2 += 1
-
-                    starts[reads[id2][0]] -= 1
-                    ends[i+l] -= 1
-
-                    paired += [[startRead, reads[id2]]]
-                    del reads[id2]
-
-                    break
-            
-            if not foundRead:
-                readLen = startRead[1]-startRead[0]
-                if readLen in readLensSorted:
-                    unpaired += [startRead]
-
-                    readLens[readLen] -= 1
-                    if readLens[readLen] == 0:
-                        for r in range(len(readLensSorted)):
-                            if readLensSorted[r] == readLen:
-                                del readLensSorted[r]
-                                break
-                else:
-                    unmatched += [startRead]
-                
             while i < j and starts[i] <= 0:
                 i += 1
             while j > i and ends[j] <= 0:
-                j -= 1
+                j -= 1 
 
-            if j > i:
+            while i < j and len(pairedLensSorted) > 0:
                 id1 = 0
-                while not reads[id1][1] == j:
+                while not reads[id1][0] == i:
                     id1 += 1
 
                 startRead = reads[id1]
 
-                starts[reads[id1][0]] -= 1
-                ends[j] -= 1
+                starts[i] -= 1
+                ends[reads[id1][1]] -= 1
                 del reads[id1]
 
                 foundRead = False
-                for r in range(len(readLensSorted)):
-                    l = readLensSorted[r]
-                    if j-l >= 0 and starts[j-l] > 0:
-                        readLens[l] -= 1
-                        if readLens[l] == 0:
-                            del readLensSorted[r]
+                for r in range(len(pairedLensSorted)):
+                    l = pairedLensSorted[r]
+                    if i+l <= length and ends[i+l] > 0:
+                        pairedLens[l] -= 1
+                        if pairedLens[l] == 0:
+                            del pairedLensSorted[r]
                         foundRead = True
 
                         # Add paired read to list
                         id2 = 0
-                        while not reads[id2][0] == j-l:
+                        while not reads[id2][1] == i+l:
                             id2 += 1
 
-                        starts[j-l] -= 1
-                        ends[reads[id2][1]] -= 1
+                        starts[reads[id2][0]] -= 1
+                        ends[i+l] -= 1
 
-                        paired += [[reads[id2], startRead]]
+                        paired += [[startRead, reads[id2]]]
                         del reads[id2]
 
                         break
                 
                 if not foundRead:
                     readLen = startRead[1]-startRead[0]
-                    if readLen in readLensSorted:
+                    if readLen in unpairedLens:
                         unpaired += [startRead]
 
-                        readLens[readLen] -= 1
-                        if readLens[readLen] == 0:
-                            for r in range(len(readLensSorted)):
-                                if readLensSorted[r] == readLen:
-                                    del readLensSorted[r]
-                                    break
+                        if unpairedLens[readLen] == 1:
+                            del unpairedLens[readLen]
+                        else:
+                            unpairedLens[readLen] -= 1
                     else:
                         unmatched += [startRead]
-
+                    
                 while i < j and starts[i] <= 0:
                     i += 1
                 while j > i and ends[j] <= 0:
                     j -= 1
 
-        if len(unmatched) > 0:
-            countReadLens = 0
-            for k,v in readLens.items():
-                countReadLens += v
+                if j > i and len(pairedLensSorted) > 0:
+                    id1 = 0
+                    while not reads[id1][1] == j:
+                        id1 += 1
 
-            while len(unmatched) > max(1, countReadLens):
-                #paired += [[unmatched[0], unmatched[len(unmatched)/2]]]
-                paired += [[unmatched[0], unmatched[-1]]]
-                #del unmatched[len(unmatched)/2]
-                del unmatched[-1]
-                del unmatched[0]
-                countReadLens -= 1
+                    startRead = reads[id1]
 
+                    starts[reads[id1][0]] -= 1
+                    ends[j] -= 1
+                    del reads[id1]
+
+                    foundRead = False
+                    for r in range(len(pairedLensSorted)):
+                        l = pairedLensSorted[r]
+                        if j-l >= 0 and starts[j-l] > 0:
+                            pairedLens[l] -= 1
+                            if pairedLens[l] == 0:
+                                del pairedLensSorted[r]
+                            foundRead = True
+
+                            # Add paired read to list
+                            id2 = 0
+                            while not reads[id2][0] == j-l:
+                                id2 += 1
+
+                            starts[j-l] -= 1
+                            ends[reads[id2][1]] -= 1
+
+                            paired += [[reads[id2], startRead]]
+                            del reads[id2]
+
+                            break
+                    
+                    if not foundRead:
+                        readLen = startRead[1]-startRead[0]
+                        if readLen in unpairedLens:
+                            unpaired += [startRead]
+
+                            if unpairedLens[readLen] == 1:
+                                del unpairedLens[readLen]
+                            else:
+                                unpairedLens[readLen] -= 1
+                        else:
+                            unmatched += [startRead]
+
+                    while i < j and starts[i] <= 0:
+                        i += 1
+                    while j > i and ends[j] <= 0:
+                        j -= 1
+
+            # Pair up remaining reads until we meet the quota of paired-end reads
+            if len(pairedLensSorted) > 0:
+                numPairedReads = 0
+                for l in pairedLensSorted:
+                    numPairedReads += pairedLens[l]
+
+                for _ in range(numPairedReads):
+                    paired += [[unmatched[0], unmatched[-1]]]
+                    del unmatched[-1]
+                    del unmatched[0]
+
+            # Add remaining unmatched reads as unpaired reads
             for r in unmatched:
                 unpaired += [r]
 
+        # Add remaining reads as unpaired reads
+        for r in reads:
+            unpaired += [r]
+
         return unpaired, paired
 
-    def findReads(self, readLens, lensLeft, lensRight, coverage, boundaries=None):
+    def findReads(self, readLens, lensLeft, lensRight, coverage):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
 
@@ -653,42 +653,52 @@ class Alignments:
             else:
                 fragmentLens[length] = count
 
-
-        countUnpaired = 0
-
-        # Read lengths sorted largest to smallest
-        readLensSorted = sorted(readLens, reverse=True)
-
-        # create separate list with unpaired lengths
-        unpairedLens = dict()
-        smallestId = len(readLensSorted)-1
-        while countUnpaired < countReads-countPaired:
-            diff = countReads - countPaired - countUnpaired
-            smallestLen = readLensSorted[smallestId]
-
-            if not smallestLen in fragmentLens:
-                fragmentLens[smallestLen] = 0
-
-            if diff < readLens[smallestLen]:
-                fragmentLens[smallestLen] += diff
-                countUnpaired += diff
-            else:
-                fragmentLens[smallestLen] += readLens[smallestLen]
-                countUnpaired += readLens[smallestLen]
-
-            smallestId -= 1
-
-        oldCov = coverage[:]
-
-        oldReadLens = dict()
-        for k,v in readLens.items():
-            oldReadLens[k] = v
+        if countPaired == 0:
+            pairedLens = dict()
+            unpairedLens = readLens
+            fragmentLens = readLens
+        elif countPaired == countReads:
+            pairedLens = readLens
+            unpairedLens = dict()
+        else:
+            # Assign longest read lengths to be paired-end reads
+            pairedLens = dict()
+            unpairedLens = dict()
+            sortedLens = sorted(readLens, reverse=True)
+            i = 0
+            while countPaired > 0:
+                l = sortedLens[i]
+                if countPaired >= readLens[l]:
+                    pairedLens[l] = readLens[l]
+                else:
+                    pairedLens[l] = countPaired
+                    unpairedLens[l] = readLens[l] - countPaired
+                    if l in fragmentLens:
+                        fragmentLens[l] += readLens[l] - countPaired
+                    else:
+                        fragmentLens[l] = readLens[l] - countPaired
+                i += 1
+            while i < len(sortedLens):
+                l = sortedLens[i]
+                unpairedLens[l] = readLens[l]
+                if l in fragmentLens:
+                    fragmentLens[l] += readLens[l] - countPaired
+                else:
+                    fragmentLens[l] = readLens[l] - countPaired
 
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
-        #reads = self.findReadsInCoverage_v2(coverage, readLens, boundaries)
-        #reads = self.findReadsInCoverage_v3(coverage, readLens, boundaries)
 
-        unpaired, paired = self.findPairs(len(coverage), reads, readLens)
+        s = 'Reads (' + str(len(reads)) + '): ' + str(reads)
+        s2 = 'Read lengths: ' + str(readLens)
+        unpaired, paired = self.findPairs(len(coverage), reads, pairedLens, unpairedLens)
+
+        if len(paired) > 0:
+            print(s)
+            print(s2)
+            print('Unpaired ('+str(len(unpaired))+'): ' + str(unpaired))
+            print('Paired: ('+str(len(paired))+')' + str(paired))
+            exit()
+
 
         return unpaired, paired
         

@@ -57,58 +57,38 @@ class Compressor:
         self.chromosomes = self.parseSAMHeader(header)
         self.aligned = alignments.Alignments(self.chromosomes)
 
-        # For each NH value and for each exon, store the byte offset in the file for the given exon in the coverage vector
-        self.unsplicedIndex = dict()
-        self.unsplicedExonsIndex = dict()
+        self.parseAlignments(samFilename)
 
-        with open(samFilename, 'r') as f_in:
-            if binary:
-                f_unspliced = open(compressedFilename+'.unspliced', 'wb')
-                f_spliced = open(compressedFilename+'.spliced', 'wb')
-            else:
-                f_unspliced = open(compressedFilename+'.unspliced', 'w')
-                f_spliced = open(compressedFilename+'.spliced', 'w')
-
-            offset = 0
-            reads = []
-            for chrom in self.chromosomes.keys():
-                offset = self.parseAlignments(f_in, offset)
-
-                ''' TODO: No need for if/else? '''
-                if binary:
-                    junctions, maxReadLen = self.computeJunctions()
-                    self.compressUnspliced(f_unspliced, chrom, binary)
-                    self.compressSpliced(junctions, maxReadLen, f_spliced, binary)
-                else:
-                    if len(self.aligned.spliced) > 0:
-                        junctions, maxReadLen = self.computeJunctions()
-                        self.compressSpliced(junctions, maxReadLen, f_spliced, binary)
-
-                    if len(self.aligned.unspliced) > 0:
-                        self.compressUnspliced(f_unspliced, chrom, binary)
-
-                # Reset alignments
-                unmatched = self.aligned.unmatched
-                self.aligned = alignments.Alignments(self.chromosomes)
-                self.aligned.unmatched = unmatched
-
-            f_unspliced.close()
-            f_spliced.close()
-
+        ''' TODO: No need for if/else? '''
         if binary:
             with open(compressedFilename, 'wb') as f:
-                self.writeIndexBinary(f)
-
                 s = binaryIO.writeChroms(self.aligned.chromosomes)
                 f.write(s)
                 s, self.exonBytes = binaryIO.writeExons(self.aligned.exons)
                 f.write(s)
+                
+                junctions, maxReadLen = self.computeJunctions()
+                self.compressUnspliced(f, binary)
+                self.compressSpliced(junctions, maxReadLen, f, binary)
 
-                with open(compressedFilename+'.unspliced', 'rb') as f_unspliced:
-                    f.write(f_unspliced.read())
-                with open(compressedFilename+'.spliced', 'rb') as f_spliced:
-                    f.write(f_spliced.read())
+            with open(compressedFilename, 'rb') as f:
+                compressed = f.read()
+            with open(compressedFilename, 'wb') as f:
+                self.writeIndexBinary(f)
+
+                f.write(compressed)
+
         else:
+            with open(compressedFilename, 'w') as f:
+                if len(self.aligned.spliced) > 0:
+                    junctions, maxReadLen = self.computeJunctions()
+                    self.compressSpliced(junctions, maxReadLen, f, binary)
+                f.write('/\n')
+                if len(self.aligned.unspliced) > 0:
+                    self.compressUnspliced(f, binary)
+
+            with open(compressedFilename, 'r') as f:
+                compressed = f.read()
             with open(compressedFilename, 'w') as f:
                 chroms = []
                 for k,v in self.aligned.chromosomes.items():
@@ -117,13 +97,7 @@ class Compressor:
 
                 f.write('\t'.join([str(e) for e in self.aligned.exons]) + '\n')
 
-                with open(compressedFilename+'.unspliced', 'r') as f_unspliced:
-                    f.write(f_unspliced.read())
-                
-                f.write('/\n')
-
-                with open(compressedFilename+'.spliced', 'r') as f_spliced:
-                    f.write(f_spliced.read())
+                f.write(compressed)
 
         '''
         self.parseAlignments(samFilename)
@@ -177,6 +151,11 @@ class Compressor:
         '''
 
     def computeJunctions(self):
+
+        #print('>>>Computing junctions')
+        #objgraph.show_growth()
+
+
         # Compute coverage levels across every exon junction
         junctions = dict()
 
@@ -299,13 +278,13 @@ class Compressor:
             binaryIO.writeVal(filehandle, 1, readLenBytes)
 
         # Junction index: list of junctions and length of each chunk
-        sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
-        junctionChunkLens = [0] * int(math.ceil(len(self.sortedJuncs) / self.junctionChunkSize))
+        self.sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
+        self.junctionChunkLens = [0] * int(math.ceil(len(self.sortedJuncs) / self.junctionChunkSize))
 
         i = 0
         s = b''
         chunkId = 0
-        for key in sortedJuncs:
+        for key in self.sortedJuncs:
             i += 1
 
             junc = junctions[key]
@@ -323,7 +302,7 @@ class Compressor:
                     filehandle.write(self.compressString(s))
 
                     # save length of chunk in file to index
-                    junctionChunkLens[chunkId] = filehandle.tell()-start
+                    self.junctionChunkLens[chunkId] = filehandle.tell()-start
                     chunkId += 1
 
                     i = 0
@@ -349,12 +328,10 @@ class Compressor:
             filehandle.write(self.compressString(s))
 
             # save length of chunk in file to index
-            junctionChunkLens[chunkId] = filehandle.tell()-start
+            self.junctionChunkLens[chunkId] = filehandle.tell()-start
 
-        self.sortedJuncs += sortedJuncs
-        self.junctionChunkLens += junctionChunkLens
 
-    def compressUnspliced(self, filehandle, chrom, binary=False):
+    def compressUnspliced(self, filehandle, binary=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
@@ -362,9 +339,6 @@ class Compressor:
 
         maxFragLen = 0
         maxReadLen = 0
-
-        chromLen = self.chromosomes[chrom]
-        chromOffset = self.aligned.chromOffsets[read.chrom]
 
         # sort reads into exons
         readExons = dict()
@@ -388,10 +362,13 @@ class Compressor:
                 for n in range(len(self.aligned.exons)-1):
                     readExons[r.NH] += [[]]
 
+
+                #print('Adding NH = %d' % r.NH)
+                #print('  Coverages size: %f' % (asizeof.asizeof(coverages)/1000000))
                 if r.NH == 1:
-                    coverages[r.NH] = [0] * chromLen
+                    coverages[r.NH] = [0] * self.aligned.exons[-1]
                 else:
-                    coverages[r.NH] = [ [0, chromLen] ]
+                    coverages[r.NH] = [ [0, self.aligned.exons[-1]] ]
 
 
             j = bisect.bisect_right(self.aligned.exons, r.exons[0][0])-1
@@ -400,22 +377,43 @@ class Compressor:
             if r.NH == 1:
                 # update coverage vector
                 if (r.lenLeft == 0 and r.lenRight == 0):
-                    for n in range(r.exons[0][0]-chromOffset, r.exons[0][1]-chromOffset):
+                    for n in range(r.exons[0][0], r.exons[0][1]):
                         coverages[r.NH][n] += 1
                 else:
-                    for n in range(r.exons[0][0]-chromOffset, r.exons[0][0]+r.lenLeft-chromOffset):
+                    for n in range(r.exons[0][0], r.exons[0][0]+r.lenLeft):
                         coverages[r.NH][n] += 1
-                    for n in range(r.exons[0][1]-r.lenRight-chromOffset, r.exons[0][1]-chromOffset):
+                    for n in range(r.exons[0][1]-r.lenRight, r.exons[0][1]):
                         coverages[r.NH][n] += 1
             else:
                 # update coverage vector
                 if (r.lenLeft == 0 and r.lenRight == 0):
-                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0]-chromOffset, r.exons[0][1]-r.exons[0][0], 1)
+                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.exons[0][1]-r.exons[0][0], 1)
                 else:
-                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0]-chromOffset, r.lenLeft, 1)
-                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-r.lenRight-chromOffset, r.lenRight, 1)
+                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.lenLeft, 1)
+                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-r.lenRight, r.lenRight, 1)
 
         coverages[1] = self.RLE(coverages[1])
+
+        # Compute difference run-length encoding for junctions and update huffman index
+        if self.huffman:
+            for cov in coverages.values():
+                # Add first value
+                if cov[0][0] in self.huffmanFreqs:
+                    self.huffmanFreqs[cov[0][0]] += 1
+                else:
+                    self.huffmanFreqs[cov[0][0]] = 1
+
+                for i in range(1,len(cov)):
+                    val = cov[i][0] - cov[i-1][0]
+                    cov[i][0] = val
+                    if val in self.huffmanFreqs:
+                        self.huffmanFreqs[val] += 1
+                    else:
+                        self.huffmanFreqs[val] = 1
+
+            # Create huffman index from frequencies
+            freqs = [(k,v) for k,v in self.huffmanFreqs.items()]
+            self.huffmanIndex = huffman.createHuffmanIndex(freqs)
 
         if binary:
             # find length in bytes to fit fragment and read lengths
@@ -427,107 +425,9 @@ class Compressor:
             binaryIO.writeVal(filehandle, 4, self.sectionLen)
             binaryIO.writeVal(filehandle, 1, fragLenBytes)
             binaryIO.writeVal(filehandle, 1, readLenBytes)
-            self.writeUnsplicedBinary(filehandle, chrom, readExons, coverages, fragLenBytes, readLenBytes)
+            self.writeUnsplicedBinary(filehandle, readExons, coverages, fragLenBytes, readLenBytes)
         else:
             self.writeUnspliced(filehandle, readExons, coverages)
-
-    # def compressUnspliced(self, filehandle, binary=False):
-    #     ''' Compress the unspliced alignments as a run-length-encoded coverage vector
-
-    #         filename: Name of file to compress to
-    #     '''
-
-    #     maxFragLen = 0
-    #     maxReadLen = 0
-
-    #     # sort reads into exons
-    #     readExons = dict()
-    #     coverages = dict()
-
-    #     for i in range(len(self.aligned.unspliced)):
-    #         r = self.aligned.unspliced[len(self.aligned.unspliced) - i - 1]
-
-    #         if binary:
-    #             # find maximum fragment and read lengths
-    #             if r.lenLeft > maxReadLen:
-    #                 maxReadLen = r.lenLeft
-    #             if r.lenRight > maxReadLen:
-    #                 maxReadLen = r.lenRight
-    #             fragLen = r.exons[0][1] - r.exons[0][0]
-    #             if fragLen > maxFragLen:
-    #                 maxFragLen = fragLen
-
-    #         if not r.NH in readExons:
-    #             readExons[r.NH] = []
-    #             for n in range(len(self.aligned.exons)-1):
-    #                 readExons[r.NH] += [[]]
-
-
-    #             #print('Adding NH = %d' % r.NH)
-    #             #print('  Coverages size: %f' % (asizeof.asizeof(coverages)/1000000))
-    #             if r.NH == 1:
-    #                 coverages[r.NH] = [0] * self.aligned.exons[-1]
-    #             else:
-    #                 coverages[r.NH] = [ [0, self.aligned.exons[-1]] ]
-
-
-    #         j = bisect.bisect_right(self.aligned.exons, r.exons[0][0])-1
-    #         readExons[r.NH][j] += [len(self.aligned.unspliced) - i - 1]
-
-    #         if r.NH == 1:
-    #             # update coverage vector
-    #             if (r.lenLeft == 0 and r.lenRight == 0):
-    #                 for n in range(r.exons[0][0], r.exons[0][1]):
-    #                     coverages[r.NH][n] += 1
-    #             else:
-    #                 for n in range(r.exons[0][0], r.exons[0][0]+r.lenLeft):
-    #                     coverages[r.NH][n] += 1
-    #                 for n in range(r.exons[0][1]-r.lenRight, r.exons[0][1]):
-    #                     coverages[r.NH][n] += 1
-    #         else:
-    #             # update coverage vector
-    #             if (r.lenLeft == 0 and r.lenRight == 0):
-    #                 coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.exons[0][1]-r.exons[0][0], 1)
-    #             else:
-    #                 coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.lenLeft, 1)
-    #                 coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-r.lenRight, r.lenRight, 1)
-
-    #     coverages[1] = self.RLE(coverages[1])
-
-    #     # Compute difference run-length encoding for junctions and update huffman index
-    #     if self.huffman:
-    #         for cov in coverages.values():
-    #             # Add first value
-    #             if cov[0][0] in self.huffmanFreqs:
-    #                 self.huffmanFreqs[cov[0][0]] += 1
-    #             else:
-    #                 self.huffmanFreqs[cov[0][0]] = 1
-
-    #             for i in range(1,len(cov)):
-    #                 val = cov[i][0] - cov[i-1][0]
-    #                 cov[i][0] = val
-    #                 if val in self.huffmanFreqs:
-    #                     self.huffmanFreqs[val] += 1
-    #                 else:
-    #                     self.huffmanFreqs[val] = 1
-
-    #         # Create huffman index from frequencies
-    #         freqs = [(k,v) for k,v in self.huffmanFreqs.items()]
-    #         self.huffmanIndex = huffman.createHuffmanIndex(freqs)
-
-    #     if binary:
-    #         # find length in bytes to fit fragment and read lengths
-    #         fragLenBytes = binaryIO.findNumBytes(maxFragLen)
-    #         readLenBytes = binaryIO.findNumBytes(maxReadLen)
-
-    #         # Write number of exons and NH values
-    #         binaryIO.writeVal(filehandle, 2, len(coverages))
-    #         binaryIO.writeVal(filehandle, 4, self.sectionLen)
-    #         binaryIO.writeVal(filehandle, 1, fragLenBytes)
-    #         binaryIO.writeVal(filehandle, 1, readLenBytes)
-    #         self.writeUnsplicedBinary(filehandle, readExons, coverages, fragLenBytes, readLenBytes)
-    #     else:
-    #         self.writeUnspliced(filehandle, readExons, coverages)
 
     def writeUnspliced(self, filehandle, readExons, coverages):
         breakpoints = range(0, self.aligned.exons[-1], self.sectionLen)
@@ -623,15 +523,21 @@ class Compressor:
                     filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensLeft.items()]) + '\n')
                     filehandle.write('\t'.join([str(k)+','+str(v) for k,v in lensRight.items()]) + '\n')
 
-    def writeUnsplicedBinary(self, filehandle, chrom, readExons, coverages, fragLenBytes, readLenBytes):
+    def writeUnsplicedBinary(self, filehandle, readExons, coverages, fragLenBytes, readLenBytes):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
         '''
 
-        chromLen = self.chromosomes[chrom]
+        #print('Writing unspliced')
+        #print('Read exons length: %f' % (asizeof.asizeof(readExons)/1000000))
+        #print('Coverages length: %f' % (asizeof.asizeof(coverages)/1000000))
 
-        breakpoints = range(0, chromLen, self.sectionLen)
+        # For each NH value and for each exon, store the byte offset in the file for the given exon in the coverage vector
+        self.unsplicedIndex = dict()
+        self.unsplicedExonsIndex = dict()
+
+        breakpoints = range(0, self.aligned.exons[-1], self.sectionLen)
 
         for NH in sorted(readExons.keys()):
             binaryIO.writeVal(filehandle, 2, NH)
@@ -683,10 +589,10 @@ class Compressor:
                     filehandle.write(self.compressString(s))
                     offsets[currBreakpoint] = filehandle.tell() - start
 
-            if not NH in self.unsplicedIndex:
-                self.unsplicedIndex[NH] = offsets
-            else:
-                self.unsplicedIndex[NH] += offsets
+            self.unsplicedIndex[NH] = offsets
+
+
+
 
             # Write lengths for each exon
             exonsIndex = []
@@ -745,63 +651,47 @@ class Compressor:
                     chunkId = 0
                     chunkString = b''
 
-            if not NH in self.unsplicedExonsIndex:
-                self.unsplicedExonsIndex[NH] = exonsIndex
-            else:
-                self.unsplicedExonsIndex[NH] += exonsIndex
+            self.unsplicedExonsIndex[NH] = exonsIndex
     
-    def parseAlignments(self, filehandle, offset=0):
-        ''' Parse a chromosome of the file in SAM format
+    def parseAlignments(self, filename, offset=0):
+        ''' Parse a file in SAM format
             Add the exonic region indices for each read to the correct ChromosomeAlignments object
             
             filehandle: SAM filehandle containing aligned reads
-            offset: Offset in file to begin reading
         '''
 
-        self.currChrom = None
-        filehandle.seek(offset)
+        with open(filename, 'r') as filehandle:
+            for line in filehandle:
+                row = line.strip().split('\t')
+                if len(row) < 5:
+                    continue
 
-        line = filehandle.readline()
-        while len(line) > 0:
-            row = line.strip().split('\t')
-            if len(row) < 5:
-                continue
+                if not row[2] in self.chromosomes.keys():
+                    print('Chromosome ' + str(row[2]) + ' not found!')
+                    continue
 
-            chromosome = str(row[2])
-            if self.currChrom == None:
-                self.currChrom = chromosome
-            elif not chromosome == self.currChrom:
-                break
+                exons = self.parseCigar(row[5], int(row[3]))
 
-            if not row[2] in self.chromosomes.keys():
-                print('Chromosome ' + str(row[2]) + ' not found!')
-                continue
+                # find XS value:
+                xs = None
+                NH = 1
+                for r in row[11 : len(row)]:
+                    if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                        xs = r[5]
+                    elif r[0:3] == 'NH:':
+                        NH = int(r[5:])
 
-            exons = self.parseCigar(row[5], int(row[3]))
+                
+                if not row[6] == '*':
+                    if row[6] == '=':
+                        pair_chrom = chromosome
+                    else:
+                        pair_chrom = row[6]
+                    pair_index = int(row[7])
 
-            # find XS value:
-            xs = None
-            NH = 1
-            for r in row[11 : len(row)]:
-                if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
-                    xs = r[5]
-                elif r[0:3] == 'NH:':
-                    NH = int(r[5:])
-
-            
-            if not row[6] == '*':
-                if row[6] == '=':
-                    pair_chrom = chromosome
+                    self.aligned.processRead(read.Read(row[2], exons, xs, NH), pair_chrom, pair_index)
                 else:
-                    pair_chrom = row[6]
-                pair_index = int(row[7])
-
-                self.aligned.processRead(read.Read(chromosome, exons, xs, NH), pair_chrom, pair_index)
-            else:
-                self.aligned.processRead(read.Read(chromosome, exons, xs, NH))
-
-            offset = filehandle.tell()
-            line = filehandle.readline()
+                    self.aligned.processRead(read.Read(row[2], exons, xs, NH))
 
         self.aligned.finalizeExons()
         self.aligned.finalizeReads()
