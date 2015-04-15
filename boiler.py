@@ -8,12 +8,6 @@ import time
 import expand
 import compress
 
-#import objgraph
-#import random
-#import inspect
-
-from pympler import asizeof
-
 def go(args):
     binary = False
     if args.binary:

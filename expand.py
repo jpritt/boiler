@@ -9,8 +9,6 @@ import binaryIO
 import operator
 import huffman
 
-from pympler import asizeof
-
 class Expander:
     aligned = None
     sectionLen = 100000    

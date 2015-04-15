@@ -8,11 +8,8 @@ import bisect
 import binaryIO
 import math
 
-import objgraph
 import random
 import inspect
-
-from pympler import asizeof
 
 import huffman
 
