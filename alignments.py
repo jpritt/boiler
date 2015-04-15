@@ -7,9 +7,6 @@ import pairedread
 import os.path
 import sys
 
-import objgraph
-import random
-
 import time
 
 class Alignments:
