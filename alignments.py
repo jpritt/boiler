@@ -6,6 +6,7 @@ import read
 import pairedread
 import os.path
 import sys
+import copy
 
 import time
 
@@ -88,6 +89,12 @@ class Alignments:
                 self.spliced += [r]
             else:
                 x += 1
+
+        for r in self.unspliced:
+            if len(r.exons) > 1:
+                print('Error!')
+                exit()
+            r.readLen = r.exons[0][1] - r.exons[0][0]
 
         # Compute list of junctions crossed by each spliced read
         for r in self.spliced:
@@ -488,13 +495,14 @@ class Alignments:
         paired = []
         unpaired = []
 
+        reads.sort()
+
         if len(pairedLens) > 0:
-            # Sort read pairedLensSortedlengths from largest to smallest
+            # Sort read pairedLensSorted lengths from largest to smallest
             pairedLensSorted = sorted(pairedLens, reverse=True)
 
             starts = [0] * (length+1)
             ends = [0] * (length+1)
-
 
             for r in reads:
                 starts[r[0]] += 1
@@ -538,7 +546,15 @@ class Alignments:
                         starts[reads[id2][0]] -= 1
                         ends[i+l] -= 1
 
-                        paired += [[startRead, reads[id2]]]
+
+                        if reads[id2][0] < startRead[0]:
+                            paired += [[reads[id2], startRead]]
+                        else:
+                            paired += [[startRead, reads[id2]]]
+
+
+
+                        #paired += [[startRead, reads[id2]]]
                         del reads[id2]
 
                         break
@@ -588,9 +604,14 @@ class Alignments:
                             starts[j-l] -= 1
                             ends[reads[id2][1]] -= 1
 
-                            paired += [[reads[id2], startRead]]
-                            del reads[id2]
 
+                            if reads[id2][0] < startRead[0]:
+                                paired += [[reads[id2], startRead]]
+                            else:
+                                paired += [[startRead, reads[id2]]]
+
+                            #paired += [[reads[id2], startRead]]
+                            del reads[id2]
                             break
                     
                     if not foundRead:
@@ -617,9 +638,13 @@ class Alignments:
                     numPairedReads += pairedLens[l]
 
                 for _ in range(numPairedReads):
-                    paired += [[unmatched[0], unmatched[-1]]]
-                    del unmatched[-1]
-                    del unmatched[0]
+                    if len(unmatched) > 1:
+                        if unmatched[-1][0] < unmatched[0][0]:
+                            paired += [[unmatched[-1], unmatched[0]]]
+                        else:
+                            paired += [[unmatched[0], unmatched[-1]]]
+                        del unmatched[-1]
+                        del unmatched[0]
 
             # Add remaining unmatched reads as unpaired reads
             for r in unmatched:
@@ -631,71 +656,100 @@ class Alignments:
 
         return unpaired, paired
 
-    def findReads(self, readLens, lensLeft, lensRight, coverage):
+    def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
 
-        countReads = 0
-        for length,count in readLens.items():
-            countReads += count
-
-        fragmentLens = dict()
-        countPaired = 0
-        for length,count in lensLeft.items():
-            countPaired += count
-            fragmentLens[length] = count
-        for length,count in lensRight.items():
-            if length in fragmentLens:
-                fragmentLens[length] += count
-            else:
-                fragmentLens[length] = count
-
-        if countPaired == 0:
-            pairedLens = dict()
-            unpairedLens = readLens
-            fragmentLens = readLens
-        elif countPaired == countReads:
-            pairedLens = readLens
-            unpairedLens = dict()
-        else:
-            # Assign longest read lengths to be paired-end reads
-            pairedLens = dict()
-            unpairedLens = dict()
-            sortedLens = sorted(readLens, reverse=True)
-            i = 0
-            while countPaired > 0:
-                l = sortedLens[i]
-                if countPaired >= readLens[l]:
-                    pairedLens[l] = readLens[l]
+        fragmentLens = copy.copy(unpairedLens) #dict()
+        #for k,v in unpairedLens.items():
+        #    if k > 0:
+        #        if k in fragmentLens:
+        #            fragmentLens[k] += v
+        #        else:
+        #            fragmentLens[k] = v
+        for k,v in lensLeft.items():
+            if k > 0:
+                if k in fragmentLens:
+                    fragmentLens[k] += v
                 else:
-                    pairedLens[l] = countPaired
-                    unpairedLens[l] = readLens[l] - countPaired
-                    if l in fragmentLens:
-                        fragmentLens[l] += readLens[l] - countPaired
-                    else:
-                        fragmentLens[l] = readLens[l] - countPaired
-                i += 1
-            while i < len(sortedLens):
-                l = sortedLens[i]
-                unpairedLens[l] = readLens[l]
-                if l in fragmentLens:
-                    fragmentLens[l] += readLens[l] - countPaired
+                    fragmentLens[k] = v
+        for k,v in lensRight.items():
+            if k > 0:
+                if k in fragmentLens:
+                    fragmentLens[k] += v
                 else:
-                    fragmentLens[l] = readLens[l] - countPaired
+                    fragmentLens[k] = v
+        
+        '''
+        countFragments = 0
+        for k,v in fragmentLens.items():
+            countFragments += v
+        print(countFragments)
+        '''
 
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
+        
+        '''
+        print(len(reads))
+        
+        countPaired = 0
+        for k,v in pairedLens.items():
+            countPaired += v
+        countUnpaired = 0
+        for k,v in unpairedLens.items():
+            countUnpaired += v
+        '''
 
-        s = 'Reads (' + str(len(reads)) + '): ' + str(reads)
-        s2 = 'Read lengths: ' + str(readLens)
         unpaired, paired = self.findPairs(len(coverage), reads, pairedLens, unpairedLens)
 
-        if len(paired) > 0:
-            print(s)
-            print(s2)
-            print('Unpaired ('+str(len(unpaired))+'): ' + str(unpaired))
-            print('Paired: ('+str(len(paired))+')' + str(paired))
-            exit()
+        '''
+        readUnpaired = dict()
+        for r in unpaired:
+            l = r[1] - r[0]
+            if l in readUnpaired:
+                readUnpaired[l] += 1
+            else:
+                readUnpaired[l] = 1
+        readLeft = dict()
+        readRight = dict()
+        readPaired = dict()
+        for r in paired:
+            left = r[0][1] - r[0][0]
+            right = r[1][1] - r[1][0]
+            length = r[1][1] - r[0][0]
+            if left in readLeft:
+                readLeft[left] += 1
+            else:
+                readLeft[left] = 1
+            if right in readRight:
+                readRight[right] += 1
+            else:
+                readRight[right] = 1
 
+            if length < 0:
+                print(r)
+
+            if length in readPaired:
+                readPaired[length] += 1
+            else:
+                readPaired[length] = 1
+
+        if not len(unpaired) == countUnpaired:
+            print('%d, %d -- %d, %d' % (countUnpaired, countPaired, len(unpaired), len(paired)))
+
+            print('\t'.join([str(k) + ': ' + str(unpairedLens[k]) for k in sorted(unpairedLens)]))
+            print('\t'.join([str(k) + ': ' + str(readUnpaired[k]) for k in sorted(readUnpaired)]))
+            print('...')
+            print('\t'.join([str(k) + ': ' + str(pairedLens[k]) for k in sorted(pairedLens)]))
+            print('\t'.join([str(k) + ': ' + str(readPaired[k]) for k in sorted(readPaired)]))
+            print('...')
+            print('\t'.join([str(k) + ': ' + str(lensLeft[k]) for k in sorted(lensLeft)]))
+            print('\t'.join([str(k) + ': ' + str(readLeft[k]) for k in sorted(readLeft)]))
+            print('...')
+            print('\t'.join([str(k) + ': ' + str(lensRight[k]) for k in sorted(lensRight)]))
+            print('\t'.join([str(k) + ': ' + str(readRight[k]) for k in sorted(readRight)]))
+            print('')
+        '''
 
         return unpaired, paired
         
@@ -1582,12 +1636,17 @@ class Alignments:
         for i in range(len(read.exons)):
             read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
 
+        #if read.chrom == '3L' and read.exons[0][0] == 60056176:
+        #    print(read.exons)
+
         # update list of exons
         alignment = read.exons
         if len(alignment) > 1:
             for i in range(len(alignment)-1):
-                self.exons.add(offset + alignment[i][1])
-                self.exons.add(offset + alignment[i+1][0])
+                self.exons.add(alignment[i][1])
+                self.exons.add(alignment[i+1][0])
+                #self.exons.add(offset + alignment[i][1])
+                #self.exons.add(offset + alignment[i+1][0])
 
         
         if pair_chrom == None:
@@ -1771,3 +1830,9 @@ class Alignments:
                     filehandle.write('\tXS:A:' + pair.xs)
                 filehandle.write('\n')
             readId += 1
+
+    def countReads(self, d):
+        count = 0
+        for k,v in d.items():
+            count += v
+        return count

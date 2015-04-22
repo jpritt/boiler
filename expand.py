@@ -72,7 +72,7 @@ class Expander:
             if line[0] == '>' or line[0] == '/':
                 if not junc == None:
                     # process junction
-                    unpaired, paired = self.aligned.findReads(junc.readLens, junc.lensLeft, junc.lensRight, junc.coverage)
+                    unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
 
                     juncBounds = []
                     for j in junctionExons:
@@ -177,7 +177,8 @@ class Expander:
                     length += self.aligned.exons[e+1] - self.aligned.exons[e]
 
                 junc = junction.Junction(junctionExons, length)
-                junc.readLens = None
+                junc.unpairedLens = None
+                junc.pairedLens = None
                 junc.lensLeft = None
                 junc.lensRight = None
 
@@ -185,22 +186,29 @@ class Expander:
                 junc.NH = int(key[-1])
 
             else:
-                if junc.readLens == None:
-                    # First line after '>' contains read length distribution
-                    junc.readLens = dict()
+                if junc.unpairedLens == None:
+                    # First line after '>' contains unpaired read length distribution
+                    junc.unpairedLens = dict()
                     for readLen in line.rstrip().split('\t'):
                         readLen = readLen.split(',')
-                        junc.readLens[int(readLen[0])] = int(readLen[1])
+                        junc.unpairedLens[int(readLen[0])] = int(readLen[1])
+                    junc.coverage = []
+                if junc.pairedLens == None:
+                    # Second line after '>' contains paired read length distribution
+                    junc.pairedLens = dict()
+                    for readLen in line.rstrip().split('\t'):
+                        readLen = readLen.split(',')
+                        junc.pairedLens[int(readLen[0])] = int(readLen[1])
                     junc.coverage = []
                 elif junc.lensLeft == None:
-                    # Second line after '>' contains left read length distribution
+                    # Third line after '>' contains left read length distribution
                     junc.lensLeft = dict()
                     if len(line.rstrip()) > 0:
                         for length in line.rstrip().split('\t'):
                             length = length.split(',')
                             junc.lensLeft[int(length[0])] = int(length[1])
                 elif junc.lensRight == None:
-                    # Third line after '>' contains right read length distribution
+                    # Fourth line after '>' contains right read length distribution
                     junc.lensRight = dict()
                     if len(line.rstrip()) > 0:
                         for length in line.rstrip().split('\t'):
@@ -249,7 +257,7 @@ class Expander:
                 junc.NH = key[-1]
                 junc.coverage = self.RLEtoVector(junc.coverage)
 
-                unpaired, paired = self.aligned.findReads(junc.readLens, junc.lensLeft, junc.lensRight, junc.coverage)
+                unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
 
                 juncBounds = []
                 for j in junc.exons:
@@ -347,13 +355,14 @@ class Expander:
         '''
 
         NH = 1
-        readLens = dict()
+        unpairedLens = dict()
+        pairedLens = dict()
         exonStart = 0
         exonEnd = 0
         for line in f:
             if line[0] == '#':
-                if len(readLens) > 0:
-                    unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+                if len(unpairedLens) > 0 or len(pairedLens) > 0:
+                    unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
 
                     for r in unpaired:
                         self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
@@ -364,7 +373,8 @@ class Expander:
                 NH = int(line.rstrip()[1:])
 
                 lineNum = 0
-                readLens = dict()
+                unpairedLens = dict()
+                pairedLens = dict()
                 lensLeft = dict()
                 lensRight = dict()
                 coverage = []
@@ -384,9 +394,9 @@ class Expander:
 
             elif line[0] == '>':
                 RLE_segment = False
-                if len(readLens) > 0:
+                if len(unpairedLens) > 0 or len(pairedLens) > 0:
                     # Process previous exon
-                    unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+                    unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
 
                     for r in unpaired:
                         self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
@@ -402,20 +412,27 @@ class Expander:
                 exonEnd = self.aligned.exons[exonId+1]
 
             elif lineNum == 1:
-                # First line after '>' contains read lengths
-                readLens = dict()
+                # First line after '>' contains unpaired lengths
+                unpairedLens = dict()
                 for row in line.rstrip().split('\t'):
                     if len(row) > 0:
                         readLen = row.split(',')
-                        readLens[int(readLen[0])] = int(readLen[1])
+                        unpairedLens[int(readLen[0])] = int(readLen[1])
             elif lineNum == 2:
+                # Second line after '>' contains paired lengths
+                pairedLens = dict()
+                for row in line.rstrip().split('\t'):
+                    if len(row) > 0:
+                        readLen = row.split(',')
+                        pairedLens[int(readLen[0])] = int(readLen[1])
+            elif lineNum == 3:
                 # Second line after '>' contains left read length distribution
                 lensLeft = dict()
                 if len(line.rstrip()) > 0:
                     for length in line.rstrip().split('\t'):
                         length = length.split(',')
                         lensLeft[int(length[0])] = int(length[1])
-            elif lineNum == 3:
+            elif lineNum == 4:
                 # Third line after '>' contains right read length distribution
                 lensRight = dict()
                 if len(line.rstrip()) > 0:
@@ -425,8 +442,8 @@ class Expander:
             lineNum += 1
 
         # Process the final exon
-        if len(readLens) > 0:
-            unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+        if len(unpairedLens) > 0 or len(pairedLens) > 0:
+            unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
 
             for r in unpaired:
                 self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
@@ -464,25 +481,26 @@ class Expander:
                         coverage += [0] * self.sectionLen
 
             for e in range(len(self.unsplicedExonsIndex[NH])):
-                #print('Reading exon %d' % e)
                 lenDists = self.expandString(f.read(self.unsplicedExonsIndex[NH][e]))
                 startPos = 0
                 i = 0
                 while startPos < len(lenDists):
                     i += 1
-                    readLens, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
+                    unpairedLens, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+                    pairedLens, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
                     lensLeft = dict()
                     lensRight = dict()
-                    if len(readLens) > 0:
+                    if len(pairedLens) > 0:
                         lensLeft, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
                         if len(lensLeft) > 0:
                             lensRight, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
 
+                    if len(unpairedLens) > 0 or len(pairedLens) > 0:
                         exonStart = self.aligned.exons[e*self.exonChunkSize + i - 1]
                         exonEnd = self.aligned.exons[e*self.exonChunkSize + i]
-
-                        unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
-
+                        
+                        unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+                        
                         for r in unpaired:
                             self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
                         for p in paired:
@@ -856,7 +874,7 @@ class Expander:
 
                         if relevant[i] == 1:
                             # Process the junction
-                            unpaired, paired = self.aligned.findReads(junc.readLens, junc.lensLeft, junc.lensRight, junc.coverage)
+                            unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
 
                             juncBounds = []
                             for j in junc.exons:
@@ -1026,18 +1044,20 @@ class Expander:
                     i = 0
                     while len(lenDists) > 0:
                         i += 1
-                        readLens, lenDists = binaryIO.readLens(lenDists, fragLenBytes)
+                        unpairedLens, lenDists = binaryIO.readLens(lenDists, readLenBytes)
+                        pairedLens, lenDists = binaryIO.readLens(lenDists, fragLenBytes)
                         lensLeft = dict()
                         lensRight = dict()
-                        if len(readLens) > 0:
+                        if len(pairedLens) > 0:
                             lensLeft, lenDists = binaryIO.readLens(lenDists, readLenBytes)
                             if len(lensLeft) > 0:
                                 lensRight, lenDists = binaryIO.readLens(lenDists, readLenBytes)
 
+                        if len(pairedLens) > 0 or len(unpairedLens) > 0:
                             exonStart = self.aligned.exons[e*self.exonChunkSize + i - 1]
                             exonEnd = self.aligned.exons[e*self.exonChunkSize + i]
                             if exonStart < end and exonEnd > start:
-                                unpaired, paired = self.aligned.findReads(readLens, lensLeft, lensRight, coverage[exonStart-covStart:exonEnd-covStart])
+                                unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart-covStart:exonEnd-covStart])
 
                                 for r in unpaired:
                                     if r[0]+exonStart >= start and r[1]+exonStart <= end:

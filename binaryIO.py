@@ -236,14 +236,15 @@ def readJunctionsList(s, start=0):
 def writeJunction(readLenBytes, junc, huffmanIndex=None):
     # More cost efficient to calculate/save the number of bytes needed for fragments for each junction
     maxFragLen = 0
-    for l in junc.readLens.keys():
+    for l in junc.pairedLens.keys():
         if l > maxFragLen:
             maxFragLen = l
     fragLenBytes = findNumBytes(maxFragLen)
     s = valToBinary(1, fragLenBytes)
 
-    s += writeLens(fragLenBytes, junc.readLens)
-    if len(junc.readLens) > 0:
+    s += writeLens(readLenBytes, junc.unpairedLens)
+    s += writeLens(fragLenBytes, junc.pairedLens)
+    if len(junc.pairedLens) > 0:
         s += writeLens(readLenBytes, junc.lensLeft)
         if len(junc.lensLeft) > 0:
             s += writeLens(readLenBytes, junc.lensRight)
@@ -260,8 +261,9 @@ def writeJunction(readLenBytes, junc, huffmanIndex=None):
 def readJunction(s, junc, readLenBytes, start=0, huffmanTree=None):
     fragLenBytes, start = binaryToVal(s, 1, start)
 
-    junc.readLens, start = readLens(s, fragLenBytes, start)
-    if len(junc.readLens) > 0:
+    junc.unpairedLens, start = readLens(s, readLenBytes, start)
+    junc.pairedLens, start = readLens(s, fragLenBytes, start)
+    if len(junc.pairedLens) > 0:
         junc.lensLeft, start = readLens(s, readLenBytes, start)
         if len(junc.lensLeft) > 0:
             junc.lensRight, start = readLens(s, readLenBytes, start)
@@ -276,6 +278,7 @@ def readJunction(s, junc, readLenBytes, start=0, huffmanTree=None):
 def skipJunction(s, readLenBytes, start=0):
     fragLenBytes, start = binaryToVal(s, 1, start)
 
+    lens, start = readLens(s, readLenBytes, start)
     lens, start = readLens(s, fragLenBytes, start)
     if len(lens) > 0:
         lens, start = readLens(s, readLenBytes, start)

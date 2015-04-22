@@ -56,6 +56,15 @@ class Compressor:
 
         self.parseAlignments(samFilename)
 
+        #print(self.aligned.chromOffsets['3L'])
+        #for i in range(len(self.aligned.exons)):
+        #    if abs(self.aligned.exons[i] - self.aligned.chromOffsets['3L'] - 15897967) < 10:
+        #        print(i)
+        #        print(self.aligned.exons[i])
+        #        print(self.aligned.exons[i+1])
+        #        break
+        #exit()
+
         ''' TODO: No need for if/else? '''
         if binary:
             with open(compressedFilename, 'wb') as f:
@@ -67,12 +76,13 @@ class Compressor:
                 junctions, maxReadLen = self.computeJunctions()
                 self.compressUnspliced(f, binary)
                 self.compressSpliced(junctions, maxReadLen, f, binary)
-
+            
+            # Write exons and index information
+            compressed = None
             with open(compressedFilename, 'rb') as f:
                 compressed = f.read()
             with open(compressedFilename, 'wb') as f:
                 self.writeIndexBinary(f)
-
                 f.write(compressed)
 
         else:
@@ -148,17 +158,11 @@ class Compressor:
         '''
 
     def computeJunctions(self):
-
-        #print('>>>Computing junctions')
-        #objgraph.show_growth()
-
-
         # Compute coverage levels across every exon junction
         junctions = dict()
 
         # Keep track of maximum read and fragment lengths
         maxReadLen = 0
-        maxFragLen = 0
 
         for r in self.aligned.spliced:
             exonIds = r.exonIds
@@ -216,32 +220,39 @@ class Compressor:
                 #for i in range(len(j.coverage)-r.endOffset-r.lenRight, len(j.coverage)-r.endOffset):
                 #    j.coverage[i] += 1
 
-            # update readLens
-            if r.readLen in j.readLens:
-                j.readLens[r.readLen] += 1
-            else:
-                j.readLens[r.readLen] = 1
 
-                if r.readLen > maxFragLen:
-                    maxFragLen = r.readLen
-
-            # update left and right read lengths
+            # If this is a paired read, lenLeft and lenRight are both > 0
             if r.lenLeft > 0 or r.lenRight > 0:
+                # update pairedLens
+                if r.readLen in j.pairedLens:
+                    j.pairedLens[r.readLen] += 1
+                else:
+                    j.pairedLens[r.readLen] = 1
+
                 if r.lenLeft in j.lensLeft:
                     j.lensLeft[r.lenLeft] += 1
                 else:
                     j.lensLeft[r.lenLeft] = 1
 
-                    if r.lenLeft > maxReadLen:
-                        maxReadLen = r.lenLeft
+                if r.lenLeft > maxReadLen:
+                    maxReadLen = r.lenLeft
 
                 if r.lenRight in j.lensRight:
                     j.lensRight[r.lenRight] += 1
                 else:
                     j.lensRight[r.lenRight] = 1
 
-                    if r.lenRight > maxReadLen:
-                        maxReadLen = r.lenRight
+                if r.lenRight > maxReadLen:
+                    maxReadLen = r.lenRight
+            else:
+                # update unpairedLens
+                if r.readLen in j.unpairedLens:
+                    j.unpairedLens[r.readLen] += 1
+                else:
+                    j.unpairedLens[r.readLen] = 1
+
+                if r.readLen > maxReadLen:
+                    maxReadLen = r.readLen
 
         # Compute difference run-length encoding for junctions and update huffman index
         if self.huffman:
@@ -309,7 +320,8 @@ class Compressor:
                 filehandle.write('>' + key + '\n')
 
                 # write read lengths
-                filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.readLens.items()] ) + '\n')
+                filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.unpairedLens.items()] ) + '\n')
+                filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.pairedLens.items()] ) + '\n')
 
                 # Write left and right read lengths
                 filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensLeft.items()]) + '\n')
@@ -346,13 +358,16 @@ class Compressor:
 
             if binary:
                 # find maximum fragment and read lengths
-                if r.lenLeft > maxReadLen:
-                    maxReadLen = r.lenLeft
-                if r.lenRight > maxReadLen:
-                    maxReadLen = r.lenRight
-                fragLen = r.exons[0][1] - r.exons[0][0]
-                if fragLen > maxFragLen:
-                    maxFragLen = fragLen
+                if r.lenLeft == 0 and r.lenRight == 0:
+                    if r.readLen > maxReadLen:
+                        maxReadLen = r.readLen
+                else:
+                    if r.lenLeft > maxReadLen:
+                        maxReadLen = r.lenLeft
+                    if r.lenRight > maxReadLen:
+                        maxReadLen = r.lenRight
+                    if r.readLen > maxFragLen:
+                        maxFragLen = r.readLen
 
             if not r.NH in readExons:
                 readExons[r.NH] = []
@@ -477,7 +492,8 @@ class Compressor:
                     exonStart = self.aligned.exons[i]
 
                     # Distribution of all read lengths
-                    readLens = dict()
+                    unpairedLens = dict()
+                    pairedLens = dict()
 
                     # Distribution of all gap lengths in paired-end reads
                     lensLeft = dict()
@@ -485,21 +501,17 @@ class Compressor:
 
                     for readId in reads[i]:
                         read = self.aligned.unspliced[readId]
-
                         alignment = read.exons
-
-                        start = alignment[0][0] - exonStart
-                        end = alignment[0][1] - exonStart
-
-                        # update read lengths distribution
-                        length = end - start
-                        if length in readLens:
-                            readLens[length] += 1
-                        else:
-                            readLens[length] = 1
 
                         # update left and right read lengths
                         if read.lenLeft > 0 or read.lenRight > 0:
+                            # update read lengths distribution
+                            length = alignment[0][1] - alignment[0][0]
+                            if length in pairedLens:
+                                pairedLens[length] += 1
+                            else:
+                                pairedLens[length] = 1
+
                             if read.lenLeft in lensLeft:
                                 lensLeft[read.lenLeft] += 1
                             else:
@@ -509,6 +521,13 @@ class Compressor:
                                 lensRight[read.lenRight] += 1
                             else:
                                 lensRight[read.lenRight] = 1
+                        else:
+                            # update read lengths distribution
+                            length = alignment[0][1] - alignment[0][0]
+                            if length in unpairedLens:
+                                unpairedLens[length] += 1
+                            else:
+                                unpairedLens[length] = 1
 
                     # Write bounds
                     filehandle.write('>' + str(i) + '\n')
@@ -525,10 +544,6 @@ class Compressor:
 
             filename: Name of file to compress to
         '''
-
-        #print('Writing unspliced')
-        #print('Read exons length: %f' % (asizeof.asizeof(readExons)/1000000))
-        #print('Coverages length: %f' % (asizeof.asizeof(coverages)/1000000))
 
         # For each NH value and for each exon, store the byte offset in the file for the given exon in the coverage vector
         self.unsplicedIndex = dict()
@@ -589,8 +604,6 @@ class Compressor:
             self.unsplicedIndex[NH] = offsets
 
 
-
-
             # Write lengths for each exon
             exonsIndex = []
             chunkId = 0
@@ -598,11 +611,9 @@ class Compressor:
             for i in range(len(reads)):
                 chunkId += 1
 
-                length = self.aligned.exons[i+1] - self.aligned.exons[i]
-                exonStart = self.aligned.exons[i]
-
                 # Distribution of all read lengths
-                readLens = dict()
+                unpairedLens = dict()
+                pairedLens = dict()
 
                 # Distribution of all gap lengths in paired-end reads
                 lensLeft = dict()
@@ -610,21 +621,17 @@ class Compressor:
 
                 for readId in reads[i]:
                     read = self.aligned.unspliced[readId]
-
-                    alignment = read.exons
-
-                    start = alignment[0][0] - exonStart
-                    end = alignment[0][1] - exonStart
-
-                    # update read lengths distribution
-                    length = end - start
-                    if length in readLens:
-                        readLens[length] += 1
-                    else:
-                        readLens[length] = 1
+                    #alignment = read.exons
 
                     # update left and right read lengths
                     if read.lenLeft > 0 or read.lenRight > 0:
+                        # update paired read lengths distribution
+                        length = read.readLen
+                        if length in pairedLens:
+                            pairedLens[length] += 1
+                        else:
+                            pairedLens[length] = 1
+
                         if read.lenLeft in lensLeft:
                             lensLeft[read.lenLeft] += 1
                         else:
@@ -634,9 +641,17 @@ class Compressor:
                             lensRight[read.lenRight] += 1
                         else:
                             lensRight[read.lenRight] = 1
+                    else:
+                        # update unpaired read lengths distribution
+                        length = read.readLen
+                        if length in unpairedLens:
+                            unpairedLens[length] += 1
+                        else:
+                            unpairedLens[length] = 1
 
-                chunkString += binaryIO.writeLens(fragLenBytes, readLens)
-                if len(readLens) > 0:
+                chunkString += binaryIO.writeLens(readLenBytes, unpairedLens)
+                chunkString += binaryIO.writeLens(fragLenBytes, pairedLens)
+                if len(pairedLens) > 0:
                     chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
                     if len(lensLeft) > 0:
                         chunkString += binaryIO.writeLens(readLenBytes, lensRight)
@@ -681,7 +696,7 @@ class Compressor:
                 
                 if not row[6] == '*':
                     if row[6] == '=':
-                        pair_chrom = chromosome
+                        pair_chrom = row[2]
                     else:
                         pair_chrom = row[6]
                     pair_index = int(row[7])
