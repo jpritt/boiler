@@ -56,13 +56,8 @@ class Compressor:
 
         self.parseAlignments(samFilename)
 
-        #print(self.aligned.chromOffsets['3L'])
-        #for i in range(len(self.aligned.exons)):
-        #    if abs(self.aligned.exons[i] - self.aligned.chromOffsets['3L'] - 15897967) < 10:
-        #        print(i)
-        #        print(self.aligned.exons[i])
-        #        print(self.aligned.exons[i+1])
-        #        break
+        #with open('testOut.sam', 'w') as f:
+        #    self.aligned.writeSAM(f)
         #exit()
 
         ''' TODO: No need for if/else? '''
@@ -566,7 +561,7 @@ class Compressor:
             segmentRLE = []
             for c in cov:
                 segmentEnd = pos+c[1]
-                while currBreakpoint < len(breakpoints)-1 and breakpoints[currBreakpoint+1] <= segmentEnd:
+                while currBreakpoint < len(breakpoints)-1 and breakpoints[currBreakpoint+1] < segmentEnd:
                     length = breakpoints[currBreakpoint+1] - pos
                     if length > 0:
                         segmentRLE.append([c[0], length])
@@ -665,7 +660,7 @@ class Compressor:
 
             self.unsplicedExonsIndex[NH] = exonsIndex
     
-    def parseAlignments(self, filename, offset=0):
+    def parseAlignments(self, filename):
         ''' Parse a file in SAM format
             Add the exonic region indices for each read to the correct ChromosomeAlignments object
             
@@ -694,18 +689,15 @@ class Compressor:
                         NH = int(r[5:])
 
                 
-                if not row[6] == '*':
-                    if row[6] == '=':
-                        pair_chrom = row[2]
-                    else:
-                        pair_chrom = row[6]
-                    pair_index = int(row[7])
-
-                    self.aligned.processRead(read.Read(row[2], exons, xs, NH), pair_chrom, pair_index)
+                r = read.Read(row[2], exons, xs, NH)
+                if row[6] == '=':
+                    r.pairOffset = int(row[7])
+                    self.aligned.processRead(r, row[0], paired=True)
                 else:
-                    self.aligned.processRead(read.Read(row[2], exons, xs, NH))
+                    self.aligned.processRead(r, row[0], paired=False)
 
         self.aligned.finalizeExons()
+        self.aligned.finalizeUnmatched()
         self.aligned.finalizeReads()
 
     def parseCigar(self, cigar, offset):

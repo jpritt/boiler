@@ -234,7 +234,7 @@ def readJunctionsList(s, start=0):
     return junctions, exonBytes, start
 
 def writeJunction(readLenBytes, junc, huffmanIndex=None):
-    # More cost efficient to calculate/save the number of bytes needed for fragments for each junction
+    # More space efficient to calculate/save the number of bytes needed for fragments for each junction
     maxFragLen = 0
     for l in junc.pairedLens.keys():
         if l > maxFragLen:

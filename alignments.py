@@ -8,6 +8,8 @@ import os.path
 import sys
 import copy
 
+from random import shuffle
+
 import time
 
 class Alignments:
@@ -18,6 +20,21 @@ class Alignments:
 
             chromosomes: A dictionary with keys corresponding to chromosome names and values corresponding to lengths
         '''
+
+        '''
+        reads = [[170,220],[100,150], [140,200], [180,270], [200,300]]
+        unpairedLens = {90: 1, 50: 2}
+        pairedLens = {100: 1}
+        u, p = self.findPairsGreedy(reads, unpairedLens, pairedLens)
+        print(u)
+        print(p)
+        exit()
+        '''
+
+
+        self.totalPaired = 0
+        self.totalUnpaired = 0
+
         self.chromosomes = chromosomes
         self.chromosomeNames = sorted(chromosomes.keys())
 
@@ -50,11 +67,23 @@ class Alignments:
     def addSpliced(self, read):
         self.spliced += [read]
 
+        '''
+        # TODO: Try taking this out
         # update list of exons
         alignment = read.exons
         for i in range(len(alignment)-1):
             self.exons.add(alignment[i][1])
             self.exons.add(alignment[i+1][0])
+        '''
+
+    def finalizeUnmatched(self):
+        # Finalize unmatched reads
+        for name,reads in self.unmatched.items():
+            for r in reads:
+                if len(r.exons) == 1:
+                    self.addUnspliced(r)
+                else:
+                    self.addSpliced(r)
 
     def finalizeExons(self):
         ''' Convert the set of exon boundaries to a list
@@ -83,17 +112,13 @@ class Alignments:
                 newExons.append([spliceSites[-1], exons[1]])
 
                 r.exons = newExons
+                self.spliced += [r]
 
                 del self.unspliced[x]
-
-                self.spliced += [r]
             else:
                 x += 1
 
         for r in self.unspliced:
-            if len(r.exons) > 1:
-                print('Error!')
-                exit()
             r.readLen = r.exons[0][1] - r.exons[0][0]
 
         # Compute list of junctions crossed by each spliced read
@@ -182,8 +207,11 @@ class Alignments:
             while n < len(pair.exonIdsB) and pair.exonIdsB[n] <= pair.exonIdsA[-1]:
                 n += 1
 
-            ## TODO: Fix this problem with exons not matching
+            ## TODO: See if we ever have this problem with exons not matching
             if n > 0 and not pair.exonIdsA[-n:] == pair.exonIdsB[:n]:
+                print('\t'.join([str(x) for x in pair.exonIdsA]))
+                print('\t'.join([str(x) for x in pair.exonIdsB]))
+                print('')
                 continue
 
             # TODO: Replace gap with end lengths
@@ -192,7 +220,6 @@ class Alignments:
                 gap = 0
                 for i in range(n):
                     gap += exonsB[i][0] - exonsA[i-n][1]
-                #gap = exonsB[n-1][0] - exonsA[-1][1]
             else:
                 newRead = read.Read(pair.chromA, exonsA+exonsB, pair.xs, pair.NH)
                 gap = exonsB[0][0] - self.exons[pair.exonIdsB[0]] + self.exons[pair.exonIdsA[-1]+1] - exonsA[-1][1]
@@ -269,15 +296,264 @@ class Alignments:
 
         return unpaired, paired, score
 
+    def findPairsRecursive(self, reads, dists, unpairedLens, pairedLens, currentScore=0, maxScore=None, numUnpaired=None, numPaired=None):
+        if numUnpaired == None:
+            numUnpaired = 0
+            for l,n in  unpairedLens.items():
+                numUnpaired += n
+        if numPaired == None:
+            numPaired = 0
+            for l,n in pairedLens.items():
+                numPaired += n
 
-    def findPairsRecursive(self, starts, ends, reads, readLens, readLensSorted, i, currentScore=0, currentDepth=0, depthCutoff=None, maxDepth=None):
-        '''
-            starts: array with ones wherever reads start
-            ends: array with ones wherever reads end
-            reads: fragments extracted from coverage vector
-            readLens: lengths of paired and unpaired reads
-        '''
+        numReads = len(reads)
+        if maxScore == None:
+            maxScore = numReads
+        if currentScore >= maxScore:
+            return [], [], maxScore
 
+        if numPaired == 0 and numUnpaired == 0:
+            return [], [], currentScore
+
+        bestScore = None
+        bestUnpaired = []
+        bestPaired = []
+
+        if numPaired > 0:
+            for l in pairedLens:
+                if pairedLens[l] == 0:
+                    continue
+
+                for i in range(numReads):
+                    for j in range(i):
+                        if dists[i][j] == l:
+                            # Update distance matrix
+                            #newDists = [r[:j]+r[j+1:i]+r[i+1:] for r in dists[:j]+dists[j+1:i]+dists[i+1:]]
+                            newDists = dists[:][:]
+                            for x in range(numReads):
+                                newDists[i][x] = -1
+                                newDists[x][j] = -1
+
+                            pairedLens[l] -= 1
+
+                            #unpaired, paired, score = self.findPairsRecursive(reads[:j] + reads[j+1:i] + reads[i+1:], newDists, unpairedLens, pairedLens, currentScore, maxScore)
+                            unpaired, paired, score = self.findPairsRecursive(reads, newDists, unpairedLens, pairedLens, currentScore, maxScore, numUnpaired, numPaired-1)
+
+                            if score == 0:
+                                return unpaired, paired + [reads[j], reads[i]], score
+                            elif bestScore == None or score < bestScore:
+                                bestScore = score
+                                bestUnpaired = unpaired
+                                bestPaired = paired + [reads[j], reads[i]]
+                                maxScore = bestScore
+
+                            pairedLens[l] += 1
+
+        if numUnpaired > 0:
+            for l in unpairedLens:
+                if unpairedLens[l] == 0:
+                    continue
+
+                for i in range(len(reads)):
+                    if dists[i][i] == l:
+                        #newDists = [r[:i] + r[i+1:] for r in dists[:i]+dists[i+1:]]
+                        newDists = dists[:][:]
+                        for x in range(numReads):
+                            newDists[i][x] = -1
+                            newDists[x][i] = -1
+
+                        unpairedLens[l] -= 1
+
+                        #unpaired, paired, score = self.findPairsRecursive(reads[:i] + reads[i+1:], newDists, unpairedLens, pairedLens, currentScore, maxScore)
+                        unpaired, paired, score = self.findPairsRecursive(reads, newDists, unpairedLens, pairedLens, currentScore, maxScore, numUnpaired-1, numPaired)
+
+                        if score == 0:
+                            return unpaired + [reads[i]], paired, score
+                        elif bestScore == None or score < bestScore:
+                            bestScore = score
+                            bestUnpaired = unpaired + [reads[i]]
+                            bestPaired = paired
+                            maxScore = bestScore
+
+                        unpairedLens[l] += 1
+
+        # No lengths match 
+        if numPaired > 0:
+            if bestScore == None:
+                for l in pairedLens:
+                    if pairedLens[l] == 0:
+                        continue
+
+                    for i in range(numReads):
+                        for j in range(i):
+                            # Update distance matrix
+                            #newDists = [r[:j]+r[j+1:i]+r[i+1:] for r in dists[:j]+dists[j+1:i]+dists[i+1:]]
+                            newDists = dists[:][:]
+                            for x in range(numReads):
+                                newDists[i][x] = -1
+                                newDists[x][j] = -1
+                            
+                            pairedLens[l] -= 1
+
+                            #unpaired, paired, score = self.findPairsRecursive(reads[:j] + reads[j+1:i] + reads[i+1:], newDists, unpairedLens, pairedLens, currentScore+1, maxScore)
+                            unpaired, paired, score = self.findPairsRecursive(reads, newDists, unpairedLens, pairedLens, currentScore+1, maxScore, numUnpaired, numPaired-1)
+
+                            if score == 0:
+                                return unpaired, paired + [reads[j], reads[i]], score
+                            elif bestScore == None or score < bestScore:
+                                bestScore = score
+                                bestUnpaired = unpaired
+                                bestPaired = paired + [reads[j], reads[i]]
+                                maxScore = bestScore
+
+                            pairedLens[l] += 1
+
+            if numUnpaired > 0:
+                for l in unpairedLens:
+                    if unpairedLens[l] == 0:
+                        continue
+
+                    for i in range(len(reads)):
+                        #newDists = [r[:i] + r[i+1:] for r in dists[:i]+dists[i+1:]]
+                        newDists = dists[:][:]
+                        for x in range(numReads):
+                            newDists[i][x] = -1
+                            newDists[x][i] = -1
+
+                        unpairedLens[l] -= 1
+
+                        #unpaired, paired, score = self.findPairsRecursive(reads[:i] + reads[i+1:], newDists, unpairedLens, pairedLens, currentScore+1, maxScore)
+                        unpaired, paired, score = self.findPairsRecursive(reads, newDists, unpairedLens, pairedLens, currentScore+1, maxScore, numUnpaired-1, numPaired)
+
+                        if score == 0:
+                            return unpaired + [reads[i]], paired, score
+                        elif bestScore == None or score < bestScore:
+                            bestScore = score
+                            bestUnpaired = unpaired + [reads[i]]
+                            bestPaired = paired
+                            maxScore = bestScore
+
+                        unpairedLens[l] += 1
+
+        if (not bestUnpaired or len(bestUnpaired) == 0) and (not bestPaired or len(bestPaired) == 0):
+            print('Error!')
+            print(unpairedLens)
+            print(pairedLens)
+            print(reads)
+            print(bestUnpaired)
+            print(bestPaired)
+            print(bestScore)
+            exit()
+        return bestUnpaired, bestPaired, bestScore
+
+
+    '''
+    def findPairsRecursive(self, starts, ends, i, reads, unpairedLens, pairedLens):
+        # Test if reads list is empty
+        if not reads:
+            return [], [], 0
+
+        while i < len(starts) and starts[i] == 0:
+            i += 1
+
+        #print('')
+        #print(reads)
+        #print(i)
+        #print(starts[i])
+
+        starts[i] -= 1
+
+        bestScore = None
+        bestUnpaired = None
+        bestPaired = None
+
+        # Test all unpaired lengths
+        testedLengths = []
+        for rid in range(len(reads)):
+            r = reads[rid]
+            if r[0] == i:
+                l = r[1] - r[0]
+                if l in unpairedLens and unpairedLens[l] > 0 and not l in testedLengths:
+                    #print(r)
+                    ends[r[1]] -= 1
+                    unpairedLens[l] -= 1
+
+                    # Recurse
+                    unpaired, paired, score = self.findPairsRecursive(starts, ends, i, reads[:rid]+reads[rid+1:], unpairedLens, pairedLens)
+
+                    ends[r[1]] += 1
+                    unpairedLens[l] += 1
+                    testedLengths.append(l)
+
+                    if score == 0:
+                        return unpaired, paired, score
+                    elif bestScore == None or score < bestScore:
+                        bestScore = score
+                        bestUnpaired = unpaired + [r]
+                        bestPaired = paired
+
+        # Test all paired lengths
+        id1 = 0
+        while not reads[id1][0] == i:
+            id1 += 1
+        startRead = reads[id1]
+        ends[startRead[1]] -= 1
+        newReads = reads[:id1] + reads[id1+1:]
+
+        for l in pairedLens:
+            if pairedLens[l] == 0 or i+l >= len(starts):
+                continue
+
+            if ends[i+l] > 0:
+                id2 = 0
+                while not newReads[id2][1] == i+l:
+                    id2 += 1
+                endRead = newReads[id2]
+                starts[endRead[0]] -= 1
+                ends[i+l] -= 1
+                pairedLens[l] -= 1
+
+                #print(str(startRead) + ', ' + str(endRead))
+                unpaired, paired, score = self.findPairsRecursive(starts, ends, i, newReads[:id2]+newReads[id2+1:], unpairedLens, pairedLens)
+
+                starts[endRead[0]] += 1
+                ends[i+l] += 1
+                pairedLens[l] += 1
+
+                if score == 0:
+                    return unpaired, paired, score
+                elif bestScore == None or score < bestScore:
+                    bestScore = score
+                    bestUnpaired = unpaired
+                    bestPaired = paired + [[startRead, endRead]]
+
+        if bestScore == None:
+            for rid in range(len(newReads)):
+                endRead = newReads[rid]
+                starts[endRead[0]] -= 1
+                ends[endRead[1]] -= 1
+
+                unpaired, paired, score = self.findPairsRecursive(starts, ends, i, newReads[:rid]+newReads[rid+1:], unpairedLens, pairedLens)
+
+                starts[endRead[0]] += 1
+                ends[endRead[1]] += 1
+
+                # increment score since the current length is a mismatch
+                score += 1
+
+                if score == 1:
+                    return unpaired, paired, score
+                elif bestScore == None or score < bestScore:
+                    bestScore = score
+                    bestUnpaired = unpaired
+                    bestPaired = paired + [[startRead, endRead]]
+
+        return bestUnpaired, bestPaired, bestScore
+    '''
+
+    '''
+    def findPairsRecursive(self, starts, ends, reads, unpairedLens, pairedLens, pairedLensSorted, i, currentScore=0, scoreCutoff=None, currentDepth=0, maxDepth=None):
+        
         if depthCutoff == None:
             depthCutoff = len(reads)
         
@@ -290,94 +566,104 @@ class Alignments:
         if starts[i] == 0:
             while i < len(starts) and starts[i] == 0:
                 i += 1
-            return self.findPairsRecursive(starts, ends, reads, readLens, readLensSorted, i, currentScore, currentDepth, depthCutoff, maxDepth)
+            return self.findPairsRecursive(starts, ends, reads, readLens, readLensSorted, i, currentScore, scoreCutoff, currentDepth, maxDepth)
 
-        id1 = 0
-        while not reads[id1][0] == i:
-            id1 += 1
 
         bestScore = None
         bestRead = None
         bestPaired = None
         bestUnpaired = None
         bestSingle = None
-        for k in range(len(readLensSorted)):
-            l = readLensSorted[k]
+
+        # Test all unpaired lengths
+        testedLengths = []
+        for rid in range(len(reads)):
+            read = reads[rid]
+            if read[0] == i:
+                l = read[1] - read[0]
+                if not l in testedLengths:
+                    starts[i] -= 1
+                    ends[i+l] -= 1
+                    del reads[rid]
+                    unpairedLens[l] -= 1
+
+                    # recurse
+                    newi = i
+                    while newi < len(starts) and starts[newi] == 0:
+                        newi += 1
+                    unpaired, paired, score = self.findPairsRecursive(starts, ends, reads, readLens, readLensSortedNew, newi, currentScore, scoreCutoff, currentDepth+1, maxDepth)
+
+                    reads.append(read)
+                    starts[read[0]] += 1
+                    ends[read[1]] += 1
+                    unpairedLens[l] += 1
+
+                    if score == 0:
+                        return unpaired+[start+[read], paired, 0
+                    elif score < bestScore:
+                        bestRead = read
+                        bestScore = score
+                        bestPaired = paired
+                        bestUnpaired = unpaired
+                        bestSingle = single
+
+                    if score < scoreCutoff:
+                        scoreCutoff = score
+
+                    testedLengths.append(l)                
+
+        # Test all paired lengths
+        id1 = 0
+        while not reads[id1][0] == i:
+            id1 += 1
+            read = reads[id1]
+            starts[i] -= 1
+            ends[read[1]] -= 1
+            del reads[id1]
+
+        for l in range(len(pairedLensSorted)):
+            if pairedLens[l] == 0:
+                continue
+
+            if ends[i+l] == 0 and 
+
             if ends[i+l] > 0:
-                for id2 in range(len(reads)):
-                    if reads[id2][1] == i+l:
-                        # update reads, readLens, starts
-                        if id1 == id2:
-                            read = reads[id1]
-                            single = True
+                id2 = 0
+                while not reads[id2][1] == i+l:
+                    id2 += 1
+                read = [startRead, reads[id2]]
+                starts[read[1][0]] -= 1
+                ends[id2] -= 1
+                del reads[id2]
 
-                            del reads[id1]
+                # update readLens
+                pairedLens[l] -= 1
 
-                            # update starts and ends
-                            starts[read[0]] -= 1
-                            ends[read[1]] -= 1
-                        else:
-                            read = [reads[id1], reads[id2]]
-                            single = False
+                # recurse
+                newi = i
+                while newi < len(starts) and starts[newi] == 0:
+                    newi += 1
+                unpaired, paired, score = self.findPairsRecursive(starts, ends, reads, readLens, readLensSortedNew, newi, currentScore, scoreCutoff, currentDepth+1, maxDepth)
 
-                            if id1 > id2:
-                                del reads[id1]
-                                del reads[id2]
-                            else:
-                                del reads[id2]
-                                del reads[id1]
+                reads.append(read[1])
+                starts[read[1][0]] += 1
+                ends[read[1][1]] += 1
 
-                            starts[read[0][0]] -= 1
-                            ends[read[0][1]] -= 1
-                            starts[read[1][0]] -= 1
-                            ends[read[1][1]] -= 1
+                pairedLens[l] += 1
 
-                        # update readLens
-                        readLens[l] -= 1
+                if score == 0:
+                    return unpaired, paired+[read], 0
+                elif score < bestScore:
+                    bestRead = read
+                    bestScore = score
+                    bestPaired = paired
+                    bestUnpaired = unpaired
+                    bestSingle = single
 
-                        readLensSortedNew = readLensSorted[:]
-                        if readLens[l] <= 0:
-                            del readLensSortedNew[k]
-
-                        # recurse
-                        newi = i
-                        while newi < len(starts) and starts[newi] == 0:
-                            newi += 1
-                        unpaired, paired, score = self.findPairsRecursive(starts, ends, reads, readLens, readLensSortedNew, newi, currentScore, currentDepth+1, depthCutoff, maxDepth)
-
-                        # add read back
-                        if single:
-                            reads.append(read)
-
-                            starts[read[0]] += 1
-                            ends[read[1]] += 1
-                        else:
-                            reads.append(read[0])
-                            reads.append(read[1])
-
-                            starts[read[0][0]] += 1
-                            ends[read[0][1]] += 1
-                            starts[read[1][0]] += 1
-                            ends[read[1][1]] += 1
-
-                        readLens[l] += 1
-
-                        if score == 0:
-                            if single:
-                                return unpaired+[read], paired, 0
-                            else:
-                                return unpaired, paired+[read], 0
-                        elif score < bestScore:
-                            bestRead = read
-                            bestScore = score
-                            bestPaired = paired
-                            bestUnpaired = unpaired
-                            bestSingle = single
-
-                        if score < depthCutoff:
-                            depthCutoff = score
+                if score < scoreCutoff:
+                    scoreCutoff = score
         if bestScore == None:
-            if currentScore >= depthCutoff:
+            if currentScore >= scoreCutoff:
                 return [],[],1
 
             read = reads[id1]
@@ -390,7 +676,7 @@ class Alignments:
             newi = i
             while newi < len(starts) and starts[newi] == 0:
                 newi += 1
-            unpaired, paired, score = self.findPairsRecursive(starts, ends, reads, readLens, readLensSorted, newi, currentScore+1, currentDepth+1, depthCutoff, maxDepth)
+            unpaired, paired, score = self.findPairsRecursive(starts, ends, reads, readLens, readLensSorted, newi, currentScore+1, scoreCutoff, currentDepth+1, maxDepth)
 
 
             reads.append(read)
@@ -402,13 +688,10 @@ class Alignments:
                 return bestUnpaired+[bestRead], bestPaired, bestScore
             else:
                 return bestUnpaired, bestPaired+[bestRead], bestScore
+    '''
 
-
-
-    def findPairs2(self, length, reads, readLens):#pairedLens, unpairedLens):
-        # Sort read lengths from largest to smallest
-        readLensSorted = sorted(readLens, reverse=True)
-
+    def findPairs2(self, length, reads, unpairedLens, pairedLens):
+        '''
         starts = [0] * (length+1)
         ends = [0] * (length+1)
 
@@ -416,82 +699,232 @@ class Alignments:
             starts[r[0]] += 1
             ends[r[1]] += 1
 
-        paired = []
-        unpaired = []
+        print('Finding pairs')
+        startTime = time.time()
+        unpaired, paired, score = self.findPairsRecursive(starts, ends, 0, reads, unpairedLens, pairedLens)
+        endTime = time.time()
+        print('Finished in %0.2fs, score = %d' % (endTime-startTime, score))
 
-        unmatched = []
+        return unpaired, paired
+        '''
 
-        i = 0
-        while i < length:
-            if starts[i] > 0:
-                id1 = 0
-                while not reads[id1][0] == i:
-                    id1 += 1
+        reads.sort()
 
-                startRead = reads[id1]
+        dists = [0] * len(reads)
+        for i in range(len(reads)):
+            dists[i] = [0] * len(reads)
+            for j in range(i+1):
+                dists[i][j] = abs(reads[j][1] - reads[i][0])
 
-                starts[i] -= 1
-                ends[reads[id1][1]] -= 1
-                del reads[id1]
-
-                foundRead = False
-                for j in range(len(readLensSorted)):
-                    l = readLensSorted[j]
-                    if i+l <= length and ends[i+l] > 0:
-                        readLens[l] -= 1
-                        if readLens[l] == 0:
-                            del readLensSorted[j]
-                        foundRead = True
-
-                        # Add paired read to list
-                        id2 = 0
-                        while not reads[id2][1] == i+l:
-                            id2 += 1
-
-                        starts[reads[id2][0]] -= 1
-                        ends[i+l] -= 1
-
-                        paired += [[startRead, reads[id2]]]
-                        del reads[id2]
-
-                        break
-                
-                if not foundRead:
-                    readLen = startRead[1]-startRead[0]
-                    if readLen in readLensSorted:
-                        unpaired += [startRead]
-
-                        readLens[readLen] -= 1
-                        if readLens[readLen] == 0:
-                            for j in range(len(readLensSorted)):
-                                if readLensSorted[j] == readLen:
-                                    del readLensSorted[j]
-                                    break
-                    else:
-                        unmatched += [startRead]
-                
-            if starts[i] <= 0:
-                i += 1
-
-        if len(unmatched) > 0:
-            countReadLens = 0
-            for k,v in readLens.items():
-                countReadLens += v
-
-            while len(unmatched) > max(1, countReadLens):
-                #paired += [[unmatched[0], unmatched[len(unmatched)/2]]]
-                paired += [[unmatched[0], unmatched[-1]]]
-                #del unmatched[len(unmatched)/2]
-                del unmatched[-1]
-                del unmatched[0]
-                countReadLens -= 1
-
-            for r in unmatched:
-                unpaired += [r]
+        print('Finding pairs from %d reads' % len(reads))
+        startTime = time.time()
+        unpaired, paired, score = self.findPairsRecursive(reads, dists, unpairedLens, pairedLens, currentScore=0, maxScore=len(reads))
+        endTime = time.time()
+        print('Finished in %0.2fs, score = %d' % (endTime-startTime, score))
 
         return unpaired, paired
 
-    def findPairs(self, length, reads, pairedLens, unpairedLens):
+    def findPairedDist(self, dists, assigned, numReads, value):
+        for i in range(numReads):
+            if assigned[i]:
+                continue
+            for j in range(i):
+                if assigned[j]:
+                    continue
+                if dists[i][j] == value:
+                    return i,j
+
+    def findSingleDist(self, dists, assigned, numReads, value):
+        for i in range(numReads):
+            if assigned[i]:
+                continue
+            if dists[i][i] == value:
+                return i
+
+    def findPairsGreedy(self, reads, unpairedLens, pairedLens):
+        reads.sort()
+        numReads = len(reads)
+
+        # Keep track of which reads we have already assigned
+        assigned = [0] * numReads
+
+        # Map each distance to the paired reads that match it
+        pairDists = dict()
+        singleDists = dict()
+
+        # Create a distance matrix between all pairs of reads
+        dists = [0] * numReads
+        for i in range(numReads):
+            dists[i] = [0] * (i+1)
+            for j in range(i):
+                d = reads[i][1] - reads[j][0]
+                dists[i][j] = d
+                if d in pairDists:
+                    pairDists[d] += 1
+                else:
+                    pairDists[d] = 1
+
+            d = reads[i][1] - reads[i][0]
+            dists[i][i] = d
+            if d in singleDists:
+                singleDists[d] += 1
+            else:
+                singleDists[d] = 1
+
+        paired = []
+        unpaired = []
+        countPaired = 0
+        for k,v in pairedLens.items():
+            countPaired += v
+        while countPaired > 0:
+            bestFreq = None
+            bestL = None
+            bestPaired = None
+            foundPair = False
+
+            # Look for unique paired read lengths
+            for l in pairedLens:
+                if not pairDists[l] > 0:
+                    continue
+
+                expected = pairedLens[l]
+                freq = pairDists[l]
+                if freq == 0:
+                    continue
+                if freq <= expected:
+                    pairedLens[l] -= 1
+                    i,j = self.findPairedDist(dists, assigned, numReads, l)
+                    paired.append([reads[j], reads[i]])
+
+                    assigned[i] = 1
+                    assigned[j] = 1
+
+                    singleDists[dists[i][i]] -= 1
+                    singleDists[dists[j][j]] -= 1
+                    for x in range(i):
+                        pairDists[dists[i][x]] -= 1
+                    for x in range(i+1,numReads):
+                        pairDists[dists[x][i]] -= 1
+                    for x in range(j):
+                        pairDists[dists[j][x]] -= 1
+                    for x in range(j+1,numReads):
+                        pairDists[dists[x][j]] -= 1
+
+                    foundPair = True
+                    countPaired -= 1
+                    break
+                elif bestFreq == None or (freq-expected) < bestFreq:
+                    bestFreq = freq - expected
+                    bestL = l
+                    bestPaired = True
+
+            # Look for unique unpaired read lengths
+            if not foundPair:
+                for l in unpairedLens:
+                    if not singleDists[l] > 0:
+                        continue
+
+                    expected = unpairedLens[l]
+                    freq = singleDists[l]
+
+                    if freq == 0:
+                        continue
+                    elif freq <= expected:
+                        unpairedLens[l] -= 1
+                        i = self.findSingleDist(dists, assigned, numReads, l)
+                        unpaired.append(reads[i])
+
+                        assigned[i] = 1
+
+                        singleDists[dists[i][i]] -= 1
+                        for x in range(i):
+                            pairDists[dists[i][x]] -= 1
+                        for x in range(i+1,numReads):
+                            pairDists[dists[x][i]] -= 1
+
+                        foundPair = True
+                        break
+                    elif bestFreq == None or (freq-expected) < bestFreq:
+                        bestFreq = freq - expected
+                        bestL = l
+                        bestPaired = False
+
+            # No unique read lengths, so choose one from the least frequent
+            if not foundPair:
+                if bestFreq == None:
+                    break
+                else:
+                    if bestPaired:
+                        pairedLens[bestL] -= 1
+                        i,j = self.findPairedDist(dists, assigned, numReads, bestL)
+                        paired.append([reads[j], reads[i]])
+
+                        assigned[i] = 1
+                        assigned[j] = 1
+
+                        singleDists[dists[i][i]] -= 1
+                        singleDists[dists[j][j]] -= 1
+                        for x in range(i):
+                            pairDists[dists[i][x]] -= 1
+                        for x in range(i+1,numReads):
+                            pairDists[dists[x][i]] -= 1
+                        for x in range(j):
+                            pairDists[dists[j][x]] -= 1
+                        for x in range(j+1,numReads):
+                            pairDists[dists[x][j]] -= 1
+
+                        countPaired -= 1
+                    else:
+                        unpairedLens[bestL] -= 1
+                        i = self.findSingleDist(dists, assigned, numReads, bestL)
+                        unpaired.append(reads[i])
+
+                        assigned[i] = 1
+
+                        singleDists[dists[i][i]] -= 1
+                        for x in range(i):
+                            pairDists[dists[i][x]] -= 1
+                        for x in range(i+1,numReads):
+                            pairDists[dists[x][i]] -= 1
+
+        remaining = [0] * (numReads - sum(assigned))
+        i = 0
+        for j in range(numReads):
+            if not assigned[j]:
+                remaining[i] = reads[j]
+                i += 1
+
+        i = 0
+        j = len(remaining)-1
+        for _ in range(countPaired):
+            if i >= j:
+                break
+
+            paired.append([remaining[i], remaining[j]])
+            i += 1
+            j -= 1
+
+        return unpaired+remaining[i:j+1], paired
+
+    def findPairsDumb(self, reads, unpairedLens, pairedLens):
+        countPaired = 0
+        for k,v in pairedLens.items():
+            countPaired += v
+
+        paired = []
+        i = 0
+        j = len(reads)-1
+        for _ in range(countPaired):
+            if i >= j:
+                break
+
+            paired += [[reads[i], reads[j]]]
+            i += 1
+            j -= 1
+
+        return reads[i:j+1], paired
+
+    def findPairs(self, length, reads, unpairedLens, pairedLens):
         paired = []
         unpaired = []
 
@@ -499,7 +932,7 @@ class Alignments:
 
         if len(pairedLens) > 0:
             # Sort read pairedLensSorted lengths from largest to smallest
-            pairedLensSorted = sorted(pairedLens, reverse=True)
+            pairedLensSorted = sorted(pairedLens)#, reverse=True)
 
             starts = [0] * (length+1)
             ends = [0] * (length+1)
@@ -551,8 +984,6 @@ class Alignments:
                             paired += [[reads[id2], startRead]]
                         else:
                             paired += [[startRead, reads[id2]]]
-
-
 
                         #paired += [[startRead, reads[id2]]]
                         del reads[id2]
@@ -660,13 +1091,17 @@ class Alignments:
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
 
-        fragmentLens = copy.copy(unpairedLens) #dict()
-        #for k,v in unpairedLens.items():
-        #    if k > 0:
-        #        if k in fragmentLens:
-        #            fragmentLens[k] += v
-        #        else:
-        #            fragmentLens[k] = v
+        countUnpaired = 0
+        for k,v in unpairedLens.items():
+            countUnpaired += v
+        countPaired = 0
+        for k,v in pairedLens.items():
+            countPaired += v
+        self.totalUnpaired += countUnpaired
+        self.totalPaired += countPaired
+        #print('%d, %d' % (self.totalUnpaired, self.totalPaired))
+
+        fragmentLens = copy.copy(unpairedLens)
         for k,v in lensLeft.items():
             if k > 0:
                 if k in fragmentLens:
@@ -700,57 +1135,11 @@ class Alignments:
             countUnpaired += v
         '''
 
-        unpaired, paired = self.findPairs(len(coverage), reads, pairedLens, unpairedLens)
+        print('Finding %d reads (%d, %d)' % (len(reads), countUnpaired, countPaired))
+        unpaired, paired = self.findPairsGreedy(reads, unpairedLens, pairedLens)
+        print('Done')
 
-        '''
-        readUnpaired = dict()
-        for r in unpaired:
-            l = r[1] - r[0]
-            if l in readUnpaired:
-                readUnpaired[l] += 1
-            else:
-                readUnpaired[l] = 1
-        readLeft = dict()
-        readRight = dict()
-        readPaired = dict()
-        for r in paired:
-            left = r[0][1] - r[0][0]
-            right = r[1][1] - r[1][0]
-            length = r[1][1] - r[0][0]
-            if left in readLeft:
-                readLeft[left] += 1
-            else:
-                readLeft[left] = 1
-            if right in readRight:
-                readRight[right] += 1
-            else:
-                readRight[right] = 1
-
-            if length < 0:
-                print(r)
-
-            if length in readPaired:
-                readPaired[length] += 1
-            else:
-                readPaired[length] = 1
-
-        if not len(unpaired) == countUnpaired:
-            print('%d, %d -- %d, %d' % (countUnpaired, countPaired, len(unpaired), len(paired)))
-
-            print('\t'.join([str(k) + ': ' + str(unpairedLens[k]) for k in sorted(unpairedLens)]))
-            print('\t'.join([str(k) + ': ' + str(readUnpaired[k]) for k in sorted(readUnpaired)]))
-            print('...')
-            print('\t'.join([str(k) + ': ' + str(pairedLens[k]) for k in sorted(pairedLens)]))
-            print('\t'.join([str(k) + ': ' + str(readPaired[k]) for k in sorted(readPaired)]))
-            print('...')
-            print('\t'.join([str(k) + ': ' + str(lensLeft[k]) for k in sorted(lensLeft)]))
-            print('\t'.join([str(k) + ': ' + str(readLeft[k]) for k in sorted(readLeft)]))
-            print('...')
-            print('\t'.join([str(k) + ': ' + str(lensRight[k]) for k in sorted(lensRight)]))
-            print('\t'.join([str(k) + ': ' + str(readRight[k]) for k in sorted(readRight)]))
-            print('')
-        '''
-
+        #return self.findPairs(len(coverage), reads, unpairedLens, pairedLens)
         return unpaired, paired
         
 
@@ -1620,24 +2009,15 @@ class Alignments:
             i += 1
         return sortedList[:i] + [a] + sortedList[i:]
 
-    def processRead(self, read, pair_chrom=None, pair_index=None):
+    def processRead(self, read, name, paired=False):
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
         '''
-
-        if read.exons == None:
-            print('Error! Read exons = None')
-            exit()
-        if len(read.exons) == 0:
-            print('Error! Exon length = 0')
 
         # Update read index based on chromosome
         offset = self.chromOffsets[read.chrom]
         for i in range(len(read.exons)):
             read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
-
-        #if read.chrom == '3L' and read.exons[0][0] == 60056176:
-        #    print(read.exons)
 
         # update list of exons
         alignment = read.exons
@@ -1645,64 +2025,36 @@ class Alignments:
             for i in range(len(alignment)-1):
                 self.exons.add(alignment[i][1])
                 self.exons.add(alignment[i+1][0])
-                #self.exons.add(offset + alignment[i][1])
-                #self.exons.add(offset + alignment[i+1][0])
-
         
-        if pair_chrom == None:
+        if not paired:
             # unpaired read
             if len(read.exons) == 1:
                 self.addUnspliced(read)
             else:
                 self.addSpliced(read)
         else:
-            pair_index += self.chromOffsets[pair_chrom]
-
-            # TODO: Use binary search here for speed
-            #self.unmatched = dict()
-
-            key = (pair_index, pair_chrom, read.exons[0][0], read.chrom)
-
-            if key in self.unmatched:
+            read.pairOffset += offset
+            if name in self.unmatched:
                 foundMatch = False
-                for i in range(len(self.unmatched[key])):
-                    match = self.unmatched[key][i]
-
-                    if read.NH == match.NH:
-                        if len(self.unmatched[key]) == 1:
-                            del self.unmatched[key]
-                        else:
-                            del self.unmatched[key][i]
-
+                for i in range(len(self.unmatched[name])):
+                    match = self.unmatched[name][i]
+                    if read.pairOffset == match.exons[0][0] and match.pairOffset == read.exons[0][0] and not self.conflicts(read.exons, match.exons):
                         xs = read.xs or match.xs
                         NH = read.NH
 
-                        if self.conflicts(read.exons, match.exons):
-                            if len(read.exons) == 1:
-                                self.addUnspliced(read)
-                            else:
-                                self.addSpliced(read)
+                        if not read.NH == match.NH:
+                            print('Warning! NH values of paired reads (%d, %d) do not match!' % (read.NH, match.NH))
 
-                            if len(match.exons) == 1:
-                                self.addUnspliced(match)
-                            else:
-                                self.addSpliced(match)
-                        else:
-                            self.paired.append(pairedread.PairedRead(pair_chrom, match.exons, read.chrom, read.exons, xs, NH))
-
+                        self.paired.append(pairedread.PairedRead(match.chrom, match.exons, read.chrom, read.exons, xs, NH))
 
                         foundMatch = True
+                        del self.unmatched[name][i]
                         break
+
                 if not foundMatch:
-                    if (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
-                        self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
-                    else:
-                        self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
+                    self.unmatched[name].append(read)
             else:
-                if (read.exons[0][0], read.chrom, pair_index, pair_chrom) in self.unmatched:
-                    self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] += [read]
-                else:
-                    self.unmatched[(read.exons[0][0], read.chrom, pair_index, pair_chrom)] = [read]
+                self.unmatched[name] = [read]
 
     def conflicts(self, exonsA, exonsB):
         '''
@@ -1765,9 +2117,15 @@ class Alignments:
             offset = self.chromOffsets[chrom]
 
             if 'N' in cigar:
-                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\tNH:i:' + str(read.NH) + '\n')
+                if read.xs == None:
+                    filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
+                else:
+                    filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\tNH:i:' + str(read.NH) + '\n')
             else:
-                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
+                if read.xs == None:
+                    filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
+                else:
+                    filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\tNH:i:' + str(read.NH) + '\n')
             readId += 1
         
         for pair in self.paired:

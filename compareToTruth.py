@@ -181,7 +181,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     
     threshold = 10
 
-
     totalScore1 = 0.0
     transcriptsTrueCount = 0
     line = 0
@@ -202,14 +201,19 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
             #totalScore1 += closestScore
         transcriptsTrueCount += t1.cov
         #transcriptsTrueCount += 1
+
         
 
     #transcriptsPredictedCount = len(transcriptsPredicted)
     totalScore2 = 0.0
     transcriptsPredictedCount = 0
-    transcriptsPredictedCountUnweighted = 0
     line = 0
+
+
+    transcriptCovs = []
+
     for t1 in transcriptsPredicted:
+        transcriptCovs.append((t1.cov, t1.name))
         line += 1
 
         closestScore = 0.0
@@ -225,10 +229,9 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
             totalScore2 += closestScore * t1.cov
             #totalScore2 += closestScore
         transcriptsPredictedCount += t1.cov
-        transcriptsPredictedCountUnweighted += 1
         #transcriptsPredictedCount += 1
-        
 
+    print(sorted(transcriptCovs, reverse=True)[:10])
 
     #print "%d transcripts in file 1" % transcriptsTrueCount
     #print "%d transcripts in file 2" % transcriptsPredictedCount
@@ -242,7 +245,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     precision = float(totalScore2) / float(transcriptsPredictedCount)
     print 'TP = ' + str(totalScore2)
     print 'P  = ' + str(transcriptsPredictedCount)
-    print 'P Unweighted = ' + str(transcriptsPredictedCountUnweighted)
     print 'Precision = TP/T = ' + str(precision)
 
     '''
