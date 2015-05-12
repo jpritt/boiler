@@ -28,6 +28,7 @@ for ln in sys.stdin:
     toks = ln.split('\t')
     flags = int(toks[1])
     if args.just_reads_with_unmapped_mate and (flags & 8) == 0:
+        print '\t'.join(toks)
         continue
     toks[1] = '0'
     if not args.just_flags:
