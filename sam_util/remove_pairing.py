@@ -26,7 +26,7 @@ for ln in sys.stdin:
         print ln
         continue
     toks = ln.split('\t')
-    flags = int(ln[1])
+    flags = int(toks[1])
     if args.just_reads_with_unmapped_mate and (flags & 8) == 0:
         continue
     toks[1] = '0'
