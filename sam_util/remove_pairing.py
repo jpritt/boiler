@@ -15,6 +15,8 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--just-flags', action='store_true', help='Just remove FLAGS; leave TLEN, RNEXT, PNEXT alone')
+parser.add_argument('--just-reads-with-unmapped-mate', action='store_true',
+                    help='Just remove for reads where mate is unmapped')
 args = parser.parse_args()
 
 
@@ -24,6 +26,9 @@ for ln in sys.stdin:
         print ln
         continue
     toks = ln.split('\t')
+    flags = int(ln[1])
+    if args.just_reads_with_unmapped_mate and (flags & 8) == 0:
+        continue
     toks[1] = '0'
     if not args.just_flags:
         toks[7] = toks[8] = '0'
