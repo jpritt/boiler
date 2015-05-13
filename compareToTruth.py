@@ -1,11 +1,6 @@
 #! /usr/bin/env python
 import sys
-import csv
-import math
-import re
-import string
-import numpy as np
-import matplotlib.pyplot as plt
+
 
 class Transcript:
     '''
