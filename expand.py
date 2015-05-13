@@ -47,6 +47,10 @@ class Expander:
                 self.expandSplicedBinary(f, self.exonBytes)
                 #print('Finished expanding spliced')
                 #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+
+                print('Original depth: %d' % self.aligned.origPairedDepth)
+                print('Decompressed depth: %d' % self.aligned.calcPairedDepth)
+                print('%d dense' % self.aligned.countDense)
         else:
             with open(compressedFilename, 'r') as f:
                 self.aligned = alignments.Alignments(self.readHeader(f))

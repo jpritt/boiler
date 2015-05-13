@@ -25,11 +25,15 @@ class Alignments:
         reads = [[170,220],[100,150], [140,200], [180,270], [200,300]]
         unpairedLens = {90: 1, 50: 2}
         pairedLens = {100: 1}
-        u, p = self.findPairsGreedy(reads, unpairedLens, pairedLens)
+        u, p = self.findPairsGreedy2(reads, unpairedLens, pairedLens)
         print(u)
         print(p)
         exit()
         '''
+
+        self.origPairedDepth = 0
+        self.calcPairedDepth = 0
+        self.countDense = 0
 
 
         self.totalPaired = 0
@@ -742,6 +746,21 @@ class Alignments:
                 return i
 
     def findPairsGreedy(self, reads, unpairedLens, pairedLens):
+        origReads = reads[:]
+        origPaired = dict()
+        for k,v in pairedLens.items():
+            origPaired[k] = v
+        origUnpaired = dict()
+        for k,v in unpairedLens.items():
+            origUnpaired[k] = v
+
+        origPairedDepth = 0
+        for k,v in pairedLens.items():
+            #self.origPairedDepth += k * v
+            origPairedDepth += k * v
+
+        pairedLensSorted = sorted(pairedLens.keys(), reverse=True)
+
         reads.sort()
         numReads = len(reads)
 
@@ -772,19 +791,18 @@ class Alignments:
                 singleDists[d] = 1
 
         paired = []
-        unpaired = []
         countPaired = 0
         for k,v in pairedLens.items():
             countPaired += v
+        origCountPaired = countPaired
         while countPaired > 0:
             bestFreq = None
             bestL = None
-            bestPaired = None
             foundPair = False
 
             # Look for unique paired read lengths
-            for l in pairedLens:
-                if not pairDists[l] > 0:
+            for l in pairedLensSorted:
+                if not (l in pairDists and pairDists[l] > 0 and pairedLens[l] > 0):
                     continue
 
                 expected = pairedLens[l]
@@ -799,16 +817,29 @@ class Alignments:
                     assigned[i] = 1
                     assigned[j] = 1
 
-                    singleDists[dists[i][i]] -= 1
-                    singleDists[dists[j][j]] -= 1
+                    if dists[i][i] > 0:
+                        singleDists[dists[i][i]] -= 1
+                        dists[i][i] = 0
+                    if dists[j][j] > 0:
+                        singleDists[dists[j][j]] -= 1
+                        dists[j][j] = 0
+
                     for x in range(i):
-                        pairDists[dists[i][x]] -= 1
+                        if dists[i][x] > 0:
+                            pairDists[dists[i][x]] -= 1
+                            dists[i][x] = 0
                     for x in range(i+1,numReads):
-                        pairDists[dists[x][i]] -= 1
+                        if dists[x][i] > 0:
+                            pairDists[dists[x][i]] -= 1
+                            dists[x][i] = 0
                     for x in range(j):
-                        pairDists[dists[j][x]] -= 1
+                        if dists[j][x] > 0:
+                            pairDists[dists[j][x]] -= 1
+                            dists[j][x] = 0
                     for x in range(j+1,numReads):
-                        pairDists[dists[x][j]] -= 1
+                        if dists[x][j] > 0:
+                            pairDists[dists[x][j]] -= 1
+                            dists[x][j] = 0
 
                     foundPair = True
                     countPaired -= 1
@@ -816,76 +847,48 @@ class Alignments:
                 elif bestFreq == None or (freq-expected) < bestFreq:
                     bestFreq = freq - expected
                     bestL = l
-                    bestPaired = True
 
-            # Look for unique unpaired read lengths
-            if not foundPair:
-                for l in unpairedLens:
-                    if not singleDists[l] > 0:
-                        continue
-
-                    expected = unpairedLens[l]
-                    freq = singleDists[l]
-
-                    if freq == 0:
-                        continue
-                    elif freq <= expected:
-                        unpairedLens[l] -= 1
-                        i = self.findSingleDist(dists, assigned, numReads, l)
-                        unpaired.append(reads[i])
-
-                        assigned[i] = 1
-
-                        singleDists[dists[i][i]] -= 1
-                        for x in range(i):
-                            pairDists[dists[i][x]] -= 1
-                        for x in range(i+1,numReads):
-                            pairDists[dists[x][i]] -= 1
-
-                        foundPair = True
-                        break
-                    elif bestFreq == None or (freq-expected) < bestFreq:
-                        bestFreq = freq - expected
-                        bestL = l
-                        bestPaired = False
-
-            # No unique read lengths, so choose one from the least frequent
+            # No unique paired lengths, so choose one from the least frequent
             if not foundPair:
                 if bestFreq == None:
                     break
                 else:
-                    if bestPaired:
-                        pairedLens[bestL] -= 1
-                        i,j = self.findPairedDist(dists, assigned, numReads, bestL)
-                        paired.append([reads[j], reads[i]])
+                    #print('Best pair: ' + str(bestL))
+                    pairedLens[bestL] -= 1
+                    i,j = self.findPairedDist(dists, assigned, numReads, bestL)
+                    paired.append([reads[j], reads[i]])
 
-                        assigned[i] = 1
-                        assigned[j] = 1
+                    assigned[i] = 1
+                    assigned[j] = 1
 
+                    if dists[i][i] > 0:
                         singleDists[dists[i][i]] -= 1
+                        dists[i][i] = 0
+                    if dists[j][j] > 0:
                         singleDists[dists[j][j]] -= 1
-                        for x in range(i):
+                        dists[j][j] = 0
+
+                    for x in range(i):
+                        if dists[i][x] > 0:
                             pairDists[dists[i][x]] -= 1
-                        for x in range(i+1,numReads):
+                            dists[i][x] = 0
+                    for x in range(i+1,numReads):
+                        if dists[x][i] > 0:
                             pairDists[dists[x][i]] -= 1
-                        for x in range(j):
+                            dists[x][i] = 0
+                    for x in range(j):
+                        if dists[j][x] > 0:
                             pairDists[dists[j][x]] -= 1
-                        for x in range(j+1,numReads):
+                            dists[j][x] = 0
+                    for x in range(j+1,numReads):
+                        if dists[x][j] > 0:
                             pairDists[dists[x][j]] -= 1
+                            dists[x][j] = 0
 
-                        countPaired -= 1
-                    else:
-                        unpairedLens[bestL] -= 1
-                        i = self.findSingleDist(dists, assigned, numReads, bestL)
-                        unpaired.append(reads[i])
+                    countPaired -= 1
 
-                        assigned[i] = 1
+        #print('%d\t/\t%d' % (countPaired, origCountPaired))
 
-                        singleDists[dists[i][i]] -= 1
-                        for x in range(i):
-                            pairDists[dists[i][x]] -= 1
-                        for x in range(i+1,numReads):
-                            pairDists[dists[x][i]] -= 1
 
         remaining = [0] * (numReads - sum(assigned))
         i = 0
@@ -894,6 +897,12 @@ class Alignments:
                 remaining[i] = reads[j]
                 i += 1
 
+        remainingPairedLens = dict()
+        for k,v in pairedLens.items():
+            if v > 0:
+                remainingPairedLens[k] = v
+
+        '''
         i = 0
         j = len(remaining)-1
         for _ in range(countPaired):
@@ -903,10 +912,153 @@ class Alignments:
             paired.append([remaining[i], remaining[j]])
             i += 1
             j -= 1
+        '''
 
-        return unpaired+remaining[i:j+1], paired
+        if countPaired > 0:
+            newUnpaired, newPaired = self.findPairsGreedy2(remaining, unpairedLens, remainingPairedLens)
+            unpaired = newUnpaired
+            paired += newPaired
+        else:
+            unpaired = remaining
+
+
+        calcPairedDepth = 0
+        for p in paired:
+            #self.calcPairedDepth += p[1][1] - p[0][0]
+            calcPairedDepth += p[1][1] - p[0][0]
+
+        '''
+        if countPaired >= 10: #not calcPairedDepth == origPairedDepth:
+            print('%d\t/\t%d' % (countPaired, origCountPaired))
+            print('%d\t-->\t%d' % (origPairedDepth, calcPairedDepth))
+            print(origReads)
+            print(origPaired)
+            print(origUnpaired)
+            print('-->')
+            print(paired)
+            print(unpaired+remaining[i:j+1])
+            print('')
+        '''
+
+
+        #return remaining[i:j+1], paired
+        return unpaired, paired
+
+    def findPairsGreedy2(self, reads, unpairedLens, pairedLens):
+        origReads = reads[:]
+        origPaired = dict()
+        for k,v in pairedLens.items():
+            origPaired[k] = v
+        origUnpaired = dict()
+        for k,v in unpairedLens.items():
+            origUnpaired[k] = v
+
+        origPairedDepth = 0
+        for k,v in pairedLens.items():
+            origPairedDepth += k * v
+            self.origPairedDepth += k * v
+
+        numReads = len(reads)
+        reads.sort()
+        pairedLensSorted = sorted(pairedLens.keys(), reverse=True)
+
+        paired = []
+
+        countPaired = 0
+        for k,v in pairedLens.items():
+            countPaired += v
+        countUnpaired = numReads - 2 * countPaired
+        #print(countPaired)
+
+        # Create a distance matrix between all pairs of reads
+        dists = [0] * numReads
+        for i in range(numReads):
+            dists[i] = [0] * i
+            for j in range(i):
+                d = reads[i][1] - reads[j][0]
+                dists[i][j] = d
+        assigned = [0] * numReads
+
+        lenIndex = 0
+        while countPaired > 0:
+            targetL = pairedLensSorted[lenIndex]
+
+            bestL = None
+            bestDiff = None
+            bestPos = None
+
+            for i in range(numReads):
+                for j in range(i,0,-1):
+                    l = dists[i][j-1]
+                    diff = abs(l - targetL)
+                    if l > 0 and (bestDiff == None or diff < bestDiff):
+                        bestDiff = diff
+                        bestL = dists[i][j-1]
+                        bestPos = (j-1, i)
+                    elif l > targetL:
+                        break
+
+            if bestL == None:
+                break
+            else:
+                pairedLens[targetL] -= 1
+                if pairedLens[targetL] == 0:
+                    lenIndex += 1
+
+                i = bestPos[0]
+                j = bestPos[1]
+                paired.append([reads[i], reads[j]])
+                assigned[i] = 1
+                assigned[j] = 1
+
+                for x in range(i):
+                    dists[i][x] = 0
+                for x in range(i+1,numReads):
+                    dists[x][i] = 0
+                for x in range(j):
+                    dists[j][x] = 0
+                for x in range(j+1,numReads):
+                    dists[x][j] = 0
+
+                countPaired -= 1
+
+        #print(countPaired)
+        #print(countUnpaired)
+        #print(len(assigned))
+        #print(sum(assigned))
+        unpaired = [0] * countUnpaired
+        i = 0
+        for j in range(numReads):
+            if not assigned[j]:
+                unpaired[i] = reads[j]
+                i += 1
+        #print('')
+
+        calcPairedDepth = 0
+        for p in paired:
+            calcPairedDepth += p[1][1] - p[0][0]
+            self.calcPairedDepth += p[1][1] - p[0][0]
+
+
+        '''
+        if float(calcPairedDepth) / float(origPairedDepth) < 0.9:
+            print('%d\t-->\t%d' % (origPairedDepth, calcPairedDepth))
+            print(origReads)
+            print(origPaired)
+            print(origUnpaired)
+            print('-->')
+            print(paired)
+            print(unpaired)
+            print('')
+        '''
+
+        return unpaired, paired
 
     def findPairsDumb(self, reads, unpairedLens, pairedLens):
+
+        for k,v in pairedLens.items():
+            self.origPairedDepth += k * v
+
         countPaired = 0
         for k,v in pairedLens.items():
             countPaired += v
@@ -922,17 +1074,30 @@ class Alignments:
             i += 1
             j -= 1
 
+        for p in paired:
+            self.calcPairedDepth += p[1][1] - p[0][0]
+
         return reads[i:j+1], paired
 
-    def findPairs(self, length, reads, unpairedLens, pairedLens):
+    def findPairs(self, reads, unpairedLens, pairedLens):
+        length = 0
+        for r in reads:
+            if r[1] > length:
+                length = r[1]
+
+        origPairedDepth = 0
+        for k,v in pairedLens.items():
+            #self.origPairedDepth += k * v
+            origPairedDepth += k * v
+
         paired = []
         unpaired = []
 
         reads.sort()
 
         if len(pairedLens) > 0:
-            # Sort read pairedLensSorted lengths from largest to smallest
-            pairedLensSorted = sorted(pairedLens)#, reverse=True)
+            # Sort read pairedLensSorted lengths
+            pairedLensSorted = sorted(pairedLens, reverse=True)
 
             starts = [0] * (length+1)
             ends = [0] * (length+1)
@@ -1085,6 +1250,23 @@ class Alignments:
         for r in reads:
             unpaired += [r]
 
+        calcPairedDepth = 0
+        for p in paired:
+            #self.calcPairedDepth += p[1][1] - p[0][0]
+            calcPairedDepth += p[1][1] - p[0][0]
+
+        '''
+        if float(origPairedDepth) > 0 and float(calcPairedDepth) / float(origPairedDepth) < 0.8:
+            print('%d\t-->\t%d' % (origPairedDepth, calcPairedDepth))
+            print(origReads)
+            print(origPaired)
+            print(origUnpaired)
+            print('-->')
+            print(paired)
+            print(unpaired)
+            print('')
+        '''
+
         return unpaired, paired
 
     def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage):
@@ -1114,30 +1296,15 @@ class Alignments:
                     fragmentLens[k] += v
                 else:
                     fragmentLens[k] = v
-        
-        '''
-        countFragments = 0
-        for k,v in fragmentLens.items():
-            countFragments += v
-        print(countFragments)
-        '''
+
 
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
-        
-        '''
-        print(len(reads))
-        
-        countPaired = 0
-        for k,v in pairedLens.items():
-            countPaired += v
-        countUnpaired = 0
-        for k,v in unpairedLens.items():
-            countUnpaired += v
-        '''
 
-        print('Finding %d reads (%d, %d)' % (len(reads), countUnpaired, countPaired))
-        unpaired, paired = self.findPairsGreedy(reads, unpairedLens, pairedLens)
-        print('Done')
+        if len(reads) > 1200:
+            self.countDense += 1
+            unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
+        else:
+            unpaired, paired = self.findPairsGreedy(reads, unpairedLens, pairedLens)
 
         #return self.findPairs(len(coverage), reads, unpairedLens, pairedLens)
         return unpaired, paired
