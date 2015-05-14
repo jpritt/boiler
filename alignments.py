@@ -1087,7 +1087,7 @@ class Alignments:
 
         origPairedDepth = 0
         for k,v in pairedLens.items():
-            #self.origPairedDepth += k * v
+            self.origPairedDepth += k * v
             origPairedDepth += k * v
 
         paired = []
@@ -1156,16 +1156,16 @@ class Alignments:
                         break
                 
                 if not foundRead:
-                    readLen = startRead[1]-startRead[0]
-                    if readLen in unpairedLens:
-                        unpaired += [startRead]
+                    #readLen = startRead[1]-startRead[0]
+                    #if readLen in unpairedLens:
+                    #    unpaired += [startRead]
 
-                        if unpairedLens[readLen] == 1:
-                            del unpairedLens[readLen]
-                        else:
-                            unpairedLens[readLen] -= 1
-                    else:
-                        unmatched += [startRead]
+                    #    if unpairedLens[readLen] == 1:
+                    #        del unpairedLens[readLen]
+                    #    else:
+                    #        unpairedLens[readLen] -= 1
+                    #else:
+                    unmatched += [startRead]
                     
                 while i < j and starts[i] <= 0:
                     i += 1
@@ -1211,16 +1211,16 @@ class Alignments:
                             break
                     
                     if not foundRead:
-                        readLen = startRead[1]-startRead[0]
-                        if readLen in unpairedLens:
-                            unpaired += [startRead]
+                        #readLen = startRead[1]-startRead[0]
+                        #if readLen in unpairedLens:
+                        #    unpaired += [startRead]
 
-                            if unpairedLens[readLen] == 1:
-                                del unpairedLens[readLen]
-                            else:
-                                unpairedLens[readLen] -= 1
-                        else:
-                            unmatched += [startRead]
+                        #    if unpairedLens[readLen] == 1:
+                        #        del unpairedLens[readLen]
+                        #    else:
+                        #        unpairedLens[readLen] -= 1
+                        #else:
+                        unmatched += [startRead]
 
                     while i < j and starts[i] <= 0:
                         i += 1
@@ -1252,7 +1252,7 @@ class Alignments:
 
         calcPairedDepth = 0
         for p in paired:
-            #self.calcPairedDepth += p[1][1] - p[0][0]
+            self.calcPairedDepth += p[1][1] - p[0][0]
             calcPairedDepth += p[1][1] - p[0][0]
 
         '''
@@ -1300,11 +1300,12 @@ class Alignments:
 
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
 
-        if len(reads) > 1200:
-            self.countDense += 1
-            unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
-        else:
-            unpaired, paired = self.findPairsGreedy(reads, unpairedLens, pairedLens)
+        #if len(reads) > 1200:
+        #    self.countDense += 1
+        #    unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
+        #else:
+        #    unpaired, paired = self.findPairsGreedy2(reads, unpairedLens, pairedLens)
+        unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
 
         #return self.findPairs(len(coverage), reads, unpairedLens, pairedLens)
         return unpaired, paired

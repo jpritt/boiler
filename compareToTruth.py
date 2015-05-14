@@ -240,7 +240,7 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     precision = float(totalScore2) / float(transcriptsPredictedCount)
     print 'TP = ' + str(totalScore2)
     print 'P  = ' + str(transcriptsPredictedCount)
-    print 'Precision = TP/T = ' + str(precision)
+    print 'Precision = TP/P = ' + str(precision)
 
     '''
     scatterX = []
