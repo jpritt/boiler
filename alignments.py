@@ -211,13 +211,6 @@ class Alignments:
             while n < len(pair.exonIdsB) and pair.exonIdsB[n] <= pair.exonIdsA[-1]:
                 n += 1
 
-            ## TODO: See if we ever have this problem with exons not matching
-            if n > 0 and not pair.exonIdsA[-n:] == pair.exonIdsB[:n]:
-                print('\t'.join([str(x) for x in pair.exonIdsA]))
-                print('\t'.join([str(x) for x in pair.exonIdsB]))
-                print('')
-                continue
-
             # TODO: Replace gap with end lengths
             if n > 0:
                 newRead = read.Read(pair.chromA, exonsA[:-1] + [[exonsA[-1][0], exonsB[n-1][1]]] + exonsB[n:], pair.xs, pair.NH)
@@ -1269,19 +1262,54 @@ class Alignments:
 
         return unpaired, paired
 
-    def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage):
+    # def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage):
+    #     ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
+    #     '''
+    #
+    #     countUnpaired = 0
+    #     for k,v in unpairedLens.items():
+    #         countUnpaired += v
+    #     countPaired = 0
+    #     for k,v in pairedLens.items():
+    #         countPaired += v
+    #     self.totalUnpaired += countUnpaired
+    #     self.totalPaired += countPaired
+    #     #print('%d, %d' % (self.totalUnpaired, self.totalPaired))
+    #
+    #     fragmentLens = copy.copy(unpairedLens)
+    #     for k,v in lensLeft.items():
+    #         if k > 0:
+    #             if k in fragmentLens:
+    #                 fragmentLens[k] += v
+    #             else:
+    #                 fragmentLens[k] = v
+    #     for k,v in lensRight.items():
+    #         if k > 0:
+    #             if k in fragmentLens:
+    #                 fragmentLens[k] += v
+    #             else:
+    #                 fragmentLens[k] = v
+    #
+    #
+    #     reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
+    #
+    #     if len(reads) > 1200:
+    #         self.countDense += 1
+    #         unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
+    #     else:
+    #         unpaired, paired = self.findPairsGreedy(reads, unpairedLens, pairedLens)
+    #     #unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
+    #
+    #     #return self.findPairs(len(coverage), reads, unpairedLens, pairedLens)
+    #     return unpaired, paired
+
+    def findReads(self, unpairedLens, lensLeft, lensRight, pairs, coverage, debug=False):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
 
-        countUnpaired = 0
-        for k,v in unpairedLens.items():
-            countUnpaired += v
         countPaired = 0
-        for k,v in pairedLens.items():
+        for k,v in lensLeft.items():
             countPaired += v
-        self.totalUnpaired += countUnpaired
-        self.totalPaired += countPaired
-        #print('%d, %d' % (self.totalUnpaired, self.totalPaired))
 
         fragmentLens = copy.copy(unpairedLens)
         for k,v in lensLeft.items():
@@ -1297,20 +1325,68 @@ class Alignments:
                 else:
                     fragmentLens[k] = v
 
+        unpaired, paired = self.findReadsInCoverageWithPairs(coverage, unpairedLens, lensLeft, lensRight, pairs)
+        unpaired.sort()
+        paired.sort()
+        return unpaired, paired
 
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
+        reads.sort()
 
-        #if len(reads) > 1200:
-        #    self.countDense += 1
-        #    unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
-        #else:
-        #    unpaired, paired = self.findPairsGreedy2(reads, unpairedLens, pairedLens)
-        unpaired, paired = self.findPairs(reads, unpairedLens, pairedLens)
+        #if debug:
+        #    print(reads)
+        #    print(pairs)
 
-        #return self.findPairs(len(coverage), reads, unpairedLens, pairedLens)
+        # Pair reads
+        numReads = len(reads)
+        assigned = [0] * numReads
+        paired = []
+        #print(pairs)
+
+        for (a,b) in pairs:
+            foundPair = False
+            for i in range(numReads-1):
+                if reads[i][0] == a and not assigned[i]:
+                    for j in range(i+1, numReads):
+                        if reads[j][1] == b and not assigned[j]:
+                            foundPair = True
+                            paired.append([reads[i], reads[j]])
+                            assigned[i] = 1
+                            assigned[j] = 1
+                            break
+                    break
+            #if not foundPair:
+            #    print('No pair found for (%d, %d)' % (a,b))
+            #else:
+            #    print('Found pair (%d, %d)' % (a,b))
+
+        '''
+        for (a,b) in pairs:
+            #print(a)
+            #print(b)
+            if a < numReads and b < numReads:
+                paired.append([reads[a], reads[b]])
+                assigned[a] = 1
+                assigned[b] = 1
+                #elif a < numReads and not assigned[-1]:
+                #paired.append([reads[a], reads[-1]])
+                #assigned[a] = 1
+                #assigned[-1] = 1
+            else:
+                print('Out of range')
+                print('%d --> %d' % (countPaired, numReads))
+                print(pairs)
+                print('')
+        '''
+
+        unpaired = []
+        for i in range(numReads):
+            if not assigned[i]:
+                unpaired.append(reads[i])
+
         return unpaired, paired
-        
 
+    '''
     def findBestLeftLen(self, coverage, start, end, lensLeftSorted):
         # Find best left length for paired or unpaired reads
         bestScore = 0
@@ -1319,7 +1395,7 @@ class Alignments:
         for i in range(lensLeftSorted[0]):
             # penalize scores for fragments containing zeros
             if start+i > end or coverage[start+i] == 0:
-                if coverages[start+i-1] > 0:
+                if coverage[start+i-1] > 0:
                     scoreWeight *= 0.5
             else:
                 j = 0
@@ -1342,7 +1418,7 @@ class Alignments:
         scoreWeight = 1
         for i in range(min(end-start, lensRightSorted[0])):
             if coverage[start+l-i] == 0:
-                if coverages[start+l-i+1] > 0:
+                if coverage[start+l-i+1] > 0:
                     scoreWeight *= 0.5
             else:
                 j = 0
@@ -1358,6 +1434,7 @@ class Alignments:
         for i in range(len(rightScores)):
             if rightScores[i] == bestScore:
                 return i, bestScore
+    '''
 
     def findBestFragmentLen(self, coverage, start, end, fragmentLensSorted, lensRightSorted):
         bestScore = 0
@@ -1730,6 +1807,142 @@ class Alignments:
             print('Found %d of %d, %d left' % (len(unpaired) + len(paired), totalFragments, len(fragmentLensSorted) + len(unpairedLensSorted)))
             exit()
         return unpaired, paired
+
+    def findReadsInCoverageWithPairs(self, coverage, unpairedLens, lensLeft, lensRight, pairs):
+        if len(pairs) > 0:
+            paired = []
+
+            # Reads sorted by frequency, most to least common
+            lensSortedLeft = sorted(lensLeft, key=lensLeft.get, reverse=True)
+            lensSortedRight = sorted(lensRight, key=lensRight.get, reverse=True)
+
+            # Longest read length
+            longestLeft = max(lensSortedLeft)
+            longestRight = max(lensSortedRight)
+
+            pairs = sorted(pairs, key = lambda p: p[1]-p[0])
+
+            for (start,end) in pairs:
+                pairLength = end - start
+
+                if coverage[start] == 0 or coverage[end-1] == 0:
+                    print('Endpoint is 0!')
+                    continue
+
+                ''' Find starting read '''
+                maxLen = 1
+                while maxLen < longestLeft and start+maxLen < len(coverage) and coverage[start+maxLen] > 0:
+                    maxLen += 1
+                if maxLen > pairLength:
+                    maxLen = pairLength
+
+                startLen = None
+                # Find a length that ends on a step down
+                for l in lensSortedLeft:
+                    if l <= maxLen and (start+l == len(coverage) or coverage[start+l-1] > coverage[start+l]):
+                        startLen = l
+                        break
+                # Find any length that fits in coverage
+                if not startLen:
+                    for l in lensSortedLeft:
+                        if l <= maxLen and start+l < len(coverage):
+                            startLen = l
+                            break
+                # Find any remaining length
+                if not startLen:
+                    startLen = maxLen
+                else:
+                    lensLeft[startLen] -= 1
+                    if lensLeft[startLen] == 0:
+                        i = 0
+                        while not lensSortedLeft[i] == startLen:
+                            i += 1
+                        del lensSortedLeft[i]
+
+                '''
+                    for l in lensSorted:
+                        if start + l < len(coverage):
+                            startLen = l
+                            break
+
+                    # Find any length from original distribution
+                    if not startLen:
+                        for l in origLens:
+                            if start + l < len(coverage):
+                                startLen = l
+                                break
+
+                if not startLen:
+                    print('Error, start length is None!')
+                    exit()
+                '''
+
+                for i in range(start, start+startLen):
+                    coverage[i] -= 1
+
+
+                ''' Find ending read'''
+                maxLen = 0
+                while maxLen < longestRight and end > maxLen and coverage[end-maxLen-1] > 0:
+                    maxLen += 1
+                if maxLen > pairLength:
+                    maxLen = pairLength
+
+                endLen = None
+                # Find a length that starts on a step up
+                for l in lensSortedRight:
+                    if l <= maxLen and (end == l+1 or coverage[end-l] > coverage[end-l-1]):
+                        endLen = l
+                        break
+                # Find any length that fits in coverage
+                if not endLen:
+                    for l in lensSortedRight:
+                        if l <= maxLen and end-l >= 0:
+                            endLen = l
+                            break
+
+                if not endLen:
+                    endLen = maxLen
+                else:
+                    lensRight[endLen] -= 1
+                    if lensRight[endLen] == 0:
+                        i = 0
+                        while not lensSortedRight[i] == endLen:
+                            i += 1
+                        del lensSortedRight[i]
+
+                '''
+                    for l in lensSorted:
+                        if l <= end:
+                            endLen = l
+                            break
+
+                    # Find any length from original distribution
+                    if not endLen:
+                        for l in origLens:
+                            if l <= end:
+                                endLen = l
+                                break
+                if not endLen:
+                    print('Error, end length is None!')
+                    exit()
+                '''
+
+                for i in range(end-endLen, end):
+                    coverage[i] -= 1
+
+
+                paired.append([[start, start+startLen], [end-endLen, end]])
+        else:
+            paired = []
+
+        if len(unpairedLens) > 0:
+            unpaired = self.findReadsInCoverage_v1(coverage, unpairedLens)
+        else:
+            unpaired = []
+
+        return unpaired, paired
+
 
     def findReadsInCoverage_v1(self, coverage, readLens, boundaries=None):
         ''' Given a coverage vector, return a set of reads the closely fits the coverage vector as well the distribution of read lengths.

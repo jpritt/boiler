@@ -235,16 +235,18 @@ def readJunctionsList(s, start=0):
 
 def writeJunction(readLenBytes, junc, huffmanIndex=None):
     # More space efficient to calculate/save the number of bytes needed for fragments for each junction
-    maxFragLen = 0
-    for l in junc.pairedLens.keys():
-        if l > maxFragLen:
-            maxFragLen = l
-    fragLenBytes = findNumBytes(maxFragLen)
-    s = valToBinary(1, fragLenBytes)
+    #maxFragLen = 0
+    #for l in junc.pairedLens.keys():
+    #    if l > maxFragLen:
+    #        maxFragLen = l
+    #fragLenBytes = findNumBytes(maxFragLen)
+    #s = valToBinary(1, fragLenBytes)
 
-    s += writeLens(readLenBytes, junc.unpairedLens)
-    s += writeLens(fragLenBytes, junc.pairedLens)
-    if len(junc.pairedLens) > 0:
+    s = writeLens(readLenBytes, junc.unpairedLens)
+    #s += writeLens(fragLenBytes, junc.pairedLens)
+    s += writePairs(junc.pairs)
+    #if len(junc.pairedLens) > 0:
+    if len(junc.pairs) > 0:
         s += writeLens(readLenBytes, junc.lensLeft)
         if len(junc.lensLeft) > 0:
             s += writeLens(readLenBytes, junc.lensRight)
@@ -259,11 +261,13 @@ def writeJunction(readLenBytes, junc, huffmanIndex=None):
     return s
 
 def readJunction(s, junc, readLenBytes, start=0, huffmanTree=None):
-    fragLenBytes, start = binaryToVal(s, 1, start)
+    #fragLenBytes, start = binaryToVal(s, 1, start)
 
     junc.unpairedLens, start = readLens(s, readLenBytes, start)
-    junc.pairedLens, start = readLens(s, fragLenBytes, start)
-    if len(junc.pairedLens) > 0:
+    #junc.pairedLens, start = readLens(s, fragLenBytes, start)
+    junc.pairs, start = readPairs(s, start)
+    #if len(junc.pairedLens) > 0:
+    if len(junc.pairs) > 0:
         junc.lensLeft, start = readLens(s, readLenBytes, start)
         if len(junc.lensLeft) > 0:
             junc.lensRight, start = readLens(s, readLenBytes, start)
@@ -319,6 +323,35 @@ def readLens(s, lenBytes, start=0):
             lens[l] = n
 
     return lens, start
+
+def writePairs(pairs, numBytes=3):
+    '''
+    Writes a list of index pairs as a simple list
+    :param pairs: List of tuples corresponding to paired reads
+    :param numBytes: Number of bytes to use for each read id
+    :return: A binary string encoding the pairs as a simple concatenated list
+    '''
+
+    s = valToBinary(numBytes, len(pairs))
+    for p in pairs:
+        s += valToBinary(numBytes, p[0]) + valToBinary(numBytes, p[1])
+    return s
+
+def readPairs(s, start=0, numBytes=3):
+    '''
+    :param s: Binary string to read from
+    :param numBytes: Number of bytes used to encode each index
+    :param start: Starting index to read from in s
+    :return: A list of tuples containing paired indices, and the starting index for the remainder of the string
+    '''
+
+    length, start = binaryToVal(s, numBytes, start)
+    pairs = [None] * length
+    for i in range(length):
+        a, start = binaryToVal(s, numBytes, start)
+        b, start = binaryToVal(s, numBytes, start)
+        pairs[i] = (a,b)
+    return pairs, start
 
 def writeCov(cov):
     maxLen = 0

@@ -261,7 +261,8 @@ class Expander:
                 junc.NH = key[-1]
                 junc.coverage = self.RLEtoVector(junc.coverage)
 
-                unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
+                #unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
+                unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.lensLeft, junc.lensRight, junc.pairs, junc.coverage)
 
                 juncBounds = []
                 for j in junc.exons:
@@ -491,19 +492,30 @@ class Expander:
                 while startPos < len(lenDists):
                     i += 1
                     unpairedLens, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
-                    pairedLens, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
+                    #pairedLens, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
+                    pairs, startPos = binaryIO.readPairs(lenDists, startPos)
                     lensLeft = dict()
                     lensRight = dict()
-                    if len(pairedLens) > 0:
+                    #if len(pairedLens) > 0:
+                    if len(pairs) > 0:
                         lensLeft, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
                         if len(lensLeft) > 0:
                             lensRight, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
 
-                    if len(unpairedLens) > 0 or len(pairedLens) > 0:
+                    #if len(unpairedLens) > 0 or len(pairedLens) > 0:
+                    if len(unpairedLens) > 0 or len(pairs) > 0:
                         exonStart = self.aligned.exons[e*self.exonChunkSize + i - 1]
                         exonEnd = self.aligned.exons[e*self.exonChunkSize + i]
-                        
-                        unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+
+                        debug = False
+                        #if exonStart == 21577537:
+                        #    debug = True
+
+                        #unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
+                        unpaired, paired = self.aligned.findReads(unpairedLens, lensLeft, lensRight, pairs, coverage[exonStart:exonEnd], debug)
+
+                        if debug:
+                            exit()
                         
                         for r in unpaired:
                             self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))

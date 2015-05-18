@@ -7,6 +7,7 @@ import junction
 import bisect
 import binaryIO
 import math
+import readNode
 
 import random
 import inspect
@@ -55,6 +56,17 @@ class Compressor:
         self.aligned = alignments.Alignments(self.chromosomes)
 
         self.parseAlignments(samFilename)
+
+        #with open('minimal.sam', 'w') as f:
+        #    self.aligned.writeSAM(f)
+        #exit()
+
+        #for i in range(len(self.aligned.exons)):
+        #    if self.aligned.exons[i] > 21578320:
+        #        print(i-1)
+        #        print(self.aligned.exons[i-1])
+        #        print(self.aligned.exons[i])
+        #        exit()
 
         #with open('testOut.sam', 'w') as f:
         #    self.aligned.writeSAM(f)
@@ -215,14 +227,13 @@ class Compressor:
                 #for i in range(len(j.coverage)-r.endOffset-r.lenRight, len(j.coverage)-r.endOffset):
                 #    j.coverage[i] += 1
 
-
             # If this is a paired read, lenLeft and lenRight are both > 0
             if r.lenLeft > 0 or r.lenRight > 0:
                 # update pairedLens
-                if r.readLen in j.pairedLens:
-                    j.pairedLens[r.readLen] += 1
-                else:
-                    j.pairedLens[r.readLen] = 1
+                #if r.readLen in j.pairedLens:
+                #    j.pairedLens[r.readLen] += 1
+                #else:
+                #    j.pairedLens[r.readLen] = 1
 
                 if r.lenLeft in j.lensLeft:
                     j.lensLeft[r.lenLeft] += 1
@@ -239,6 +250,12 @@ class Compressor:
 
                 if r.lenRight > maxReadLen:
                     maxReadLen = r.lenRight
+
+                a = r.startOffset
+                b = j.length - r.endOffset
+                j.pairs.append((a,b))
+
+                j.paired.append([[r.startOffset, r.startOffset+r.lenLeft], [j.length-r.endOffset-r.lenRight, j.length-r.endOffset]])
             else:
                 # update unpairedLens
                 if r.readLen in j.unpairedLens:
@@ -248,6 +265,8 @@ class Compressor:
 
                 if r.readLen > maxReadLen:
                     maxReadLen = r.readLen
+
+                j.unpaired.append([r.startOffset, j.length-r.endOffset])
 
         # Compute difference run-length encoding for junctions and update huffman index
         if self.huffman:
@@ -291,6 +310,31 @@ class Compressor:
             i += 1
 
             junc = junctions[key]
+            #junc.pairs = self.generatePairs(junc.reads)
+
+            '''
+            if len(junc.pairs) > 0:
+                junc.paired.sort()
+                junc.unpaired.sort()
+                c = []
+                for x in junc.coverage:
+                    c += [x[0]] * x[1]
+                unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.lensLeft, junc.lensRight, junc.pairs, c)
+                unpaired.sort()
+                paired.sort()
+                if not unpaired == junc.unpaired or not paired == junc.paired:
+                    print(junc.unpaired)
+                    print(junc.unpairedLens)
+                    print(junc.paired)
+                    print(junc.lensLeft)
+                    print(junc.lensRight)
+                    print(junc.pairs)
+                    print('-->')
+                    print(unpaired)
+                    print(paired)
+                    print('')
+            '''
+
 
             if binary:
                 if self.huffman:
@@ -608,24 +652,29 @@ class Compressor:
 
                 # Distribution of all read lengths
                 unpairedLens = dict()
-                pairedLens = dict()
+                #pairedLens = dict()
 
                 # Distribution of all gap lengths in paired-end reads
                 lensLeft = dict()
                 lensRight = dict()
 
+                pairs = []
+                offset = self.aligned.exons[i]
+                #sectionReads = []
                 for readId in reads[i]:
+                    #sectionReads.append(self.aligned.unspliced[readId])
+
                     read = self.aligned.unspliced[readId]
                     #alignment = read.exons
 
                     # update left and right read lengths
                     if read.lenLeft > 0 or read.lenRight > 0:
                         # update paired read lengths distribution
-                        length = read.readLen
-                        if length in pairedLens:
-                            pairedLens[length] += 1
-                        else:
-                            pairedLens[length] = 1
+                        #length = read.readLen
+                        #if length in pairedLens:
+                        #    pairedLens[length] += 1
+                        #else:
+                        #    pairedLens[length] = 1
 
                         if read.lenLeft in lensLeft:
                             lensLeft[read.lenLeft] += 1
@@ -636,6 +685,10 @@ class Compressor:
                             lensRight[read.lenRight] += 1
                         else:
                             lensRight[read.lenRight] = 1
+
+                        a = read.exons[0][0] - offset
+                        b = a + read.readLen
+                        pairs.append((a,b))
                     else:
                         # update unpaired read lengths distribution
                         length = read.readLen
@@ -644,9 +697,18 @@ class Compressor:
                         else:
                             unpairedLens[length] = 1
 
+                #pairs = self.generatePairs(sectionReads)
+
+                #if NH == 1 and self.aligned.exons[i] == 21577537:
+                #    print('\t'.join([str(r.exons[0][0]-21577537)+', '+str(r.readLen)+'('+str(r.lenLeft)+','+str(r.lenRight)+')' for r in sectionReads]))
+                #    print(pairs)
+                #    print('')
+
                 chunkString += binaryIO.writeLens(readLenBytes, unpairedLens)
-                chunkString += binaryIO.writeLens(fragLenBytes, pairedLens)
-                if len(pairedLens) > 0:
+                #chunkString += binaryIO.writeLens(fragLenBytes, pairedLens)
+                chunkString += binaryIO.writePairs(pairs)
+                #if len(pairedLens) > 0:
+                if len(pairs) > 0:
                     chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
                     if len(lensLeft) > 0:
                         chunkString += binaryIO.writeLens(readLenBytes, lensRight)
@@ -659,7 +721,53 @@ class Compressor:
                     chunkString = b''
 
             self.unsplicedExonsIndex[NH] = exonsIndex
-    
+
+    def generatePairs(self, reads):
+        '''
+        :param reads: A list of mixed unpaired and paired reads
+        :return: A list of index pairs
+        '''
+
+        #print('Generating pairs for %d reads' % len(reads))
+
+        if len(reads) == 0:
+            return []
+
+        # Construct linked list of reads, sorted by start index
+        root = None
+        for r in reads:
+            start1 = r.exons[0][0]
+            node1 = readNode.ReadNode(start1)
+            if root == None:
+                root = node1
+            else:
+                root = root.addRead(node1)
+
+            if r.lenLeft > 0 or r.lenRight > 0:
+                start2 = start1 + r.readLen - r.lenLeft
+                #print('(%d,%d)' % (start1,start2))
+                node2 = readNode.ReadNode(start2)
+                root = root.addRead(node2)
+
+                node1.pair = node2
+                node2.pair = node1
+            #else:
+            #    print(start1)
+            #print(root.toString())
+            #print('')
+
+        # Index reads in list
+        root.index()
+
+        # Find pairs
+        pairs = []
+        node = root
+        while node:
+            if node.pair and node.pair.id > node.id:
+                pairs.append((node.id, node.pair.id))
+            node = node.next
+        return pairs
+
     def parseAlignments(self, filename):
         ''' Parse a file in SAM format
             Add the exonic region indices for each read to the correct ChromosomeAlignments object
