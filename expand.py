@@ -493,7 +493,8 @@ class Expander:
                     i += 1
                     unpairedLens, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
                     #pairedLens, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
-                    pairs, startPos = binaryIO.readPairs(lenDists, startPos)
+                    pairBytes = binaryIO.findNumBytes(self.aligned.exons[e+1] - self.aligned.exons[e])
+                    pairs, startPos = binaryIO.readPairs(lenDists, startPos, pairBytes)
                     lensLeft = dict()
                     lensRight = dict()
                     #if len(pairedLens) > 0:

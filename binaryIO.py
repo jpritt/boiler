@@ -234,48 +234,49 @@ def readJunctionsList(s, start=0):
     return junctions, exonBytes, start
 
 def writeJunction(readLenBytes, junc, huffmanIndex=None):
-    # More space efficient to calculate/save the number of bytes needed for fragments for each junction
-    #maxFragLen = 0
-    #for l in junc.pairedLens.keys():
-    #    if l > maxFragLen:
-    #        maxFragLen = l
-    #fragLenBytes = findNumBytes(maxFragLen)
-    #s = valToBinary(1, fragLenBytes)
+    # Find max number of bytes needed to encode pair offsets
+    covLen = 0
+    for c in junc.coverage:
+        covLen += c[1]
+    pairBytes = findNumBytes(covLen)
 
-    s = writeLens(readLenBytes, junc.unpairedLens)
+
+    if not huffmanIndex == None:
+        s = writeCovHuffman(junc.coverage, huffmanIndex)
+    else:
+        s = writeCov(junc.coverage)
+
+    s += writeLens(readLenBytes, junc.unpairedLens)
     #s += writeLens(fragLenBytes, junc.pairedLens)
-    s += writePairs(junc.pairs)
+    s += writePairs(junc.pairs, pairBytes)
     #if len(junc.pairedLens) > 0:
     if len(junc.pairs) > 0:
         s += writeLens(readLenBytes, junc.lensLeft)
         if len(junc.lensLeft) > 0:
             s += writeLens(readLenBytes, junc.lensRight)
 
-    if not huffmanIndex == None:
-        #s += writeCovHuffman(RLE(junc.coverage), huffmanIndex)
-        s += writeCovHuffman(junc.coverage, huffmanIndex)
-    else:
-        #s += writeCov(RLE(junc.coverage))
-        s += writeCov(junc.coverage)
-
     return s
 
 def readJunction(s, junc, readLenBytes, start=0, huffmanTree=None):
-    #fragLenBytes, start = binaryToVal(s, 1, start)
+    if not huffmanTree == None:
+        junc.coverage, start = readCovHuffman(s, huffmanTree, start)
+    else:
+        junc.coverage, start = readCov(s, start)
+
+    covLen = 0
+    for c in junc.coverage:
+        covLen += c[1]
+    pairBytes = findNumBytes(covLen)
 
     junc.unpairedLens, start = readLens(s, readLenBytes, start)
     #junc.pairedLens, start = readLens(s, fragLenBytes, start)
-    junc.pairs, start = readPairs(s, start)
+    junc.pairs, start = readPairs(s, start, pairBytes)
     #if len(junc.pairedLens) > 0:
     if len(junc.pairs) > 0:
         junc.lensLeft, start = readLens(s, readLenBytes, start)
         if len(junc.lensLeft) > 0:
             junc.lensRight, start = readLens(s, readLenBytes, start)
 
-    if not huffmanTree == None:
-        junc.coverage, start = readCovHuffman(s, huffmanTree, start)
-    else:
-        junc.coverage, start = readCov(s, start)
 
     return junc, start
 
@@ -332,6 +333,8 @@ def writePairs(pairs, numBytes=3):
     :return: A binary string encoding the pairs as a simple concatenated list
     '''
 
+    numBytes = 3
+
     s = valToBinary(numBytes, len(pairs))
     for p in pairs:
         s += valToBinary(numBytes, p[0]) + valToBinary(numBytes, p[1])
@@ -344,6 +347,8 @@ def readPairs(s, start=0, numBytes=3):
     :param start: Starting index to read from in s
     :return: A list of tuples containing paired indices, and the starting index for the remainder of the string
     '''
+
+    numBytes = 3
 
     length, start = binaryToVal(s, numBytes, start)
     pairs = [None] * length

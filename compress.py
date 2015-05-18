@@ -36,7 +36,7 @@ class Compressor:
         elif self.compressMethod == 2:
             self.bz2 = __import__('bz2')
 
-    def compress(self, samFilename, compressedFilename, binary=False, huffman=False):
+    def compress(self, samFilename, compressedFilename, minFilename=None, binary=False, huffman=False):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
 
             file_prefix: Prefix for all output file names
@@ -57,20 +57,11 @@ class Compressor:
 
         self.parseAlignments(samFilename)
 
-        #with open('minimal.sam', 'w') as f:
-        #    self.aligned.writeSAM(f)
-        #exit()
+        if minFilename:
+            with open(minFilename, 'w') as f:
+                self.aligned.writeSAM(f)
 
-        #for i in range(len(self.aligned.exons)):
-        #    if self.aligned.exons[i] > 21578320:
-        #        print(i-1)
-        #        print(self.aligned.exons[i-1])
-        #        print(self.aligned.exons[i])
-        #        exit()
-
-        #with open('testOut.sam', 'w') as f:
-        #    self.aligned.writeSAM(f)
-        #exit()
+        self.aligned.finalizeReads()
 
         ''' TODO: No need for if/else? '''
         if binary:
@@ -706,7 +697,9 @@ class Compressor:
 
                 chunkString += binaryIO.writeLens(readLenBytes, unpairedLens)
                 #chunkString += binaryIO.writeLens(fragLenBytes, pairedLens)
-                chunkString += binaryIO.writePairs(pairs)
+
+                pairBytes = binaryIO.findNumBytes(self.aligned.exons[i+1] - offset)
+                chunkString += binaryIO.writePairs(pairs, pairBytes)
                 #if len(pairedLens) > 0:
                 if len(pairs) > 0:
                     chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
@@ -806,7 +799,6 @@ class Compressor:
 
         self.aligned.finalizeExons()
         self.aligned.finalizeUnmatched()
-        self.aligned.finalizeReads()
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome

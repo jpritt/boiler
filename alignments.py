@@ -2454,7 +2454,7 @@ class Alignments:
         countA = len(exonsA)
         for i in range(countA):
             e = exonsA[countA-i-1]
-            if e[1] < exonsB[0][0]:
+            if e[1] < exonsB[0][1]:
                 break
 
             for i in range(len(exonsB)-1):

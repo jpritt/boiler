@@ -28,7 +28,7 @@ def go(args):
     #print('Initial')
     #objgraph.show_growth(limit=3)
     startTime = time.time()
-    compressor.compress(args.alignments, compressedName, binary, huffman)
+    compressor.compress(args.alignments, compressedName, args.intermediate, binary, huffman)
     endTime = time.time()
     compressor = None
 
@@ -62,6 +62,7 @@ if __name__ == '__main__':
         action="store_true")
     parser.add_argument("--expand-to", type=str, help="After compressing, decompress to this filename")
     parser.add_argument("--output", type=str, help="Compressed filename")
+    parser.add_argument("--intermediate", type=str, help="Name of SAM file to write to after processing but before compressing")
 
     args = parser.parse_args(sys.argv[1:])
 
