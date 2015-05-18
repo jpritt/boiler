@@ -8,6 +8,9 @@ import time
 import expand
 import compress
 
+
+VERSION = '0.0.1'
+
 def go(args):
     binary = False
     if args.binary:
@@ -17,9 +20,9 @@ def go(args):
     if args.huffman:
         huffman = True
 
-
     compressedName = 'compressed/compressed_binary.txt'
-    expandedName = 'expanded.sam'
+    if args.output is not None:
+        compressedName = args.output
 
     compressor = compress.Compressor()
     #print('Initial')
@@ -34,14 +37,20 @@ def go(args):
     print('Compression time: %0.3f s' % (endTime-startTime))
     #print('Alignments size: %f\n' % (asizeof.asizeof(compressor.aligned)/1000000))
 
-    expander = expand.Expander()
-    startTime = time.time()
-    expander.expand(compressedName, expandedName, binary, huffman)
-    endTime = time.time()
-    print('Decompression time: %0.3f s' % (endTime-startTime))
-    #print('Alignments size: %f\n' % (asizeof.asizeof(expander.aligned)/1000000))
+    if args.expand_to is not None:
+        expander = expand.Expander()
+        startTime = time.time()
+        expander.expand(compressedName, args.expand_to, binary, huffman)
+        endTime = time.time()
+        print('Decompression time: %0.3f s' % (endTime-startTime))
+        #print('Alignments size: %f\n' % (asizeof.asizeof(expander.aligned)/1000000))
 
 if __name__ == '__main__':
+
+    if '--version' in sys.argv:
+        print('Boiler v' + VERSION)
+        sys.exit(0)
+
     # Print file's docstring if -h is invoked
     parser = argparse.ArgumentParser(description=__doc__, 
             formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -51,7 +60,9 @@ if __name__ == '__main__':
         action="store_true")
     parser.add_argument("--huffman", help="Use huffman coding to compress coverage vectors",
         action="store_true")
-    
+    parser.add_argument("--expand-to", type=str, help="After compressing, decompress to this filename")
+    parser.add_argument("--output", type=str, help="Compressed filename")
+
     args = parser.parse_args(sys.argv[1:])
 
     go(args)

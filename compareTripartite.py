@@ -1,106 +1,45 @@
 #! /usr/bin/env python
 import sys
-import csv
-import math
-import re
-import string
-import numpy as np
-import matplotlib.pyplot as plt
-
-class Transcript:
-    '''
-    '''
-    def __init__(self, chrom, start, end, cov, name):
-        self.chrom = chrom
-        self.start = start
-        self.end = end
-        self.cov = cov
-        self.exons = []
-        self.name = name
-
-    def scoreTranscript(self, transcript, threshold):
-        ''' Compare this transcript to the given transcript and return a score representing their closeness
-            0 = no match, 1 = perfect match
-        '''
-        if (not self.chrom == transcript.chrom) or (self.start > transcript.end) or (self.end < transcript.start):
-            return 0
-
-        thisMatches = []
-        scores = []
-        for i in xrange(len(self.exons)):
-            e1 = self.exons[i]
-            closest = 0
-            closestScore = 0
-
-            for j in xrange(len(transcript.exons)):
-                e2 = transcript.exons[j]
-                currScore = self.scoreExons(e1, e2, threshold)
-
-                if currScore > closestScore:
-                    closestScore = currScore
-                    closest = j
-
-            thisMatches.append(closest)
-            scores.append(closestScore)
-
-        otherMatches = []
-        for i in xrange(len(transcript.exons)):
-            e1 = transcript.exons[i]
-            closest = 0
-            closestScore = 0
-
-            for j in xrange(len(self.exons)):
-                e2 = self.exons[j]
-                currScore = self.scoreExons(e1, e2, threshold)
-
-                if currScore > closestScore:
-                    closestScore = currScore
-                    closest = j
-
-            otherMatches.append(closest)
-
-        '''
-        print 'Comparing %s and %s' % (self.name, transcript.name)
-        print 'This matches:  ' + '\t'.join([str(c) for c in thisMatches])
-        print 'Other matches: ' + '\t'.join([str(c) for c in otherMatches])
-        print 'Scores:        ' + '\t'.join([str(c) for c in scores])
-        '''
-
-        totalScore = 0.0
-        count = len(thisMatches)
-        for i in xrange(len(thisMatches)):
-            if otherMatches[thisMatches[i]] == i:
-                totalScore += scores[i]
-        for i in xrange(len(otherMatches)):
-            if not thisMatches[otherMatches[i]] == i:
-                count += 1
-        
-        '''
-        print '%f / %f = %f' % (totalScore, count, totalScore/float(count))
-        print ''
-        '''
-
-        return totalScore / float(count)
-
-    def scoreExons(self, exon1, exon2, threshold):
-        ''' Returns a value between 0 and 1, where 1 indicates that the 2 exons are a perfect match and 0 indicates no match
-        '''
-
-        dx = min(abs(exon1[0] - exon2[0]), threshold)
-        dy = min(abs(exon1[1] - exon2[1]), threshold)
-
-        return 1 - dx / (2.0*threshold) - dy / (2.0*threshold)
-
+import logging
+from transcript import Transcript
 
 '''
 Compare a Cufflinks GTF file to the .pro output by flux
 '''
 
+
+def read_xscripts(gtf_fn):
+    transcriptsComp = dict()
+    with open(gtf_fn, 'r') as tsv:
+        for line in tsv:
+            row = line.strip().split('\t')
+            if len(row) < 5:
+                continue
+
+            covIndex = row[8].find('cov')
+            covStart = row[8].find('"', covIndex) + 1
+            covEnd = row[8].find('"', covStart)
+            cov = float(row[8][covStart:covEnd])
+
+            transcriptIdIndex = row[8].find('transcript_id')
+            transcriptIdStart = row[8].find('"', transcriptIdIndex) + 1
+            transcriptIdEnd = row[8].find('"', transcriptIdStart)
+            transcriptId = row[8][transcriptIdStart:transcriptIdEnd]
+
+            if row[2] == 'transcript':
+                transcriptsComp[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), cov, transcriptId)
+            elif row[2] == 'exon':
+                transcriptsComp[transcriptId].exons.append((int(row[3]), int(row[4])))
+    return transcriptsComp
+
+
 def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
     # Read reference transcripts
     # file 1 is a .pro file output by flux
     transcriptsTruth = parsePro(proFile)
+    logging.info('Parsed %d transcripts from simulation .pro file' % len(transcriptsTruth))
 
+    nexons = 0
     with open(truthGTF, 'r') as tsv:
         for line in tsv:
             row = line.strip().split('\t')
@@ -117,57 +56,31 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
 
             if row[1] == 'protein_coding' and row[2] == 'exon' and transcriptId in transcriptsTruth:
                 transcriptsTruth[transcriptId].exons.append( (int(row[3]), int(row[4])) )
-    transcriptsTruth = transcriptsTruth.values()
+                nexons += 1
+    for transcriptId, xscript in transcriptsTruth.items():
+        assert len(xscript.exons) > 0
+    transcriptsTruth = [v for v in transcriptsTruth.values()]
+    logging.info('Parsed %d protein-coding exons from simulation .gtf file' % nexons)
 
     # Read transcripts from first GTF
-    transcriptsCompA = dict()
-    with open(compGTF1, 'r') as tsv:
-        for line in tsv:
-            row = line.strip().split('\t')
-            if len(row) < 5:
-                continue
-
-            covIndex = row[8].find('cov')
-            covStart = row[8].find('"', covIndex) + 1
-            covEnd = row[8].find('"', covStart)
-            cov = float(row[8][covStart:covEnd])
-
-            transcriptIdIndex = row[8].find('transcript_id')
-            transcriptIdStart = row[8].find('"', transcriptIdIndex) + 1
-            transcriptIdEnd = row[8].find('"', transcriptIdStart)
-            transcriptId = row[8][transcriptIdStart : transcriptIdEnd]
-
-            if row[2] == 'transcript':
-                transcriptsCompA[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), cov, transcriptId)
-            elif row[2] == 'exon':
-                transcriptsCompA[transcriptId].exons.append( (int(row[3]), int(row[4])) )
-    transcriptsCompA = transcriptsCompA.values()
+    transcriptsCompA = [v for v in read_xscripts(compGTF1).values()]
+    logging.info('Parsed %d transcripts from first .gtf file' % len(transcriptsCompA))
 
     # Read transcripts from second GTF
-    transcriptsCompB = dict()
-    with open(compGTF2, 'r') as tsv:
-        for line in tsv:
-            row = line.strip().split('\t')
-            if len(row) < 5:
-                continue
-
-            covIndex = row[8].find('cov')
-            covStart = row[8].find('"', covIndex) + 1
-            covEnd = row[8].find('"', covStart)
-            cov = float(row[8][covStart:covEnd])
-
-            transcriptIdIndex = row[8].find('transcript_id')
-            transcriptIdStart = row[8].find('"', transcriptIdIndex) + 1
-            transcriptIdEnd = row[8].find('"', transcriptIdStart)
-            transcriptId = row[8][transcriptIdStart : transcriptIdEnd]
-
-            if row[2] == 'transcript':
-                transcriptsCompB[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), cov, transcriptId)
-            elif row[2] == 'exon':
-                transcriptsCompB[transcriptId].exons.append( (int(row[3]), int(row[4])) )
-    transcriptsCompB = transcriptsCompB.values()
+    transcriptsCompB = [v for v in read_xscripts(compGTF2).values()]
+    logging.info('Parsed %d transcripts from second .gtf file' % len(transcriptsCompB))
 
     connectionsA, connectionsB = buildGraph(transcriptsTruth, transcriptsCompA, transcriptsCompB)
+    nconnected_a = sum(map(lambda x: len(x) > 0, connectionsA))
+    nconnected_b = sum(map(lambda x: len(x) > 0, connectionsB))
+    logging.info('%d of %d transcripts in set A have near neighbor in true transcript set' %
+                 (nconnected_a, len(transcriptsCompA)))
+    logging.info('%d of %d transcripts in set B have near neighbor in true transcript set' %
+                 (nconnected_b, len(transcriptsCompB)))
+    if nconnected_a == 0:
+        raise RuntimeError('0 transcripts from first GTF file are similar to any true transcript!')
+    if nconnected_b == 0:
+        raise RuntimeError('0 transcripts from second GTF file are similar to any true transcript!')
 
     matches = 0
     score = 0.0
@@ -176,7 +89,7 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
     xs = []
     ys = []
 
-    for i in xrange(len(connectionsA)):
+    for i in range(len(connectionsA)):
         if strict:
             # strict
             if len(connectionsA[i]) == 1 and len(connectionsB[i]) == 1:
@@ -213,9 +126,9 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
 
                 score += bestA.scoreTranscript(bestB, threshold)
         
-    print '%d / %d transcripts from file 1' % (matches, len(transcriptsCompA))
-    print '%d / %d transcripts from file 2' % (matches, len(transcriptsCompB))
-    print 'Score: %f' % (score / matches)
+    print('%d / %d transcripts from file 1' % (matches, len(transcriptsCompA)))
+    print('%d / %d transcripts from file 2' % (matches, len(transcriptsCompB)))
+    print('Score: %f' % (score / matches))
 
     #plt.scatter(xs, ys)
     #plt.show()
@@ -247,55 +160,42 @@ def parsePro(filename):
     return transcripts
 
 
-def buildGraph(transcriptsTrue, transcriptsPredictedA, transcriptsPredictedB):
-    ''' Compare 
-    '''
+def make_connections(xscript_pred, xscript_true, threshold=10):
+    """ Find true transcript most similar to each transcript in xscript_pred.
+        Return a mapping.  If similarity doesn't exceed threshold, transcripts
+        aren't considered similar. """
+    connect = []
+    for i in range(len(xscript_true)):
+        connect += [[]]
 
-    # For each reference transcript, a list of predicted transcripts A that match most closely to it
-    refConnectionsA = []
-    refConnectionsB = []
-    for i in xrange(len(transcriptsTrue)):
-        refConnectionsA += [[]]
-        refConnectionsB += [[]]
+    for i, t in enumerate(xscript_pred):
+        best_score, best_xscript = 0, 0
+        for j, truet in enumerate(xscript_true):
+            score = t.scoreTranscript(truet, threshold)
+            if score > best_score:
+                best_score, best_xscript = score, j
 
-    threshold = 10
-    for i in xrange(len(transcriptsPredictedA)):
-        t = transcriptsPredictedA[i]
-        bestScore = 0
-        bestTranscript = 0
-        for j in xrange(len(transcriptsTrue)):
-            score = t.scoreTranscript(transcriptsTrue[j], threshold)
-            if score > bestScore:
-                bestScore = score
-                bestTranscript = j
+        if best_score > 0:
+            connect[best_xscript] += [i]
+    return connect
 
-        if bestScore > 0:
-            refConnectionsA[bestTranscript] += [i]
 
-    for i in xrange(len(transcriptsPredictedB)):
-        t = transcriptsPredictedB[i]
-        bestScore = 0
-        bestTranscript = 0
-        for j in xrange(len(transcriptsTrue)):
-            score = t.scoreTranscript(transcriptsTrue[j], threshold)
-            if score > bestScore:
-                bestScore = score
-                bestTranscript = j
-
-        if bestScore > 0:
-            refConnectionsB[bestTranscript] += [i]
-
+def buildGraph(transcriptsTrue, transcriptsPredictedA, transcriptsPredictedB, threshold=10):
+    """ Build mappings between true/A and true/B """
+    refConnectionsA = make_connections(transcriptsPredictedA, transcriptsTrue, threshold)
+    refConnectionsB = make_connections(transcriptsPredictedB, transcriptsTrue, threshold)
     return refConnectionsA, refConnectionsB
+
 
 def scoreTranscripts(exons1, exons2, threshold):
     thisMatches = []
     scores = []
-    for i in xrange(len(exons1)):
+    for i in range(len(exons1)):
         e1 = exons1[i]
         closest = 0
         closestScore = 0
 
-        for j in xrange(len(exons2)):
+        for j in range(len(exons2)):
             e2 = exons2[j]
             currScore = scoreExons(e1, e2, threshold)
 
@@ -307,12 +207,12 @@ def scoreTranscripts(exons1, exons2, threshold):
         scores.append(closestScore)
 
     otherMatches = []
-    for i in xrange(len(exons2)):
+    for i in range(len(exons2)):
         e1 = exons2[i]
         closest = 0
         closestScore = 0
 
-        for j in xrange(len(exons1)):
+        for j in range(len(exons1)):
             e2 = exons1[j]
             currScore = scoreExons(e1, e2, threshold)
 
@@ -324,10 +224,10 @@ def scoreTranscripts(exons1, exons2, threshold):
 
     totalScore = 0.0
     count = len(thisMatches)
-    for i in xrange(len(thisMatches)):
+    for i in range(len(thisMatches)):
         if otherMatches[thisMatches[i]] == i:
             totalScore += scores[i]
-    for i in xrange(len(otherMatches)):
+    for i in range(len(otherMatches)):
         if not thisMatches[otherMatches[i]] == i:
             count += 1
 
@@ -342,6 +242,9 @@ def scoreExons(exon1, exon2, threshold):
 
     return 1 - dx / (2.0*threshold) - dy / (2.0*threshold)
 
+
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', datefmt='%m/%d/%y-%H:%M:%S', level=logging.INFO)
+
 ref_pro = sys.argv[1]
 ref_gtf = sys.argv[2]
 alignments1 = sys.argv[3]
@@ -350,7 +253,7 @@ alignments2 = sys.argv[4]
 strict = True
 if int(sys.argv[5]) == 0:
     strict = False
-    print 'Comparing tripartite loose'
+    logging.info('Comparing tripartite loose')
 else:
-    print 'Comparing tripartite strict'
+    logging.info('Comparing tripartite strict')
 compareTripartite(ref_pro, ref_gtf, alignments1, alignments2, strict)
