@@ -3,10 +3,13 @@
 class Junction:
     ''' An exon junction spanned by at least 1 aligned read '''
 
-    def __init__(self, exons, length):
+    def __init__(self, exons, length, boundaries=None):
         self.exons = exons
         self.label = ' '.join([str(e) for e in exons])
         self.length = length
+
+        # Offsets of boundaries between subexons
+        self.boundaries = boundaries
 
         self.pairs = []
 
@@ -14,7 +17,7 @@ class Junction:
         self.unpaired = []
 
         # Distribution of lengths of all paired and unpaired reads crossing this junction
-        #self.pairedLens = dict()
+        self.pairedLens = dict()
         self.unpairedLens = dict()
 
         # Distribution of gap lengths for all paired-end reads crossing this junction

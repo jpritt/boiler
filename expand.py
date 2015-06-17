@@ -6,8 +6,6 @@ import junction
 import time
 import math
 import binaryIO
-import operator
-import huffman
 
 class Expander:
     aligned = None
@@ -27,7 +25,7 @@ class Expander:
             self.bz2 = __import__('bz2')
 
 
-    def expand(self, compressedFilename, uncompressedFilename, binary=False, huffman=False):
+    def expand(self, compressedFilename, uncompressedFilename, binary=False, keep_pairs=False):
         ''' Expand both spliced and unspliced alignments
         '''
 
@@ -41,16 +39,18 @@ class Expander:
                 self.aligned = alignments.Alignments(chroms)
                 self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
 
-                self.expandUnsplicedBinary(f)
-                #print('Finished expanding unspliced')
-                #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
-                self.expandSplicedBinary(f, self.exonBytes)
-                #print('Finished expanding spliced')
-                #print('Alignments size: %f\n' % (asizeof.asizeof(self.aligned)/1000000))
+                self.expandUnsplicedBinary(f, keep_pairs)
+                self.expandSplicedBinary(f, self.exonBytes, keep_pairs)
 
+
+                #print('%d / %d = %0.3f bad unpaired reads' % (self.aligned.badUnpaired, self.aligned.countUnpaired, self.aligned.badUnpaired/self.aligned.countUnpaired))
+                #print('%d / %d = %0.3f bad paired reads' % (self.aligned.badPaired, self.aligned.countPaired, self.aligned.badPaired/self.aligned.countPaired))
                 print('Original depth: %d' % self.aligned.origPairedDepth)
                 print('Decompressed depth: %d' % self.aligned.calcPairedDepth)
                 print('%d dense' % self.aligned.countDense)
+
+                #print(self.aligned.unpairedCounts)
+                #print(self.aligned.pairedCounts)
         else:
             with open(compressedFilename, 'r') as f:
                 self.aligned = alignments.Alignments(self.readHeader(f))
@@ -63,178 +63,10 @@ class Expander:
         with open(uncompressedFilename, 'w') as f:
             self.aligned.writeSAM(f)
 
-    def expandSpliced(self, f):
+    def expandSplicedBinary(self, f, exonBytes, keep_pairs=False):
         ''' Expand a file containing compressed spliced alignments
         '''
 
-        #self.aligned.exons = None
-        junc = None
-
-        self.aligned.spliced = []
-        for line in f:
-            # Lines grouped by junction
-            if line[0] == '>' or line[0] == '/':
-                if not junc == None:
-                    # process junction
-                    unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
-
-                    juncBounds = []
-                    for j in junctionExons:
-                        juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
-
-                    # Offset of start of junction from beginning of chromosome
-                    juncOffset = juncBounds[0][0]
-
-                    # marks indices in junction coverage vector where exons are
-                    mapping = [0]
-                    # offsets of start of each exon in junction
-                    offsets = [0]
-                    for j in range(1,len(juncBounds)):
-                        mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
-                        offsets.append(juncBounds[j][0] - juncBounds[0][0])
-
-                    for r in unpaired:
-                        start = r[0]
-                        i = 0
-                        while i < (len(mapping)-1) and mapping[i+1] <= start:
-                            i += 1
-                        start += offsets[i] - mapping[i]
-
-                        end = r[1]
-                        j = 0
-                        while j < (len(mapping)-1) and mapping[j+1] < end:
-                            j += 1
-                        end += offsets[j] - mapping[j]
-                        
-                        readExons = []
-                        if i == j:
-                            readExons.append( [start+juncOffset, end+juncOffset] )
-                        else:
-                            readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-
-                            for x in range(i+1,j):
-                                readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-
-                            readExons.append( [offsets[j]+juncOffset, end+juncOffset] ) 
-
-                        self.aligned.spliced.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
-
-                    for p in paired:
-                        start = p[0][0]
-                        i = 0
-                        while i < (len(mapping)-1) and mapping[i+1] <= start:
-                            i += 1
-                        start += offsets[i] - mapping[i]
-
-                        end = p[0][1]
-                        j = 0
-                        while j < (len(mapping)-1) and mapping[j+1] < end:
-                            j += 1
-                        end += offsets[j] - mapping[j]
-                        
-                        readExonsA = []
-                        if i == j:
-                            readExonsA.append( [start+juncOffset, end+juncOffset] )
-                        else:
-                            readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-
-                            for x in range(i+1,j):
-                                readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-
-                            readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
-
-                        start = p[1][0]
-                        i = 0
-                        while i < (len(mapping)-1) and mapping[i+1] <= start:
-                            i += 1
-                        start += offsets[i] - mapping[i]
-
-                        end = p[1][1]
-                        j = 0
-                        while j < (len(mapping)-1) and mapping[j+1] < end:
-                            j += 1
-                        end += offsets[j] - mapping[j]
-                        
-                        readExonsB = []
-                        if i == j:
-                            readExonsB.append( [start+juncOffset, end+juncOffset] )
-                        else:
-                            readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-
-                            for x in range(i+1,j):
-                                readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-
-                            readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
-
-                        self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                                 self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
-
-                if line[0] == '/':
-                    return
-
-                # Start of a new junction
-                key = line[1:].rstrip().split('\t')
-                junctionExons = [int(e) for e in key[:-2]]
-                length = 0
-
-                for e in junctionExons:
-                    length += self.aligned.exons[e+1] - self.aligned.exons[e]
-
-                junc = junction.Junction(junctionExons, length)
-                junc.unpairedLens = None
-                junc.pairedLens = None
-                junc.lensLeft = None
-                junc.lensRight = None
-
-                junc.xs = key[-2]
-                junc.NH = int(key[-1])
-
-            else:
-                if junc.unpairedLens == None:
-                    # First line after '>' contains unpaired read length distribution
-                    junc.unpairedLens = dict()
-                    for readLen in line.rstrip().split('\t'):
-                        readLen = readLen.split(',')
-                        junc.unpairedLens[int(readLen[0])] = int(readLen[1])
-                    junc.coverage = []
-                if junc.pairedLens == None:
-                    # Second line after '>' contains paired read length distribution
-                    junc.pairedLens = dict()
-                    for readLen in line.rstrip().split('\t'):
-                        readLen = readLen.split(',')
-                        junc.pairedLens[int(readLen[0])] = int(readLen[1])
-                    junc.coverage = []
-                elif junc.lensLeft == None:
-                    # Third line after '>' contains left read length distribution
-                    junc.lensLeft = dict()
-                    if len(line.rstrip()) > 0:
-                        for length in line.rstrip().split('\t'):
-                            length = length.split(',')
-                            junc.lensLeft[int(length[0])] = int(length[1])
-                elif junc.lensRight == None:
-                    # Fourth line after '>' contains right read length distribution
-                    junc.lensRight = dict()
-                    if len(line.rstrip()) > 0:
-                        for length in line.rstrip().split('\t'):
-                            length = length.split(',')
-                            junc.lensRight[int(length[0])] = int(length[1])
-                else:
-                    # Rest of lines contain run-length-encoded coverage vector
-                    row = line.rstrip().split('\t')
-                    if len(row) == 1:
-                        length = 1
-                    else:
-                        length = int(row[1])
-                    val = int(row[0])
-
-                    junc.coverage += [val] * length
-                    #junc.coverage += [[val, length]]
-
-    def expandSplicedBinary(self, f, exonBytes):
-        ''' Expand a file containing compressed spliced alignments
-        '''
-
-        #fragLenBytes = binaryIO.readVal(f, 1)
         readLenBytes = binaryIO.readVal(f, 1)
 
         # Read junctions in compressed chunks
@@ -247,22 +79,39 @@ class Expander:
                 key = self.sortedJuncs[juncId]
                 juncId += 1
                 exons = key[:-2]
-                    
+
                 length = 0
+                boundaries = []
+                for i in range(len(exons)):
+                    e = exons[i]
+                    subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
+
+                    length += subexon_length
+                    if i < len(exons)-1:
+                        if i == 0:
+                            boundaries.append(subexon_length)
+                        else:
+                            boundaries.append(boundaries[-1] + subexon_length)
+
+                debug = False
                 for e in exons:
-                    length += self.aligned.exons[e+1] - self.aligned.exons[e]
+                    if key[-1] == 1 and self.aligned.exons[e] == 15749602:#21589227:
+                        debug = True
+                        print('Junction ' + str(key))
+                        break
+
 
                 # Read the rest of the junction information
-                if self.huffman:
-                    junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length), readLenBytes, startPos, self.huffmanTree)
-                else:
-                    junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length), readLenBytes, startPos)
+                junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length, boundaries), readLenBytes, startPos, keep_pairs)
                 junc.xs = key[-2]
                 junc.NH = key[-1]
                 junc.coverage = self.RLEtoVector(junc.coverage)
 
-                #unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
-                unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.lensLeft, junc.lensRight, junc.pairs, junc.coverage)
+                if keep_pairs:
+                    unpaired, paired = self.aligned.findReadsWithPairs(junc.unpairedLens, junc.pairs, junc.lensLeft, junc.lensRight, junc.coverage)
+                else:
+                    unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, debug)
+
 
                 juncBounds = []
                 for j in junc.exons:
@@ -354,6 +203,361 @@ class Expander:
 
                     self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
                                                              self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
+
+    def expandUnsplicedBinary(self, f, keep_pairs=False):
+        ''' Expand a file containing compressed unspliced alignments
+        '''
+
+        NHs = binaryIO.readVal(f, 2)
+        self.sectionLen = binaryIO.readVal(f, 4)
+        fragLenBytes = binaryIO.readVal(f, 1)
+        readLenBytes = binaryIO.readVal(f, 1)
+
+        #numSections = int(math.ceil(self.aligned.exons[-1] / float(self.sectionLen)))
+        for _ in range(NHs):
+            NH = binaryIO.readVal(f, 2)
+            coverage = []
+            for chunk in range(len(self.unsplicedIndex[NH])):
+                covLength = self.unsplicedIndex[NH][chunk]
+                if covLength > 0:
+                    s = f.read(covLength)
+                    cov,_ = binaryIO.readCov(self.expandString(s))
+                    coverage += self.RLEtoVector(cov)
+                else:
+                    if chunk == len(self.unsplicedIndex[NH])-1:
+                        coverage += [0] * (self.aligned.exons[-1] - chunk*self.sectionLen)
+                    else:
+                        coverage += [0] * self.sectionLen
+
+            for e in range(len(self.unsplicedExonsIndex[NH])):
+                lenDists = self.expandString(f.read(self.unsplicedExonsIndex[NH][e]))
+                startPos = 0
+                i = 0
+
+                while startPos < len(lenDists):
+                    i += 1
+                    unpairedLens, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+
+                    lensLeft = dict()
+                    lensRight = dict()
+                    if keep_pairs:
+                        pairBytes = binaryIO.findNumBytes(self.aligned.exons[e+1] - self.aligned.exons[e])
+                        pairs, startPos = binaryIO.readPairs(lenDists, startPos, pairBytes)
+
+                        if len(pairs) > 0:
+                            lensLeft, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+                            if len(lensLeft) > 0:
+                                lensRight, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+
+                    else:
+                        pairs, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
+
+                        if len(pairs) > 0:
+                            lensLeft, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+                            if len(lensLeft) > 0:
+                                lensRight, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+
+
+                    if len(unpairedLens) > 0 or len(pairs) > 0:
+                        exonStart = self.aligned.exons[e*self.exonChunkSize + i - 1]
+                        exonEnd = self.aligned.exons[e*self.exonChunkSize + i]
+
+                        #if exonStart == 8037090:
+                        #    print('NH=%d: Found region %d - %d' % (NH, exonStart, exonEnd))
+                        #    debug = True
+                        #else:
+                        debug = False
+
+                        if exonStart == 15749602:
+                            print(exonStart)
+                            debug=True
+                            print(coverage[exonStart:exonEnd])
+                            print(unpairedLens)
+                            print(pairs)
+                            print(lensLeft)
+                            print(lensRight)
+
+
+                        if keep_pairs:
+                            unpaired, paired = self.aligned.findReadsWithPairs(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart:exonEnd])
+                        else:
+                            unpaired, paired = self.aligned.findReads(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart:exonEnd], None, debug)
+                            #unpaired, paired = self.aligned.findReadsWithPairedCov(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart:exonEnd])
+
+                        if exonStart == 15749602:
+                            print('-->')
+                            print(unpaired)
+                            print(paired)
+                            print('')
+
+                        for r in unpaired:
+                            self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
+                        for p in paired:
+                            self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
+                                                                         self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
+
+
+    def readIndexBinary(self, f):
+        '''
+            Read index information from beginning of file
+        '''
+
+        # Read an unzip index
+        sLen = binaryIO.readVal(f, 4)
+        s = self.expandString(f.read(sLen))
+        startPos = 0
+
+        self.exonChunkSize, startPos = binaryIO.binaryToVal(s, 4, startPos)
+        self.junctionChunkSize, startPos = binaryIO.binaryToVal(s, 4, startPos)
+
+        # Read junction names
+        t = time.time()
+        self.sortedJuncs, self.exonBytes, startPos = binaryIO.readJunctionsList(s, startPos)
+
+        # Read junction chunk lengths
+        self.junctionChunkLens, startPos = binaryIO.readList(s, startPos)
+
+        self.unsplicedIndex = dict()
+        self.unsplicedExonsIndex = dict()
+        numNH, startPos = binaryIO.binaryToVal(s, 4, startPos)
+        for _ in range(numNH):
+            NH, startPos = binaryIO.binaryToVal(s, 4, startPos)
+
+            # Read unspliced coverage index
+            self.unsplicedIndex[NH], startPos = binaryIO.readList(s, startPos)
+
+            # Read unspliced exons index
+            self.unsplicedExonsIndex[NH], startPos = binaryIO.readList(s, startPos)
+
+    def RLE(self, vector):
+        rle = []
+
+        val = vector[0]
+        length = 0
+        for v in vector:
+            if v == val:
+                length += 1
+            else:
+                if length == 1:
+                    rle.append([val])
+                else:
+                    rle.append([val, length])
+                val = v
+                length = 1
+
+        if length == 1:
+            rle.append([val])
+        else:
+            rle.append([val, length])
+
+        return rle
+
+    def RLEtoVector(self, rle):
+        ''' Convert a run length encoded vector to the original coverage vector '''
+
+        vector = []
+        for row in rle:
+            vector += [row[0]] * row[1]
+        return vector
+
+    def expandString(self, s):
+        ''' Use a predefined python library to expand the given string.
+            Return the decompressed string '''
+
+        if self.compressMethod == 0:
+            return self.zlib.decompress(s)
+        elif self.compressMethod == 1:
+            return self.lzma.decompress(s)
+        elif self.compressMethod == 2:
+            return self.bz2.decompress(s)
+
+
+
+
+
+
+
+
+
+    '''
+    TODO
+    These functions are out of date and need to be revised/rewritten
+    '''
+
+    def expandSpliced(self, f):
+        ''' Expand a file containing compressed spliced alignments
+        '''
+
+        #self.aligned.exons = None
+        junc = None
+
+        self.aligned.spliced = []
+        for line in f:
+            # Lines grouped by junction
+            if line[0] == '>' or line[0] == '/':
+                if not junc == None:
+                    # process junction
+                    unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage)
+
+                    juncBounds = []
+                    for j in junctionExons:
+                        juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
+
+                    # Offset of start of junction from beginning of chromosome
+                    juncOffset = juncBounds[0][0]
+
+                    # marks indices in junction coverage vector where exons are
+                    mapping = [0]
+                    # offsets of start of each exon in junction
+                    offsets = [0]
+                    for j in range(1,len(juncBounds)):
+                        mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
+                        offsets.append(juncBounds[j][0] - juncBounds[0][0])
+
+                    for r in unpaired:
+                        start = r[0]
+                        i = 0
+                        while i < (len(mapping)-1) and mapping[i+1] <= start:
+                            i += 1
+                        start += offsets[i] - mapping[i]
+
+                        end = r[1]
+                        j = 0
+                        while j < (len(mapping)-1) and mapping[j+1] < end:
+                            j += 1
+                        end += offsets[j] - mapping[j]
+
+                        readExons = []
+                        if i == j:
+                            readExons.append( [start+juncOffset, end+juncOffset] )
+                        else:
+                            readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+
+                            for x in range(i+1,j):
+                                readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+
+                            readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+                        self.aligned.spliced.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
+
+                    for p in paired:
+                        start = p[0][0]
+                        i = 0
+                        while i < (len(mapping)-1) and mapping[i+1] <= start:
+                            i += 1
+                        start += offsets[i] - mapping[i]
+
+                        end = p[0][1]
+                        j = 0
+                        while j < (len(mapping)-1) and mapping[j+1] < end:
+                            j += 1
+                        end += offsets[j] - mapping[j]
+
+                        readExonsA = []
+                        if i == j:
+                            readExonsA.append( [start+juncOffset, end+juncOffset] )
+                        else:
+                            readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+
+                            for x in range(i+1,j):
+                                readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+
+                            readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+                        start = p[1][0]
+                        i = 0
+                        while i < (len(mapping)-1) and mapping[i+1] <= start:
+                            i += 1
+                        start += offsets[i] - mapping[i]
+
+                        end = p[1][1]
+                        j = 0
+                        while j < (len(mapping)-1) and mapping[j+1] < end:
+                            j += 1
+                        end += offsets[j] - mapping[j]
+
+                        readExonsB = []
+                        if i == j:
+                            readExonsB.append( [start+juncOffset, end+juncOffset] )
+                        else:
+                            readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+
+                            for x in range(i+1,j):
+                                readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+
+                            readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+                        self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
+                                                                 self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
+
+                if line[0] == '/':
+                    return
+
+                # Start of a new junction
+                key = line[1:].rstrip().split('\t')
+                junctionExons = [int(e) for e in key[:-2]]
+
+                length = 0
+                boundaries = []
+                for i in range(len(junctionExons)):
+                    e = junctionExons[i]
+                    subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
+
+                    length += subexon_length
+                    if i == 0:
+                        boundaries.append(subexon_length)
+                    elif i < len(junctionExons)-1:
+                        boundaries.append(boundaries[-1] + subexon_length)
+
+                junc = junction.Junction(junctionExons, length, boundaries)
+                junc.unpairedLens = None
+                junc.pairedLens = None
+                junc.lensLeft = None
+                junc.lensRight = None
+
+                junc.xs = key[-2]
+                junc.NH = int(key[-1])
+
+            else:
+                if junc.unpairedLens == None:
+                    # First line after '>' contains unpaired read length distribution
+                    junc.unpairedLens = dict()
+                    for readLen in line.rstrip().split('\t'):
+                        readLen = readLen.split(',')
+                        junc.unpairedLens[int(readLen[0])] = int(readLen[1])
+                    junc.coverage = []
+                if junc.pairedLens == None:
+                    # Second line after '>' contains paired read length distribution
+                    junc.pairedLens = dict()
+                    for readLen in line.rstrip().split('\t'):
+                        readLen = readLen.split(',')
+                        junc.pairedLens[int(readLen[0])] = int(readLen[1])
+                    junc.coverage = []
+                elif junc.lensLeft == None:
+                    # Third line after '>' contains left read length distribution
+                    junc.lensLeft = dict()
+                    if len(line.rstrip()) > 0:
+                        for length in line.rstrip().split('\t'):
+                            length = length.split(',')
+                            junc.lensLeft[int(length[0])] = int(length[1])
+                elif junc.lensRight == None:
+                    # Fourth line after '>' contains right read length distribution
+                    junc.lensRight = dict()
+                    if len(line.rstrip()) > 0:
+                        for length in line.rstrip().split('\t'):
+                            length = length.split(',')
+                            junc.lensRight[int(length[0])] = int(length[1])
+                else:
+                    # Rest of lines contain run-length-encoded coverage vector
+                    row = line.rstrip().split('\t')
+                    if len(row) == 1:
+                        length = 1
+                    else:
+                        length = int(row[1])
+                    val = int(row[0])
+
+                    junc.coverage += [val] * length
+                    #junc.coverage += [[val, length]]
 
     def expandUnspliced(self, f):
         ''' Expand a file containing compressed unspliced alignments
@@ -456,73 +660,6 @@ class Expander:
             for p in paired:
                 self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
                                                          self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
-
-    def expandUnsplicedBinary(self, f):
-        ''' Expand a file containing compressed unspliced alignments
-        '''
-
-        NHs = binaryIO.readVal(f, 2)
-        self.sectionLen = binaryIO.readVal(f, 4)
-        fragLenBytes = binaryIO.readVal(f, 1)
-        readLenBytes = binaryIO.readVal(f, 1)
-
-        #numSections = int(math.ceil(self.aligned.exons[-1] / float(self.sectionLen)))
-        for _ in range(NHs):
-            NH = binaryIO.readVal(f, 2)
-            coverage = []
-            for chunk in range(len(self.unsplicedIndex[NH])):
-                covLength = self.unsplicedIndex[NH][chunk]
-                if covLength > 0:
-                    s = f.read(covLength)
-                    if self.huffman:
-                        cov,_ = binaryIO.readCovHuffman(self.expandString(s), self.huffmanTree)
-                    else:
-                        cov,_ = binaryIO.readCov(self.expandString(s))
-                    coverage += self.RLEtoVector(cov)
-                else:
-                    if chunk == len(self.unsplicedIndex[NH])-1:
-                        coverage += [0] * (self.aligned.exons[-1] - chunk*self.sectionLen)
-                    else:
-                        coverage += [0] * self.sectionLen
-
-            for e in range(len(self.unsplicedExonsIndex[NH])):
-                lenDists = self.expandString(f.read(self.unsplicedExonsIndex[NH][e]))
-                startPos = 0
-                i = 0
-                while startPos < len(lenDists):
-                    i += 1
-                    unpairedLens, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
-                    #pairedLens, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
-                    pairBytes = binaryIO.findNumBytes(self.aligned.exons[e+1] - self.aligned.exons[e])
-                    pairs, startPos = binaryIO.readPairs(lenDists, startPos, pairBytes)
-                    lensLeft = dict()
-                    lensRight = dict()
-                    #if len(pairedLens) > 0:
-                    if len(pairs) > 0:
-                        lensLeft, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
-                        if len(lensLeft) > 0:
-                            lensRight, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
-
-                    #if len(unpairedLens) > 0 or len(pairedLens) > 0:
-                    if len(unpairedLens) > 0 or len(pairs) > 0:
-                        exonStart = self.aligned.exons[e*self.exonChunkSize + i - 1]
-                        exonEnd = self.aligned.exons[e*self.exonChunkSize + i]
-
-                        debug = False
-                        #if exonStart == 21577537:
-                        #    debug = True
-
-                        #unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, coverage[exonStart:exonEnd])
-                        unpaired, paired = self.aligned.findReads(unpairedLens, lensLeft, lensRight, pairs, coverage[exonStart:exonEnd], debug)
-
-                        if debug:
-                            exit()
-                        
-                        for r in unpaired:
-                            self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
-                        for p in paired:
-                            self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
-                                                                     self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
 
     def getCoverage(self, compressedFilename, chrom, start=None, end=None):
         self.aligned = None
@@ -808,7 +945,7 @@ class Expander:
             self.readIndexBinary(f)
 
             chromosomes = binaryIO.readChroms(f)
-            self.aligned = alignments.Alignments(cxhromosomes)
+            self.aligned = alignments.Alignments(chromosomes)
             self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
 
             if start == None or end == None:
@@ -1421,85 +1558,5 @@ class Expander:
 
     #             i = (i+1) % 2
 
-    def readIndexBinary(self, f):
-        '''
-            Read index information from beginning of file
-        '''
 
-        # Read an unzip index
-        sLen = binaryIO.readVal(f, 4)
-        s = self.expandString(f.read(sLen))
-        startPos = 0
-
-        self.exonChunkSize, startPos = binaryIO.binaryToVal(s, 4, startPos)
-        self.junctionChunkSize, startPos = binaryIO.binaryToVal(s, 4, startPos)
-
-        # Read junction names
-        t = time.time()
-        self.sortedJuncs, self.exonBytes, startPos = binaryIO.readJunctionsList(s, startPos)
-
-        # Read junction chunk lengths
-        self.junctionChunkLens, startPos = binaryIO.readList(s, startPos)
-
-        self.unsplicedIndex = dict()
-        self.unsplicedExonsIndex = dict()
-        numNH, startPos = binaryIO.binaryToVal(s, 4, startPos)
-        for _ in range(numNH):
-            NH, startPos = binaryIO.binaryToVal(s, 4, startPos)
-
-            # Read unspliced coverage index
-            self.unsplicedIndex[NH], startPos = binaryIO.readList(s, startPos)
-
-            # Read unspliced exons index
-            self.unsplicedExonsIndex[NH], startPos = binaryIO.readList(s, startPos)
-
-        if startPos < len(s):
-            print('Reading huffman index')
-            self.huffman = True
-            index, startPos = binaryIO.readHuffmanIndex(s, startPos)
-            self.huffmanTree, _ = huffman.createHuffmanTreeFromIndex(index)
-        else:
-            self.huffman = False
-
-    def RLE(self, vector):
-        rle = []
-
-        val = vector[0]
-        length = 0
-        for v in vector:
-            if v == val:
-                length += 1
-            else:
-                if length == 1:
-                    rle.append([val])
-                else:
-                    rle.append([val, length])
-                val = v
-                length = 1
-
-        if length == 1:
-            rle.append([val])
-        else:
-            rle.append([val, length])
-
-        return rle
-
-    def RLEtoVector(self, rle):
-        ''' Convert a run length encoded vector to the original coverage vector '''
-
-        vector = []
-        for row in rle:
-            vector += [row[0]] * row[1]
-        return vector
-
-    def expandString(self, s):
-        ''' Use a predefined python library to expand the given string.
-            Return the decompressed string '''
-
-        if self.compressMethod == 0:
-            return self.zlib.decompress(s)
-        elif self.compressMethod == 1:
-            return self.lzma.decompress(s)
-        elif self.compressMethod == 2:
-            return self.bz2.decompress(s)
 
