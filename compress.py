@@ -68,7 +68,6 @@ class Compressor:
         print('Finalizing')
         self.aligned.finalizeReads()
 
-
         ''' TODO: No need for if/else? '''
         if binary:
             with open(compressedFilename, 'wb') as f:
@@ -78,6 +77,7 @@ class Compressor:
                 f.write(s)
 
                 junctions, maxReadLen = self.computeJunctions(keep_pairs)
+
                 self.compressUnspliced(f, binary, keep_pairs)
                 self.compressSpliced(junctions, maxReadLen, f, binary, keep_pairs)
             
@@ -110,142 +110,196 @@ class Compressor:
 
                 f.write(compressed)
 
+    def add_to_partition(self, r, max_len, partitions):
+        '''
+
+        :param r: Read to add
+        :param max_len: Maximum fragment length seen so far
+        :param partitions: List of previously computed partitions
+        :return: Key where r is stored, updated partitions list, updated max_len
+        '''
+
+        exonIds = r.exonIds
+
+        if not r.xs == None:
+            # XS is defined for this read
+            key = '\t'.join([str(e) for e in exonIds]) + '\t' + r.xs + '\t' + str(r.NH)
+
+            if not key in partitions:
+                covLength = 0
+                #boundaries = []
+                for i in range(len(exonIds)):
+                    e = exonIds[i]
+                    subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
+
+                    covLength += subexon_length
+                    #if i == 0:
+                    #    boundaries.append(subexon_length)
+                    #elif i < len(exonIds)-1:
+                    #    boundaries.append(boundaries[-1] + subexon_length)
+
+                partitions[key] = junction.Junction(exonIds, covLength)
+                partitions[key].xs = r.xs
+                partitions[key].NH = r.NH
+
+                partitions[key].countBefore = 0
+            j = partitions[key]
+        else:
+            # XS not defined for this read, so see which one (+/-) is in the dict already or add + by default
+            key1 = '\t'.join([str(e) for e in exonIds]) + '\t+\t' + str(r.NH)
+            key2 = '\t'.join([str(e) for e in exonIds]) + '\t-\t' + str(r.NH)
+            if key1 in partitions:
+                read.xs = '+'
+                j = partitions[key1]
+
+                key = key1
+            elif key2 in partitions:
+                read.xs = '-'
+                j = partitions[key2]
+
+                key = key2
+            else:
+                read.xs = '+'
+                covLength = 0
+                #boundaries = []
+
+                for i in range(len(exonIds)):
+                    e = exonIds[i]
+                    subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
+
+                    covLength += subexon_length
+                    #if i == 0:
+                    #    boundaries.append(subexon_length)
+                    #elif i < len(exonIds)-1:
+                    #    boundaries.append(boundaries[-1] + subexon_length)
+
+                partitions[key1] = junction.Junction(exonIds, covLength)
+                partitions[key1].xs = '+'
+                partitions[key1].NH = r.NH
+
+                partitions[key1].countBefore = 0
+
+                j = partitions[key1]
+
+                key = key1
+
+
+        # update junction coverage vector in dictionary
+        if (r.lenLeft == 0 and r.lenRight == 0):
+            j.coverage = self.updateRLE(j.coverage, r.startOffset, j.length-r.endOffset-r.startOffset, 1)
+        else:
+            j.coverage = self.updateRLE(j.coverage, r.startOffset, r.lenLeft, 1)
+            j.coverage = self.updateRLE(j.coverage, j.length-r.endOffset-r.lenRight, r.lenRight, 1)
+
+        # If this is a paired read, lenLeft and lenRight are both > 0
+        if r.lenLeft > 0 or r.lenRight > 0:
+            if not r.startOffset+r.readLen+r.endOffset == j.length:
+                print('Error in read/junction length!')
+                exit()
+
+            # update pairedLens
+            if r.readLen in j.pairedLens:
+                j.pairedLens[r.readLen] += 1
+            else:
+                j.pairedLens[r.readLen] = 1
+
+            if r.lenLeft in j.lensLeft:
+                j.lensLeft[r.lenLeft] += 1
+            else:
+                j.lensLeft[r.lenLeft] = 1
+
+            if r.lenRight in j.lensRight:
+                j.lensRight[r.lenRight] += 1
+            else:
+                j.lensRight[r.lenRight] = 1
+
+            # Update maximum fragment length
+            if r.lenLeft > max_len:
+                max_len = r.lenLeft
+            if r.lenRight > max_len:
+                max_len = r.lenRight
+        else:
+            # update unpairedLens
+            if r.readLen in j.unpairedLens:
+                j.unpairedLens[r.readLen] += 1
+            else:
+                j.unpairedLens[r.readLen] = 1
+
+            if r.readLen > max_len:
+                max_len = r.readLen
+
+        return key, partitions, max_len
+
+
     def computeJunctions(self, keep_pairs=False):
 
         # Compute coverage levels across every exon junction
-        junctions = dict()
+        partitions = dict()
 
-        # Keep track of maximum read and fragment lengths
-        maxReadLen = 0
+        # Maximum fragment length
+        max_len = 0
 
         for r in self.aligned.spliced:
-            exonIds = r.exonIds
+            _, partitions, max_len = self.add_to_partition(r, max_len, partitions)
 
-            if exonIds == [3]:
-                print(r.chrom)
-                print(r.exons)
-
-            if not r.xs == None:
-                # XS is defined for this read
-                key = '\t'.join([str(e) for e in exonIds]) + '\t' + r.xs + '\t' + str(r.NH)
-
-                if not key in junctions:
-                    covLength = 0
-                    #boundaries = []
-                    for i in range(len(exonIds)):
-                        e = exonIds[i]
-                        subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
-
-                        covLength += subexon_length
-                        #if i == 0:
-                        #    boundaries.append(subexon_length)
-                        #elif i < len(exonIds)-1:
-                        #    boundaries.append(boundaries[-1] + subexon_length)
-
-                    junctions[key] = junction.Junction(exonIds, covLength)
-                    junctions[key].xs = r.xs
-                    junctions[key].NH = r.NH
-
-                    junctions[key].countBefore = 0
-                j = junctions[key]
+        for p in self.aligned.discordant:
+            r = p[0]
+            if len(r.exons) == 1:
+                # Unspliced
+                for i in range(len(self.aligned.exons)-1):
+                    if r.exons[0][0] < self.aligned.exons[i+1]:
+                        p[0] = (r.NH, i, r.exons[0][0]-self.aligned.exons[i])
+                        break
+                self.aligned.addUnspliced(r)
             else:
-                # XS not defined for this read, so see which one (+/-) is in the dict already or add + by default
-                key1 = '\t'.join([str(e) for e in exonIds]) + '\t+\t' + str(r.NH)
-                key2 = '\t'.join([str(e) for e in exonIds]) + '\t-\t' + str(r.NH)
-                if key1 in junctions:
-                    read.xs = '+'
-                    j = junctions[key1]
+                #print(r.exons)
+                #print(r.exonIds)
+                #print(r.startOffset)
+                #print(r.endOffset)
+                #print('')
+                # Spliced
+                key, partitions, max_len = self.add_to_partition(r, max_len, partitions)
+                p[0] = (0, key, r.startOffset)
 
-                    key = key1
-                elif key2 in junctions:
-                    read.xs = '-'
-                    j = junctions[key2]
 
-                    key = key2
-                else:
-                    read.xs = '+'
-                    covLength = 0
-                    #boundaries = []
-
-                    for i in range(len(exonIds)):
-                        e = exonIds[i]
-                        subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
-
-                        covLength += subexon_length
-                        #if i == 0:
-                        #    boundaries.append(subexon_length)
-                        #elif i < len(exonIds)-1:
-                        #    boundaries.append(boundaries[-1] + subexon_length)
-
-                    junctions[key1] = junction.Junction(exonIds, covLength)
-                    junctions[key1].xs = '+'
-                    junctions[key1].NH = r.NH
-
-                    junctions[key1].countBefore = 0
-
-                    j = junctions[key1]
-
-                    key = key1
-
-            
-            # update junction coverage vector in dictionary
-            if (r.lenLeft == 0 and r.lenRight == 0):
-                j.coverage = self.updateRLE(j.coverage, r.startOffset, j.length-r.endOffset-r.startOffset, 1)
-                #j.countBefore += j.length-r.endOffset-r.startOffset
+            r = p[1]
+            if len(r.exons) == 1:
+                # Unspliced
+                for i in range(len(self.aligned.exons)-1):
+                    if r.exons[0][0] < self.aligned.exons[i+1]:
+                        p[1] = (r.NH, i, r.exons[0][0]-self.aligned.exons[i])
+                        break
+                self.aligned.addUnspliced(r)
             else:
-                j.coverage = self.updateRLE(j.coverage, r.startOffset, r.lenLeft, 1)
-                j.coverage = self.updateRLE(j.coverage, j.length-r.endOffset-r.lenRight, r.lenRight, 1)
-                #j.countBefore += r.endOffset - r.startOffset
+                #print(r.exons)
+                #print(r.exonIds)
+                #print(r.startOffset)
+                #print(r.endOffset)
+                #print('')
+                # Spliced
+                key, partitions, max_len = self.add_to_partition(r, max_len, partitions)
+                p[1] = (0, key, r.startOffset)
 
-            # If this is a paired read, lenLeft and lenRight are both > 0
-            if r.lenLeft > 0 or r.lenRight > 0:
-                if not r.startOffset+r.readLen+r.endOffset == j.length:
-                    print('Error in read/junction length!')
-                    exit()
 
+        # Junction index: list of junctions and length of each chunk
+        self.sortedJuncs = sorted(partitions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
+        self.junctionChunkLens = [0] * int(math.ceil(len(self.sortedJuncs) / self.junctionChunkSize))
 
-                if not keep_pairs:
-                    # update pairedLens
-                    if r.readLen in j.pairedLens:
-                        j.pairedLens[r.readLen] += 1
-                    else:
-                        j.pairedLens[r.readLen] = 1
-                else:
-                    # update pair offsets
-                    a = r.startOffset
-                    b = j.length - r.endOffset
-                    j.pairs.append((a,b))
+        # Replace partition keys with key ids
+        for p in self.aligned.discordant:
+            if p[0][0] == 0:
+                i = 0
+                while not p[0][1] == self.sortedJuncs[i]:
+                    i += 1
+                p[0] = (p[0][0], i, p[0][2])
 
-                    #j.paired.append([[r.startOffset, r.startOffset+r.lenLeft], [j.length-r.endOffset-r.lenRight, j.length-r.endOffset]])
+            if p[1][0] == 0:
+                i = 0
+                while not p[1][1] == self.sortedJuncs[i]:
+                    i += 1
+                p[1] = (p[1][0], i, p[1][2])
 
-                if r.lenLeft in j.lensLeft:
-                    j.lensLeft[r.lenLeft] += 1
-                else:
-                    j.lensLeft[r.lenLeft] = 1
-
-                if r.lenLeft > maxReadLen:
-                    maxReadLen = r.lenLeft
-
-                if r.lenRight in j.lensRight:
-                    j.lensRight[r.lenRight] += 1
-                else:
-                    j.lensRight[r.lenRight] = 1
-
-                if r.lenRight > maxReadLen:
-                    maxReadLen = r.lenRight
-            else:
-                # update unpairedLens
-                if r.readLen in j.unpairedLens:
-                    j.unpairedLens[r.readLen] += 1
-                else:
-                    j.unpairedLens[r.readLen] = 1
-
-                if r.readLen > maxReadLen:
-                    maxReadLen = r.readLen
-
-                #j.unpaired.append([r.startOffset, j.length-r.endOffset])
-
-        return junctions, maxReadLen
+        return partitions, max_len
 
 
     def compressSpliced(self, junctions, maxReadLen, filehandle, binary=False, keep_pairs=False):
@@ -254,17 +308,10 @@ class Compressor:
             filehandle: File to write to
         '''
 
-        #countBefore = 0
-        #countAfter = 0
-
         if binary:
             # Determine the number of bytes for read lengths
             readLenBytes = binaryIO.findNumBytes(maxReadLen)
             binaryIO.writeVal(filehandle, 1, readLenBytes)
-
-        # Junction index: list of junctions and length of each chunk
-        self.sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
-        self.junctionChunkLens = [0] * int(math.ceil(len(self.sortedJuncs) / self.junctionChunkSize))
 
         i = 0
         s = b''
@@ -275,41 +322,10 @@ class Compressor:
 
             junc = junctions[key]
 
-            #countBefore += junc.countBefore
             c = []
             for x in junc.coverage:
                 c += [x[0]] * x[1]
-            #unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, c)
 
-            #for r in unpaired:
-            #    countAfter += r[1] - r[0]
-            #for p in paired:
-            #    countAfter += p[1][1] - p[0][0]
-
-
-
-            '''
-            if len(junc.pairs) > 0:
-                junc.paired.sort()
-                junc.unpaired.sort()
-                c = []
-                for x in junc.coverage:
-                    c += [x[0]] * x[1]
-                unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.lensLeft, junc.lensRight, junc.pairs, c)
-                unpaired.sort()
-                paired.sort()
-                if not unpaired == junc.unpaired or not paired == junc.paired:
-                    print(junc.unpaired)
-                    print(junc.unpairedLens)
-                    print(junc.paired)
-                    print(junc.lensLeft)
-                    print(junc.lensRight)
-                    print(junc.pairs)
-                    print('-->')
-                    print(unpaired)
-                    print(paired)
-                    print('')
-            '''
 
 
             if binary:
@@ -629,8 +645,6 @@ class Compressor:
 
             self.unsplicedExonsIndex[NH] = exonsIndex
 
-        #print('Unspliced: %d --> %d (%0.3f)' % (countBefore, countAfter, float(countAfter)/float(countBefore)))
-
     def parseAlignments(self, filename):
         ''' Parse a file in SAM format
             Add the exonic region indices for each read to the correct ChromosomeAlignments object
@@ -782,6 +796,9 @@ class Compressor:
         
             # Write unspliced exon reads index
             s += binaryIO.writeList(self.unsplicedExonsIndex[k])
+
+        # Write discordant pairs
+        s += binaryIO.writeDiscordant(self.aligned.discordant, self.exonBytes)
 
         # Compress and write to file
         s = self.compressString(s)

@@ -73,7 +73,6 @@ def go(args):
     #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
     #intervals = [['2R', 100000, 200000]]
 
-    
     lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
     #lens = [10000,100000]
     chroms = ['2R', '2L', '3R', '3L', 'X']
@@ -105,7 +104,7 @@ def go(args):
                         print('Error!')
                         print('%s (%d, %d)' % (chrom, start, start+l))
                         print(x)
-                        for n in xrange(x-3,x+3):
+                        for n in range(x,x+50):
                             print(str(trueCov[n]) + '\t' + str(predCov[n]))
                         exit()
 

@@ -34,7 +34,7 @@ def go(args):
     if args.expand_to is not None:
         expander = expand.Expander()
         startTime = time.time()
-        expander.expand(compressedName, args.expand_to, binary, keep_pairs)
+        expander.expand(compressedName, args.expand_to, binary)
         endTime = time.time()
         print('Decompression time: %0.3f s' % (endTime-startTime))
 
