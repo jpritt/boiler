@@ -435,6 +435,7 @@ class Expander:
         return coverage
 
     def getSplicedCoverage(self, filehandle, coverage, start, end):
+        #print('Getting spliced coverage')
 
         readLenBytes = binaryIO.readVal(filehandle, 1)
 
@@ -470,7 +471,7 @@ class Expander:
             relevant_juncs = [0] * self.junctionChunkSize
             for i in range(self.junctionChunkSize):
                 juncId = chunkOffset + i
-                if id < num_juncs:
+                if juncId < num_juncs:
                     exons = self.sortedJuncs[juncId][:-2]
                     passed = True
                     relevant = False
@@ -516,7 +517,7 @@ class Expander:
                         junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
                         junc.xs = key[-2]
                         junc.NH = key[-1]
-                        junc.coverage = self.RLEtoVector(junc.coverage)
+                        #junc.coverage = self.RLEtoVector(junc.coverage)
 
                         # Update coverage vector
                         currExon = 0
@@ -532,7 +533,7 @@ class Expander:
                                     if posEnd > 0:
                                         posStart = max(self.aligned.exons[exons[currExon]] + offsetInExon - start, 0)
                                         for i in range(posStart, posEnd):
-                                            coverage[i] += c / NH
+                                            coverage[i] += c / junc.NH
                                 l = l + offsetInExon - exonLength
                                 currExon += 1
 
@@ -551,7 +552,7 @@ class Expander:
                                     if posEnd > 0:
                                         posStart = max(self.aligned.exons[exons[currExon]] + offsetInExon - start, 0)
                                         for i in range(posStart, posEnd):
-                                            coverage[i] += c / NH
+                                            coverage[i] += c / junc.NH
 
                                         if posEnd == end-start:
                                             break
@@ -561,206 +562,6 @@ class Expander:
         filehandle.seek(skip, 1)
         return coverage
 
-    '''
-    def getSplicedCoverage(self, filehandle, coverage, start, end):
-
-        readLenBytes = binaryIO.readVal(filehandle, 1)
-
-        relevantExonsStart = 0
-        while self.aligned.exons[relevantExonsStart+1] < start:
-            relevantExonsStart += 1
-        relevantExonsEnd = relevantExonsStart
-        while self.aligned.exons[relevantExonsEnd] < end:
-            relevantExonsEnd += 1
-
-        relevant = False
-
-        # Keep track of which chunk we are in, and what position in that chunk
-        chunkId = 0
-        chunkOffset = 0
-        idInChunk = 0
-
-        # Since the junctions are sorted, if all junctions are after the region of interest, we are done
-        passedRange = False
-
-        s = None
-        lastJ = 0
-
-        expandTime = 0
-        skipTime = 0
-        readTime = 0
-        updateTime = 0
-        t = time.time()
-
-        for j in range(len(self.sortedJuncs)):
-            junc = self.sortedJuncs[j]
-            exons = [int(e) for e in junc[:-2]]
-            NH = float(junc[-1])
-
-
-            passed = True
-            relevant = False
-            for e in exons:
-                if e < relevantExonsEnd:
-                    passed = False
-                    if e >= relevantExonsStart:
-                        relevant = True
-                        break
-            if passed:
-                break
-
-            if relevant:
-                length = 0
-                for e in exons:
-                    length += self.aligned.exons[e+1] - self.aligned.exons[e]
-
-                t1 = time.time()
-                if s == None:
-                    if chunkOffset > 0:
-                        filehandle.seek(chunkOffset, 1)
-                        chunkOffset = 0
-                    s = self.expandString(filehandle.read(self.junctionChunkLens[chunkId]))
-                    startPos = 0
-
-                t2 = time.time()
-                expandTime += t2-t1
-
-                for i in range(lastJ, j):
-                    startPos = binaryIO.skipJunction(s, readLenBytes, startPos)
-
-                t3 = time.time()
-                skipTime += t3-t2
-
-                junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length), readLenBytes, startPos)
-
-                t4 = time.time()
-                readTime += t4-t3
-
-
-                # Update coverage vector
-
-                currExon = 0
-                exonLength = self.aligned.exons[exons[currExon]+1] - self.aligned.exons[exons[currExon]]
-                offsetInExon = 0
-
-                for row in junc.coverage:
-                    c = row[0]
-                    l = row[1]
-                    while l+offsetInExon >= exonLength:
-                        if c > 0:
-                            posEnd = min(self.aligned.exons[exons[currExon]+1]-start, end-start)
-                            if posEnd > 0:
-                                posStart = max(self.aligned.exons[exons[currExon]] + offsetInExon - start, 0)
-                                for i in range(posStart, posEnd):
-                                    coverage[i] += c / NH
-                        l = l + offsetInExon - exonLength
-                        currExon += 1
-
-                        if currExon < len(exons):
-                            if self.aligned.exons[exons[currExon]] >= end:
-                                break
-                            exonLength = self.aligned.exons[exons[currExon]+1] - self.aligned.exons[exons[currExon]]
-                        offsetInExon = 0
-
-                    if currExon >= len(exons) or self.aligned.exons[exons[currExon]] >= end:
-                        break
-
-                    if l > 0:
-                        if c > 0:
-                            posEnd = min(self.aligned.exons[exons[currExon]] + offsetInExon + l - start, end-start)
-                            if posEnd > 0:
-                                posStart = max(self.aligned.exons[exons[currExon]] + offsetInExon - start, 0)
-                                for i in range(posStart, posEnd):
-                                    coverage[i] += c / NH
-
-                                if posEnd == end-start:
-                                    break
-                        offsetInExon += l
-
-                t5 = time.time()
-                updateTime += t5-t4
-
-                lastJ = j+1
-
-
-            idInChunk += 1
-            if idInChunk == self.junctionChunkSize:
-                if s == None:
-                    chunkOffset += self.junctionChunkLens[chunkId]
-                else:
-                    s = None
-                chunkId += 1
-                idInChunk = 0
-                lastJ = j+1
-
-        # Now skip to the end of the spliced section
-        skip = 0
-        while chunkId < len(self.junctionChunkLens):
-            skip += self.junctionChunkLens[chunkId]
-            chunkId += 1
-        filehandle.seek(skip, 1)
-
-        return coverage
-    '''
-
-
-    def getUnsplicedCoverage(self, filehandle, coverage, start, end):
-        NHs = binaryIO.readVal(filehandle, 2)
-        self.sectionLen = binaryIO.readVal(filehandle, 4)
-        fragLenBytes = binaryIO.readVal(filehandle, 1)
-        readLenBytes = binaryIO.readVal(filehandle, 1)
-
-        for _ in range(NHs):
-            NH = binaryIO.readVal(filehandle, 2)
-            offset = 0
-
-            for chunk in range(len(self.unsplicedIndex[NH])):
-                covLength = self.unsplicedIndex[NH][chunk]
-                if covLength > 0:
-                    if offset >= end:
-                        break
-                    elif offset+self.sectionLen <= start:
-                        filehandle.seek(covLength, 1)
-                    else:
-                        s = filehandle.read(covLength)
-                        cov,_ = binaryIO.readCov(self.expandString(s))
-                        for row in cov:
-                            c = row[0]
-                            l = row[1]
-                            if c > 0 and offset+l > start:
-                                if offset < start:
-                                    startPos = 0
-                                else:
-                                    startPos = offset - start
-
-                                if offset + l >= end:
-                                    endPos = end - start
-                                else:
-                                    endPos = offset + l - start
-
-                                for j in range(startPos, endPos):
-                                    coverage[j] += c / float(NH)
-                            offset += l
-                            if offset >= end:
-                                break
-                else:
-                    offset += self.sectionLen
-
-            # Skip to end of coverage
-            skip = 0
-            for j in range(chunk, len(self.unsplicedIndex[NH])):
-                skip += self.unsplicedIndex[NH][j]
-
-            # Skip exon information
-            for e in range(len(self.unsplicedExonsIndex[NH])):
-                skip += self.unsplicedExonsIndex[NH][e]
-
-            filehandle.seek(skip, 1)
-
-        return coverage
-
-
-    '''
     def getUnsplicedCoverage(self, filehandle, coverage, start, end):
         NHs = binaryIO.readVal(filehandle, 2)
         self.sectionLen = binaryIO.readVal(filehandle, 4)
@@ -822,18 +623,413 @@ class Expander:
             filehandle.seek(skip, 1)
 
         return coverage
-    '''
 
 
+    def getReads(self, compressedFile, chrom, start=None, end=None):
+        with open(compressedFile, 'rb') as f:
+            self.readIndexBinary(f)
+
+            chromosomes = binaryIO.readChroms(f)
+            self.aligned = alignments.Alignments(chromosomes)
+            self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
+
+            if start == None or end == None:
+                start = 0
+                end = chromosomes[chrom]
+
+            for k in sorted(chromosomes.keys()):
+                if not k == chrom:
+                    start += chromosomes[k]
+                    end += chromosomes[k]
+                else:
+                    break
+
+            unpaired, paired = self.getUnsplicedReads(f, start, end)#, self.exonBytes)
+            print('Unspliced: ')
+            print(unpaired)
+            print(paired)
+            unpaired2, paired2 = self.getSplicedReads(f, start, end)
+            print('Spliced: ')
+            print(unpaired2)
+            print(paired2)
+            unpaired += unpaired2
+            paired += paired2
 
 
+        return unpaired, paired
+
+    def getSplicedReads(self, filehandle, start, end):
+        unpaired = []
+        paired = []
+
+        readLenBytes = binaryIO.readVal(filehandle, 1)
+
+        relevantExonsStart = 0
+        while self.aligned.exons[relevantExonsStart+1] < start:
+            relevantExonsStart += 1
+        relevantExonsEnd = relevantExonsStart
+        while self.aligned.exons[relevantExonsEnd] < end:
+            relevantExonsEnd += 1
+
+        relevant = False
+
+        # Keep track of which chunk we are in, and what position in that chunk
+        chunkId = 0
+
+        # Since the junctions are sorted, if all junctions are after the region of interest, we are done
+        passedRange = False
+
+        num_juncs = len(self.sortedJuncs)
 
 
+        # Read junctions in compressed chunks
+        skip = 0
+        for chunkLen in self.junctionChunkLens:
+            if passedRange:
+                skip += chunkLen
+                continue
+
+            chunkOffset = chunkId * self.junctionChunkSize
+            chunkId += 1
+
+            # Id of last relevant junction in chunk
+            max_relevant = -1
+            relevant_juncs = [0] * self.junctionChunkSize
+            for i in range(self.junctionChunkSize):
+                juncId = chunkOffset + i
+                if juncId < num_juncs:
+                    exons = self.sortedJuncs[juncId][:-2]
+                    passed = True
+                    relevant = False
+                    for e in exons:
+                        if e < relevantExonsEnd:
+                            passed = False
+                            if e >= relevantExonsStart:
+                                relevant_juncs[i] = 1
+                                max_relevant = i
+                                break
+                    if passed:
+                        passedRange = True
+                        break
+
+            if max_relevant < 0:
+                filehandle.seek(chunkLen, 1)
+            else:
+                s = self.expandString(filehandle.read(chunkLen))
+                startPos = 0
+
+                for i in range(max_relevant+1):
+                    if not relevant_juncs[i]:
+                        startPos = binaryIO.skipJunction(s, readLenBytes, startPos)
+                    else:
+                        juncId = chunkOffset + i
+                        key = self.sortedJuncs[juncId]
+                        exons = key[:-2]
+
+                        length = 0
+                        boundaries = []
+                        for i in range(len(exons)):
+                            e = exons[i]
+                            subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
+
+                            length += subexon_length
+                            if i < len(exons)-1:
+                                if i == 0:
+                                    boundaries.append(subexon_length)
+                                else:
+                                    boundaries.append(boundaries[-1] + subexon_length)
+
+                        # Read the rest of the junction information
+                        junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
+                        junc.xs = key[-2]
+                        junc.NH = key[-1]
+                        junc.coverage = self.RLEtoVector(junc.coverage)
+
+                        u, ps, _ = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, [], junc.boundaries, False)
+
+                        juncBounds = []
+                        for j in junc.exons:
+                            juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
+
+                        # Offset of start of junction from beginning of chromosome
+                        juncOffset = juncBounds[0][0]
+
+                        # marks indices in junction coverage vector where exons are
+                        mapping = [0]
+                        # offsets of start of each exon in junction
+                        offsets = [0]
+                        for j in range(1,len(juncBounds)):
+                            mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
+                            offsets.append(juncBounds[j][0] - juncBounds[0][0])
+
+                        for r in u:
+                            start = r[0]
+                            i = 0
+                            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                                i += 1
+                            start += offsets[i] - mapping[i]
+
+                            end = r[1]
+                            j = 0
+                            while j < (len(mapping)-1) and mapping[j+1] < end:
+                                j += 1
+                            end += offsets[j] - mapping[j]
+
+                            readExons = []
+                            if i == j:
+                                readExons.append( [start+juncOffset, end+juncOffset] )
+                            else:
+                                readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+
+                                for x in range(i+1,j):
+                                    readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+
+                                readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+                            if readExons[0][0] < end and readExons[-1][1] > start:
+                                unpaired.append(readExons)
+
+                        for p in ps:
+                            start = p[0][0]
+                            i = 0
+                            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                                i += 1
+                            start += offsets[i] - mapping[i]
+
+                            end = p[0][1]
+                            j = 0
+                            while j < (len(mapping)-1) and mapping[j+1] < end:
+                                j += 1
+                            end += offsets[j] - mapping[j]
+
+                            readExonsA = []
+                            if i == j:
+                                readExonsA.append( [start+juncOffset, end+juncOffset] )
+                            else:
+                                readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+
+                                for x in range(i+1,j):
+                                    readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+
+                                readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+                            start = p[1][0]
+                            i = 0
+                            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                                i += 1
+                            start += offsets[i] - mapping[i]
+
+                            end = p[1][1]
+                            j = 0
+                            while j < (len(mapping)-1) and mapping[j+1] < end:
+                                j += 1
+                            end += offsets[j] - mapping[j]
+
+                            readExonsB = []
+                            if i == j:
+                                readExonsB.append( [start+juncOffset, end+juncOffset] )
+                            else:
+                                readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+
+                                for x in range(i+1,j):
+                                    readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+
+                                readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+                            if readExonsA[0][0] < end and readExonsB[-1][1] > start:
+                                paired.append([readExonsA, readExonsB])
+                            #if readExonsA[0][0] < end and readExonsA[-1][1] > start:
+                            #    reads.append(readExonsA)
+                            #if readExonsB[0][0] < end and readExonsB[-1][1] > start:
+                            #    reads.append(readExonsB)
+
+        # Skip rest of junctions
+        filehandle.seek(skip, 1)
+        return unpaired, paired
+
+    def getUnsplicedReads(self, filehandle, start, end):
+        unpaired = []
+        paired = []
+
+        # Extract reads from subexon chunks
+        start_exon = 0
+        while self.aligned.exons[start_exon+1] <= start:
+            start_exon += 1
+        end_exon = start_exon
+        while end_exon < len(self.aligned.exons)-1 and self.aligned.exons[end_exon] <= end:
+            end_exon += 1
+        length = self.aligned.exons[end_exon] - self.aligned.exons[start_exon]
+        coverage = [0] * length
+
+        #print('Relevant exons: %d - %d' % (start_exon, end_exon))
+        #print('  ' + ', '.join([str(self.aligned.exons[c]) for c in range(start_exon,end_exon+1)]))
+
+        NHs = binaryIO.readVal(filehandle, 2)
+        self.sectionLen = binaryIO.readVal(filehandle, 4)
+        fragLenBytes = binaryIO.readVal(filehandle, 1)
+        readLenBytes = binaryIO.readVal(filehandle, 1)
+
+        # Coverage is compressed in chunks
+        start_section = int(self.aligned.exons[start_exon] / self.sectionLen)
+        end_section = math.ceil(self.aligned.exons[end_exon] / self.sectionLen)
+
+        #print('Relevant sections: %d - %d' % (start_section, end_section))
+
+        for _ in range(NHs):
+            coverage = [0] * length
+            NH = binaryIO.readVal(filehandle, 2)
+
+            skip = sum(self.unsplicedIndex[NH][:start_section])
+            filehandle.seek(skip, 1)
+
+            if end_section <= start_section+1:
+                # Only one coverage chunk
+                offset = (start_section * self.sectionLen) - self.aligned.exons[start_exon]
+                covLength = self.unsplicedIndex[NH][start_section]
+                if covLength > 0:
+                    s = filehandle.read(covLength)
+                    cov,_ = binaryIO.readCov(self.expandString(s))
+
+                    for row in cov:
+                        l = row[1]
+                        if offset < 0:
+                            if offset + l > 0:
+                                c = row[0]
+                                for i in range(0, min(offset+l, length)):
+                                    coverage[i] = c
+                        else:
+                            c = row[0]
+                            for i in range(offset, min(offset+l, length)):
+                                coverage[i] = c
+                        offset += l
+                        if offset >= length:
+                            break
+                else:
+                    offset += self.sectionLen
+            else:
+                # First coverage chunk
+                offset = (start_section * self.sectionLen) - self.aligned.exons[start_exon]
+                covLength = self.unsplicedIndex[NH][start_section]
+                if covLength > 0:
+                    s = filehandle.read(covLength)
+                    cov,_ = binaryIO.readCov(self.expandString(s))
+
+                    #print(cov)
+
+                    for row in cov:
+                        #print(offset)
+                        #print(row)
+                        l = row[1]
+                        if offset < 0:
+                            if offset + l > 0:
+                                c = row[0]
+                                for i in range(0, offset+l):
+                                    coverage[i] = c
+                        else:
+                            c = row[0]
+                            for i in range(offset, offset+l):
+                                coverage[i] = c
+                        offset += l
+                else:
+                    offset += self.sectionLen
+
+                # Middle coverage chunks
+                for i in range(end_section - start_section - 2):
+                    covLength = self.unsplicedIndex[NH][start_section+i+1]
+                    if covLength > 0:
+                        s = filehandle.read(covLength)
+                        cov,_ = binaryIO.readCov(self.expandString(s))
+
+                        for row in cov:
+                            c = row[0]
+                            l = row[1]
+                            for i in range(offset, offset+l):
+                                coverage[i] = c
+                            offset += l
+                    else:
+                        offset += self.sectionLen
+
+                # Last coverage chunk
+                covLength = self.unsplicedIndex[NH][end_section-1]
+                if covLength > 0:
+                    s = filehandle.read(covLength)
+                    cov,_ = binaryIO.readCov(self.expandString(s))
+
+                    for row in cov:
+                        c = row[0]
+                        l = row[1]
+                        if offset+l >= length:
+                            for i in range(offset, length):
+                                coverage[i] = c
+                            offset = length
+                            break
+                        else:
+                            for i in range(offset, offset+l):
+                                coverage[i] = c
+                        offset += l
+                else:
+                    offset += self.sectionLen
+
+            # Skip the rest of the coverage
+            skip = sum(self.unsplicedIndex[NH][end_section:])
+            filehandle.seek(skip, 1)
+
+            # Skip exons before start
+            start_chunk = int(start_exon / self.exonChunkSize)
+            end_chunk = math.ceil(end_exon / self.exonChunkSize)
+            skip = sum(self.unsplicedExonsIndex[NH][:start_chunk])
+            filehandle.seek(skip, 1)
+
+            currExon = start_chunk * self.exonChunkSize
+
+            first_exon = self.aligned.exons[start_exon]
+            for e in range(start_chunk, end_chunk):
+                lenDists = self.expandString(filehandle.read(self.unsplicedExonsIndex[NH][e]))
+                startPos = 0
+
+                while startPos < len(lenDists):
+
+
+                    unpairedLens, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+                    pairs, startPos = binaryIO.readLens(lenDists, fragLenBytes, startPos)
+                    lensLeft = dict()
+                    lensRight = dict()
+                    if len(pairs) > 0:
+                        lensLeft, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+                        if len(lensLeft) > 0:
+                            lensRight, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
+
+
+                    if currExon < end_exon and currExon >= start_exon:
+                        if len(unpairedLens) > 0 or len(pairs) > 0:
+                            exonStart = self.aligned.exons[currExon]
+                            exonEnd = self.aligned.exons[currExon+1]
+
+                            debug = False
+
+                            u, p, _ = self.aligned.findReads(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart-first_exon:exonEnd-first_exon], [], None, debug)
+
+                            for r in u:
+                                if r[0]+exonStart < end and r[1]+exonStart > start:
+                                    unpaired.append([[r[0]+exonStart, r[1]+exonStart]])
+                            for p in p:
+                                if p[0][0]+exonStart < end and p[1][1]+exonStart > start:
+                                    paired.append([[[p[0][0]+exonStart, p[0][1]+exonStart]], [[p[1][0]+exonStart, p[1][1]+exonStart]]])
+
+
+                    currExon += 1
+
+
+            # Skip the rest of the exons
+            skip = sum(self.unsplicedExonsIndex[NH][end_chunk:])
+            filehandle.seek(skip, 1)
+
+        return unpaired, paired
 
 
     '''
     TODO
-    These functions are out of date and need to be revised/rewritten
+    These functions are out of date and need to be revised/removed
     '''
 
     def expandSpliced(self, f):
@@ -1113,7 +1309,8 @@ class Expander:
                 self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
                                                          self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
 
-    def getCoverage(self, compressedFilename, chrom, start=None, end=None):
+    '''
+    def getCoverage2(self, compressedFilename, chrom, start=None, end=None):
         self.aligned = None
         with open(compressedFilename, 'rb') as f:
             self.readIndexBinary(f)
@@ -1135,19 +1332,21 @@ class Expander:
 
             coverage = [0.0] * (end-start)
             startTime = time.time()
-            coverage = self.getUnsplicedCoverage(f, coverage, start, end)
+            coverage = self.getUnsplicedCoverage2(f, coverage, start, end)
             #print(coverage[123823:123833])
             t = time.time() - startTime
             #print('  Unspliced time: %0.3f s' % t)
             startTime = time.time()
-            coverage = self.getSplicedCoverage(f, coverage, start, end)
+            coverage = self.getSplicedCoverage2(f, coverage, start, end)
             #print(coverage[123823:123833])
             t = time.time() - startTime
             #print('  Spliced time: %0.3f s' % t)
 
         return coverage
 
-    def getSplicedCoverage(self, filehandle, coverage, start, end):
+    def getSplicedCoverage2(self, filehandle, coverage, start, end):
+
+        #print('Getting spliced coverage 2')
 
         readLenBytes = binaryIO.readVal(filehandle, 1)
 
@@ -1217,13 +1416,13 @@ class Expander:
                 skipTime += t3-t2
 
                 junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length), readLenBytes, startPos)
+                junc.coverage = self.RLEtoVector(junc.coverage)
 
                 t4 = time.time()
                 readTime += t4-t3
 
                 
                 # Update coverage vector
-                '''
                 currExon = 0
                 exonLength = self.aligned.exons[exons[currExon]+1] - self.aligned.exons[exons[currExon]]
                 offsetInExon = 0
@@ -1239,7 +1438,6 @@ class Expander:
                             coverage[pos - start] += junc.coverage[i] / NH
 
                     offsetInExon += 1
-                '''
 
                 currExon = 0
                 exonLength = self.aligned.exons[exons[currExon]+1] - self.aligned.exons[exons[currExon]]
@@ -1279,30 +1477,7 @@ class Expander:
                                     break
                         offsetInExon += l
 
-                '''
-                i = 0                
-                for e in exons:
-                    for n in range(self.aligned.exons[e], self.aligned.exons[e+1]):
-                        if junc.coverage[i] > 0:
-                            if n >= start and n < end:
-                                coverage[n-start] += junc.coverage[i] / NH
-                            elif n >= end:
-                                break
-                        i += 1
 
-                
-                i = 0                
-                for e in exons:
-                    if self.aligned.exons[e] > start:
-                        i += self.aligned.exons[e] - start
-
-                    for n in range(max(start,self.aligned.exons[e]), min(self.aligned.exons[e+1], end)):
-                        if i < len(junc.coverage) and junc.coverage[i] > 0:
-                            coverage[n-start] += junc.coverage[i] / NH
-                        i += 1
-                    if self.aligned.exons[e+1] > end:
-                        i += self.aligned.exons[e+1]-end
-                '''
                 
 
                 t5 = time.time()
@@ -1330,7 +1505,8 @@ class Expander:
 
         return coverage
     
-    def getUnsplicedCoverage(self, filehandle, coverage, start, end):
+    def getUnsplicedCoverage2(self, filehandle, coverage, start, end):
+        #print('Getting unspliced coverage 2')
         NHs = binaryIO.readVal(filehandle, 2)
         self.sectionLen = binaryIO.readVal(filehandle, 4)
         fragLenBytes = binaryIO.readVal(filehandle, 1)
@@ -1453,6 +1629,7 @@ class Expander:
 
             lastRelevant = -1
             passed = True
+            length = 0
             for e in exons:
                 length += self.aligned.exons[e+1] - self.aligned.exons[e]
                 if e < relevantExonsEnd:
@@ -1620,7 +1797,7 @@ class Expander:
 
                     covLength = self.unsplicedIndex[NH][s]
                     if covLength > 0:
-                        s = f.read(covLength)
+                        s = filehandle.read(covLength)
                         cov,_ = binaryIO.readCov(self.expandString(s))
 
                     coverage += cov
@@ -1685,7 +1862,7 @@ class Expander:
             filehandle.seek(skip, 1)
         
         return reads
-
+    '''
 
     def getGenes(self, compressedFile, chrom, start=None, end=None, overlapRadius=50):
         '''

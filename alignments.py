@@ -99,14 +99,18 @@ class Alignments:
         self.discordant = []
         count = 0
 
-        print('Finalizing unmatched')
-
         for name,reads in self.unmatched.items():
             if reads:
                 count += len(reads)
                 for r in reads:
                     self.updateGeneBounds([r.exons[0][0], r.exons[-1][1]])
 
+                    if len(r.exons) == 1:
+                        self.addUnspliced(r)
+                    else:
+                        self.addSpliced(r)
+
+                '''
                 # Sort reads by decreasing NH value
                 reads.sort(key=lambda x: x.NH, reverse=True)
 
@@ -114,14 +118,6 @@ class Alignments:
                 while num_reads > 1:
                     r1 = reads[0]
 
-                    if len(r1.exons) == 1:
-                        self.addUnspliced(r1)
-                    else:
-                        self.addSpliced(r1)
-                    reads = reads[1:]
-                    num_reads -= 1
-
-                    '''
                     found = False
                     for i in range(1, num_reads):
                         r2 = reads[i]
@@ -154,13 +150,13 @@ class Alignments:
                         num_reads -= 2
 
                     self.discordant.append([r1, r2])
-                    '''
 
                 if num_reads == 1:
                     if len(reads[0].exons) == 1:
                         self.addUnspliced(reads[0])
                     else:
                         self.addSpliced(reads[0])
+                '''
 
         print('%d unmatched' % count)
 
@@ -1928,11 +1924,10 @@ class Alignments:
                 self.exons.add(alignment[i][1])
                 self.exons.add(alignment[i+1][0])
 
-        self.updateGeneBounds([read.exons[0][0], read.exons[-1][1]])
+        #self.updateGeneBounds([read.exons[0][0], read.exons[-1][1]])
 
         if not paired:
-            # Update gene bounds
-            #self.updateGeneBounds([read.exons[0][0], read.exons[-1][1]])
+            self.updateGeneBounds([read.exons[0][0], read.exons[-1][1]])
 
             # unpaired read
             if len(read.exons) == 1:
@@ -1949,14 +1944,12 @@ class Alignments:
                         xs = read.xs or match.xs
                         NH = min(read.NH, match.NH)
 
-                        #if not read.NH == match.NH:
-                        #    print('Warning! NH values of paired reads %s (%d, %d) do not match!' % (name, read.NH, match.NH))
-
-                        #self.updateGeneBounds([match.exons[0][0], read.exons[-1][1]])
-                        #if read.exons[-1][1] - match.exons[0][0] > 10000000:
-                        #    print(name)
-
                         self.paired.append(pairedread.PairedRead(match.chrom, match.exons, read.chrom, read.exons, xs, NH))
+
+                        start = min(match.exons[0][0], read.exons[0][0])
+                        end = max(match.exons[-1][1], read.exons[-1][1])
+                        if end-start < 100000:
+                            self.updateGeneBounds([start, end])
 
                         # Update NH values
                         if match.NH <= read.NH:

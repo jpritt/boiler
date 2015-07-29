@@ -54,6 +54,40 @@ class ReadSAM:
 
             return coverage
 
+    def getReads(self, chrom, start=None, end=None):
+        if start == None or end == None:
+            start = 0
+            end = self.chromosomes[chrom]
+
+        offset = 0
+        for k in sorted(self.chromosomes.keys()):
+                if not k == chrom:
+                    offset += self.chromosomes[k]
+                else:
+                    break
+
+        reads = []
+        with open(self.filename, 'r') as f:
+            for line in f:
+                row = line.rstrip().split('\t')
+
+                if len(row) < 10:
+                    continue
+
+                if row[2] == chrom:
+                    readStart = int(row[3])
+                    cigar = row[5]
+
+                    if readStart < end:
+                        exons = self.parseCigar(cigar, readStart+offset)
+
+                        if exons[-1][1]-offset > start:
+                            reads += [exons]
+                    else:
+                        return reads
+
+        return reads
+
     def getGenes(self, chrom, start=None, end=None, overlapRadius=50):
         if start == None or end == None:
             start = 0

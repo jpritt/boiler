@@ -77,12 +77,14 @@ def go(args):
     #lens = [10000,100000]
     chroms = ['2R', '2L', '3R', '3L', 'X']
     chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
-    
+
+    '''
+    print('Querying coverage')
     for l in lens:
         timeTrue = 0.0
         timePred = 0.0
 
-        numIters = 10
+        numIters = 3
         for c in range(len(chroms)):
             chrom = chroms[c]
 
@@ -99,12 +101,16 @@ def go(args):
                 endTime = time.time()
                 timePred += float(endTime - startTime)
 
+                if not len(trueCov) == len(predCov):
+                    print('Error! Coverages not the same length!')
+                    exit()
+
                 for x in range(len(trueCov)):
                     if abs(trueCov[x] - predCov[x]) > 0.0001:
                         print('Error!')
                         print('%s (%d, %d)' % (chrom, start, start+l))
                         print(x)
-                        for n in range(x,x+50):
+                        for n in range(x-5,x+5):
                             print(str(trueCov[n]) + '\t' + str(predCov[n]))
                         exit()
 
@@ -115,59 +121,45 @@ def go(args):
         print('  Compressed: %0.3f s' % timePredAvg)
     '''
 
-    
-    print('Querying coverage...')
-    for i in intervals:
-        chrom = i[0]
-        start = i[1]
-        end = i[2]
+    print('Querying reads')
+    print(sam.getReads('2R', 9779903, 9780903))
+    print('')
+    u,p = expander.getReads(args['compressed'], '2R', 9779903, 9780903)
+    exit()
+    for l in lens:
+        timeTrue = 0.0
+        timePred = 0.0
 
-        if start == None or end == None:
-            print('%s: (%d, %d)' % (chrom, 0, chromosomes[chrom]))
-        else:
-            print('%s: (%d, %d)' % (chrom, start, end))
-        if start == None or end == None:
-            length = chromosomes[chrom]
-        else:
-            length = end-start
-        startTime = time.time()
-        trueCov = sam.getCoverage(chrom, start, end)
-        endTime = time.time()
-        trueTime = float(endTime - startTime)
-        print('%fs, %d bases (%f bases/s)' % (trueTime, length, float(length)/trueTime))
+        numIters = 3
+        for c in range(len(chroms)):
+            chrom = chroms[c]
 
-        startTime = time.time()
-        predCov = expander.getCoverage(args['compressed'], chrom, start, end)
-        endTime = time.time()
-        predTime = float(endTime - startTime)
-        print('%fs, %d bases (%f bases/s)' % (predTime, length, float(length)/predTime))
+            for _ in range(numIters):
+                start = random.randint(0, chromLens[c]-l)
 
-        
-        correct = 0
-        trueBig = 0
-        predBig = 0
-        for x in range(len(trueCov)):
-            
-            if trueCov[x] > predCov[x]+0.0001:
-                trueBig += 1
-            elif predCov[x] > trueCov[x]+0.0001:
-                predBig += 1
-            #print str(trueCov[x]) + '\t' + str(predCov[x])
+                startTime = time.time()
+                print('%s: %d - %d' % (chrom, start, start+l))
+                trueReads = sam.getReads(chrom, start, start+l)
+                endTime = time.time()
+                timeTrue += float(endTime - startTime)
 
-            
-            if abs(trueCov[x] - predCov[x]) < 0.0001:
-                correct += 1
-            elif predCov[x] >= 0.1:
-                print(x)
-                for n in range(x-3,x+3):
-                    print(str(trueCov[n]) + '\t' + str(predCov[n]))
-                exit()
-            
-        print('%d wrong - %0.3f correct' % (len(trueCov)-correct, float(correct) / float(len(trueCov))))
-        print('')
-    '''
-            
-        
+                startTime = time.time()
+                predUnpaired, predPaired = expander.getReads(args['compressed'], chrom, start, start+l)
+                endTime = time.time()
+                timePred += float(endTime - startTime)
+
+                print('%d true reads: %s' % (len(trueReads), str(trueReads)))
+                #print('%d pred reads: %s' % (len(predReads), str(predReads)))
+                print('')
+            exit()
+
+
+        timeTrueAvg = timeTrue / float(numIters*len(chroms))
+        timePredAvg = timePred / float(numIters*len(chroms))
+        print('Length %d:' % l)
+        print('  SAM:        %0.3f s' % timeTrueAvg)
+        print('  Compressed: %0.3f s' % timePredAvg)
+
         
 def go_profile(args):
    pr = None

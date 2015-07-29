@@ -8,6 +8,7 @@ import bisect
 import binaryIO
 import math
 import readNode
+import time
 
 class Compressor:
     aligned = None
@@ -46,11 +47,8 @@ class Compressor:
         self.chromosomes = self.parseSAMHeader(header)
         self.aligned = alignments.Alignments(self.chromosomes)
 
-        print(self.aligned.chromOffsets)
-
         print('Parsing alignments')
         self.parseAlignments(samFilename)
-
 
 
         #for i in range(len(self.aligned.exons)):
@@ -652,6 +650,8 @@ class Compressor:
             filehandle: SAM filehandle containing aligned reads
         '''
 
+        start = time.time()
+
         with open(filename, 'r') as filehandle:
             for line in filehandle:
                 row = line.strip().split('\t')
@@ -683,8 +683,19 @@ class Compressor:
                 else:
                     self.aligned.processRead(r, row[0], paired=False)
 
+        t = time.time() - start
+        print('%0.3fs' % t)
+        start = time.time()
+
+        print('Finalizing unmatched')
         self.aligned.finalizeUnmatched()
+        t = time.time() - start
+        print('%0.3fs' % t)
+        start = time.time()
+        print('Finalizing exons')
         self.aligned.finalizeExons()
+        t = time.time() - start
+        print('%0.3fs' % t)
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome
