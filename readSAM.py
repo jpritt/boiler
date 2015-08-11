@@ -55,6 +55,13 @@ class ReadSAM:
             return coverage
 
     def getReads(self, chrom, start=None, end=None):
+        '''
+        Assumes the SAM file is sorted
+        :param chrom:
+        :param start:
+        :param end:
+        :return:
+        '''
         if start == None or end == None:
             start = 0
             end = self.chromosomes[chrom]
@@ -63,10 +70,16 @@ class ReadSAM:
         for k in sorted(self.chromosomes.keys()):
                 if not k == chrom:
                     offset += self.chromosomes[k]
+                    start += self.chromosomes[k]
+                    end += self.chromosomes[k]
                 else:
                     break
 
-        reads = []
+        unmatched = dict()
+
+        unpaired = []
+        paired = []
+        sawChrom = False # Set this flag to true after we've seen the first read from chrom
         with open(self.filename, 'r') as f:
             for line in f:
                 row = line.rstrip().split('\t')
@@ -75,18 +88,81 @@ class ReadSAM:
                     continue
 
                 if row[2] == chrom:
+                    sawChrom = True
                     readStart = int(row[3])
                     cigar = row[5]
 
-                    if readStart < end:
+                    if row[6] == '=':
+                        pairStart = int(row[7])
+
+                        fragmentStart = min(readStart, pairStart) + offset
+                        fragmentEnd = fragmentStart + abs(int(row[8])) + offset
+                        if fragmentStart >= end or fragmentEnd <= start:
+                            continue
+
+                        #if readStart >= end and pairStart >= end:
+                        #    continue
+
+                        NH = 1
+                        for r in row[11 : len(row)]:
+                            if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                                xs = r[5]
+                            elif r[0:3] == 'NH:':
+                                NH = int(r[5:])
+
+
+                        if row[0] in unmatched:
+                            found = False
+                            m = unmatched[row[0]]
+                            for i in range(len(m)):
+                                if m[i][0] == pairStart and m[i][2] == readStart and m[i][3] == NH:
+                                    r1 = self.parseCigar(m[i][1], m[i][0]+offset)
+                                    r2 = self.parseCigar(cigar, readStart+offset)
+
+                                    if self.readOverlapsRegion(r1, start, end) or self.readOverlapsRegion(r2, start, end):
+                                        paired.append([r1, r2])
+
+                                    del unmatched[row[0]][i]
+                                    break
+
+                            if not found:
+                                unmatched[row[0]].append((readStart, cigar, pairStart, NH))
+                        else:
+                            unmatched[row[0]] = [(readStart, cigar, pairStart, NH)]
+                    else:
                         exons = self.parseCigar(cigar, readStart+offset)
 
-                        if exons[-1][1]-offset > start:
-                            reads += [exons]
-                    else:
-                        return reads
+                        if readStart < end and exons[-1][1] > start:
+                            if self.readOverlapsRegion(exons, start, end):
+                                NH = 1
+                                for r in row[11 : len(row)]:
+                                    if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                                        xs = r[5]
+                                    elif r[0:3] == 'NH:':
+                                        NH = int(r[5:])
+                                unpaired.append(exons)
+                else:
+                    if sawChrom:
+                        return unpaired, paired
 
-        return reads
+        return unpaired, paired
+
+    def readOverlapsRegion(self, exons, start, end):
+        '''
+
+        :param exons: List of exon bounds
+        :param start: Start of region of interest
+        :param end: End of region of interest
+        :return: True if any of the exons overlap the region of interest
+        '''
+
+        for e in exons:
+            if e[0] >= end:
+                # Passed region
+                return False
+            elif e[1] > start:
+                return True
+        return False
 
     def getGenes(self, chrom, start=None, end=None, overlapRadius=50):
         if start == None or end == None:

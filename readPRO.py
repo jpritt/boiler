@@ -15,7 +15,7 @@ class ReadPRO:
         if start == None:
             start = 0
         if end == None:
-            end = sys.maxint
+            end = sys.maxsize
 
         genes = set()
         with open(self.filename, 'r') as f:

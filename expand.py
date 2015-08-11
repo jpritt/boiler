@@ -626,6 +626,14 @@ class Expander:
 
 
     def getReads(self, compressedFile, chrom, start=None, end=None):
+        '''
+        Return all reads for which at least one exon overlaps the given region
+        :param compressedFile:
+        :param chrom:
+        :param start:
+        :param end:
+        :return:
+        '''
         with open(compressedFile, 'rb') as f:
             self.readIndexBinary(f)
 
@@ -644,31 +652,31 @@ class Expander:
                 else:
                     break
 
-            unpaired, paired = self.getUnsplicedReads(f, start, end)#, self.exonBytes)
-            print('Unspliced: ')
-            print(unpaired)
-            print(paired)
+            unpaired, paired = self.getUnsplicedReads(f, start, end)
+            #print('Unspliced: ')
+            #print(unpaired)
+            #print(paired)
             unpaired2, paired2 = self.getSplicedReads(f, start, end)
-            print('Spliced: ')
-            print(unpaired2)
-            print(paired2)
+            #print('Spliced: ')
+            #print(unpaired2)
+            #print(paired2)
             unpaired += unpaired2
             paired += paired2
 
 
         return unpaired, paired
 
-    def getSplicedReads(self, filehandle, start, end):
+    def getSplicedReads(self, filehandle, startRegion, endRegion):
         unpaired = []
         paired = []
 
         readLenBytes = binaryIO.readVal(filehandle, 1)
 
         relevantExonsStart = 0
-        while self.aligned.exons[relevantExonsStart+1] < start:
+        while self.aligned.exons[relevantExonsStart+1] < startRegion:
             relevantExonsStart += 1
         relevantExonsEnd = relevantExonsStart
-        while self.aligned.exons[relevantExonsEnd] < end:
+        while self.aligned.exons[relevantExonsEnd] < endRegion:
             relevantExonsEnd += 1
 
         relevant = False
@@ -786,7 +794,7 @@ class Expander:
 
                                 readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                            if readExons[0][0] < end and readExons[-1][1] > start:
+                            if self.readOverlapsRegion(readExons, startRegion, endRegion):
                                 unpaired.append(readExons)
 
                         for p in ps:
@@ -836,7 +844,7 @@ class Expander:
 
                                 readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                            if readExonsA[0][0] < end and readExonsB[-1][1] > start:
+                            if self.readOverlapsRegion(readExonsA, startRegion, endRegion) or self.readOverlapsRegion(readExonsB, startRegion, endRegion):
                                 paired.append([readExonsA, readExonsB])
                             #if readExonsA[0][0] < end and readExonsA[-1][1] > start:
                             #    reads.append(readExonsA)
@@ -1025,6 +1033,23 @@ class Expander:
             filehandle.seek(skip, 1)
 
         return unpaired, paired
+
+    def readOverlapsRegion(self, exons, start, end):
+        '''
+
+        :param exons: List of exon bounds
+        :param start: Start of region of interest
+        :param end: End of region of interest
+        :return: True if any of the exons overlap the region of interest
+        '''
+
+        for e in exons:
+            if e[0] >= end:
+                # Passed region
+                return False
+            elif e[1] > start:
+                return True
+        return False
 
 
     '''

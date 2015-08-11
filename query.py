@@ -7,7 +7,9 @@ import expand
 import readPRO
 import time
 import re
+import math
 import random
+import matplotlib.pyplot as plt
 
 def parseCigar(cigar, offset):
     ''' Parse the cigar string starting at the given index of the genome
@@ -75,7 +77,8 @@ def go(args):
 
     lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
     #lens = [10000,100000]
-    chroms = ['2R', '2L', '3R', '3L', 'X']
+    #chroms = ['2R', '2L', '3R', '3L', 'X']
+    chroms = ['2R']
     chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
 
     '''
@@ -122,44 +125,217 @@ def go(args):
     '''
 
     print('Querying reads')
-    print(sam.getReads('2R', 9779903, 9780903))
+
+    '''
+    trueUnpaired,truePaired = sam.getReads('2R', 14020520, 14021520)
+    #print('Unpaired (%d):' % len(u))
+    #print(u)
+    #print('Paired (%d):' % len(p))
+    #print(p)
+
+    #print('')
+    predUnpaired,predPaired = expander.getReads(args['compressed'], '2R', 14020520, 14021520)
+    #print('Unpaired (%d):' % len(u))
+    #print(u)
+    #print('Paired (%d):' % len(p))
+    #print(p)
+
+    pred = predUnpaired[:]
+    correctUnpaired = 0
+    for r in trueUnpaired:
+        for i in range(len(pred)):
+            if r == pred[i]:
+                correctUnpaired += 1
+                del pred[i]
+                break
+
+    pred = predPaired[:]
+    correctPaired = 0
+    for r in truePaired:
+        for i in range(len(pred)):
+            if r == pred[i]:
+                correctPaired += 1
+                del pred[i]
+                break
+
+    print('Unpaired:')
+    print('%d true reads, %d predicted, %d correct' % (len(trueUnpaired), len(predUnpaired), correctUnpaired))
+    print('Paired:')
+    print('%d true reads, %d predicted, %d correct' % (len(truePaired), len(predPaired), correctPaired))
     print('')
-    u,p = expander.getReads(args['compressed'], '2R', 9779903, 9780903)
     exit()
-    for l in lens:
-        timeTrue = 0.0
-        timePred = 0.0
+    '''
 
-        numIters = 3
-        for c in range(len(chroms)):
-            chrom = chroms[c]
+    # Index i in these lists corresponds to the range of lengths [10^i, 10^(i+1))
+    true_times = []
+    pred_times = []
+    counts = []
 
-            for _ in range(numIters):
-                start = random.randint(0, chromLens[c]-l)
+    pro = readPRO.ReadPRO(args['pro'])
 
-                startTime = time.time()
-                print('%s: %d - %d' % (chrom, start, start+l))
-                trueReads = sam.getReads(chrom, start, start+l)
-                endTime = time.time()
-                timeTrue += float(endTime - startTime)
+    num_genes = 0
+    for c in range(len(chroms)):
+        chrom = chroms[c]
 
-                startTime = time.time()
-                predUnpaired, predPaired = expander.getReads(args['compressed'], chrom, start, start+l)
-                endTime = time.time()
-                timePred += float(endTime - startTime)
+        genes = pro.getGenes(chrom)
+        num_genes += len(genes)
+        print('%d genes in chromosome %s' % (len(genes), chrom))
 
-                print('%d true reads: %s' % (len(trueReads), str(trueReads)))
-                #print('%d pred reads: %s' % (len(predReads), str(predReads)))
-                print('')
-            exit()
+        offset = 0
+        for k in sorted(chromosomes.keys()):
+            if not k == chrom:
+                offset += chromosomes[k]
+            else:
+                break
 
+        for g in genes:
+            start = g[0]
+            end = g[1]
 
-        timeTrueAvg = timeTrue / float(numIters*len(chroms))
-        timePredAvg = timePred / float(numIters*len(chroms))
-        print('Length %d:' % l)
-        print('  SAM:        %0.3f s' % timeTrueAvg)
-        print('  Compressed: %0.3f s' % timePredAvg)
+            bin = int(math.log(end - start,10))
+            if bin > len(true_times)-1:
+                add = bin - len(true_times) + 1
+                true_times += [0] * add
+                pred_times += [0] * add
+                counts += [0] * add
 
+            startTime = time.time()
+            print('%s: %d - %d' % (chrom, start, end))
+            trueUnpaired, truePaired = sam.getReads(chrom, start, end)
+            endTime = time.time()
+
+            true_times[bin] += float(endTime - startTime)
+
+            startTime = time.time()
+            predUnpaired, predPaired = expander.getReads(args['compressed'], chrom, start, end)
+            endTime = time.time()
+
+            pred_times[bin] += float(endTime - startTime)
+            counts[bin] += 1
+
+            pred = predUnpaired[:]
+            correctUnpaired = 0
+            for r in trueUnpaired:
+                for i in range(len(pred)):
+                    if r == pred[i]:
+                        correctUnpaired += 1
+                        del pred[i]
+                        break
+
+            pred = predPaired[:]
+            correctPaired = 0
+            for r in truePaired:
+                for i in range(len(pred)):
+                    if r == pred[i]:
+                        correctPaired += 1
+                        del pred[i]
+                        break
+
+            #print('Unpaired:')
+            #print('%d true reads, %d predicted, %d correct' % (len(trueUnpaired), len(predUnpaired), correctUnpaired))
+            #print('Paired:')
+            #print('%d true reads, %d predicted, %d correct' % (len(truePaired), len(predPaired), correctPaired))
+
+            '''
+            if (len(trueUnpaired) + len(truePaired) + len(predUnpaired) + len(predPaired)) > 0:
+                cov_true_total = 0
+                for r in trueUnpaired:
+                    for e in r:
+                        cov_true_total += e[1] - e[0]
+                for p in truePaired:
+                    for r in p:
+                        for e in r:
+                            cov_true_total += e[1] - e[0]
+
+                cov_pred_total = 0
+                for r in predUnpaired:
+                    for e in r:
+                        cov_pred_total += e[1] - e[0]
+                for p in predPaired:
+                    for r in p:
+                        for e in r:
+                            cov_pred_total += e[1] - e[0]
+
+                print('Total Coverage:  %d, %d' % (cov_true_total, cov_pred_total))
+
+                start += offset
+                end += offset
+                cov_true_region = 0
+                for r in trueUnpaired:
+                    for e in r:
+                        if e[1] > start and e[0] < end:
+                            cov_true_region += min(end, e[1]) - max(start, e[0])
+                for p in truePaired:
+                    for r in p:
+                        for e in r:
+                            if e[1] > start and e[0] < end:
+                                cov_true_region += min(end, e[1]) - max(start, e[0])
+
+                cov_pred_region = 0
+                for r in predUnpaired:
+                    for e in r:
+                        if e[1] > start and e[0] < end:
+                            cov_pred_region += min(end, e[1]) - max(start, e[0])
+                for p in predPaired:
+                    for r in p:
+                        for e in r:
+                            if e[1] > start and e[0] < end:
+                                cov_pred_region += min(end, e[1]) - max(start, e[0])
+
+                print('Region Coverage: %d, %d' % (cov_true_region, cov_pred_region))
+
+                true_avg_len = 0
+                for r in trueUnpaired:
+                    true_avg_len += r[-1][1] - r[0][0]
+                for p in truePaired:
+                    true_avg_len += p[1][-1][1] - p[0][0][0]
+                true_avg_len /= float(len(trueUnpaired) + len(truePaired))
+
+                pred_avg_len = 0
+                for r in predUnpaired:
+                    pred_avg_len += r[-1][1] - r[0][0]
+                for p in predPaired:
+                    pred_avg_len += p[1][-1][1] - p[0][0][0]
+                pred_avg_len /= float(len(predUnpaired) + len(predPaired))
+
+                print('Average Length:  %d, %d' % (true_avg_len, pred_avg_len))
+
+            print('')
+            '''
+
+    for i in range(len(true_times)):
+        if counts[i] > 0:
+            true_times[i] /= float(counts[i])
+            pred_times[i] /= float(counts[i])
+
+    w = 0.33
+    xs = [0] * len(true_times)
+    for i in range(len(true_times)):
+        xs[i] = i - w
+
+    # plot times
+    #a, = plt.plot(xs, true_times)
+    #b, = plt.plot(xs, pred_times)
+
+    a = plt.bar(xs, true_times, width=w, color='b')
+    for i in range(len(xs)):
+        xs[i] = i
+    b = plt.bar(xs, pred_times, width=w, color='r')
+    plt.xlabel('Region Length')
+    plt.ylabel('Avg Time (s)')
+    plt.xlim([-w, xs[-1]+w])
+    plt.legend([a,b], ['True', 'Compressed'], loc=2)
+    plt.title('Average Read Query Time')
+    plt.savefig('read_query_time.png')
+    plt.clf()
+
+    with open('times.txt', 'w') as f:
+        f.write(str(true_times))
+        f.write('\n')
+        f.write(str(pred_times))
+        f.write('\n')
+        f.write(str(counts))
+        f.write('\n')
         
 def go_profile(args):
    pr = None
