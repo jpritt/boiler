@@ -9,7 +9,7 @@ import time
 import re
 import math
 import random
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 def parseCigar(cigar, offset):
     ''' Parse the cigar string starting at the given index of the genome
@@ -308,6 +308,7 @@ def go(args):
             true_times[i] /= float(counts[i])
             pred_times[i] /= float(counts[i])
 
+    '''
     w = 0.33
     xs = [0] * len(true_times)
     for i in range(len(true_times)):
@@ -328,13 +329,14 @@ def go(args):
     plt.title('Average Read Query Time')
     plt.savefig('read_query_time.png')
     plt.clf()
+    '''
 
     with open('times.txt', 'w') as f:
-        f.write(str(true_times))
+        f.write('\t'.join([str(t) for f in true_times]))
         f.write('\n')
-        f.write(str(pred_times))
+        f.write('\t'.join([str(t) for f in pred_times]))
         f.write('\n')
-        f.write(str(counts))
+        f.write('\t'.join([str(t) for f in counts]))
         f.write('\n')
         
 def go_profile(args):
