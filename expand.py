@@ -38,7 +38,7 @@ class Expander:
                 self.readIndexBinary(f)
 
                 chroms = binaryIO.readChroms(f)
-                self.aligned = alignments.Alignments(chroms)
+                self.aligned = alignments.Alignments(chroms, self.debug)
                 self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
 
                 self.expandUnsplicedBinary(f)
@@ -340,22 +340,23 @@ class Expander:
                     break
 
             coverage = [0.0] * (end-start)
-            startTime = time.time()
+            if self.debug:
+                startTime = time.time()
+                print('  Getting unspliced coverage')
             coverage = self.getUnsplicedCoverage(f, coverage, start, end)
-            #print(coverage[123823:123833])
-            t = time.time() - startTime
-            #print('  Unspliced time: %0.3f s' % t)
-            startTime = time.time()
+            if self.debug:
+                t = time.time() - startTime
+                print('  Unspliced time: %0.3f s' % t)
+                print('  Getting spliced coverage')
+                startTime = time.time()
             coverage = self.getSplicedCoverage(f, coverage, start, end)
-            #print(coverage[123823:123833])
-            t = time.time() - startTime
-            #print('  Spliced time: %0.3f s' % t)
+            if self.debug:
+                t = time.time() - startTime
+                print('  Spliced time: %0.3f s' % t)
 
         return coverage
 
     def getSplicedCoverage(self, filehandle, coverage, start, end):
-        #print('Getting spliced coverage')
-
         readLenBytes = binaryIO.readVal(filehandle, 1)
 
         relevantExonsStart = 0
@@ -572,13 +573,7 @@ class Expander:
                     break
 
             unpaired, paired = self.getUnsplicedReads(f, start, end)
-            #print('Unspliced: ')
-            #print(unpaired)
-            #print(paired)
             unpaired2, paired2 = self.getSplicedReads(f, start, end)
-            #print('Spliced: ')
-            #print(unpaired2)
-            #print(paired2)
             unpaired += unpaired2
             paired += paired2
 
@@ -786,10 +781,6 @@ class Expander:
         while end_exon < len(self.aligned.exons)-1 and self.aligned.exons[end_exon] <= end:
             end_exon += 1
         length = self.aligned.exons[end_exon] - self.aligned.exons[start_exon]
-        coverage = [0] * length
-
-        #print('Relevant exons: %d - %d' % (start_exon, end_exon))
-        #print('  ' + ', '.join([str(self.aligned.exons[c]) for c in range(start_exon,end_exon+1)]))
 
         NHs = binaryIO.readVal(filehandle, 2)
         self.sectionLen = binaryIO.readVal(filehandle, 4)
@@ -799,8 +790,6 @@ class Expander:
         # Coverage is compressed in chunks
         start_section = int(self.aligned.exons[start_exon] / self.sectionLen)
         end_section = math.ceil(self.aligned.exons[end_exon] / self.sectionLen)
-
-        #print('Relevant sections: %d - %d' % (start_section, end_section))
 
         for _ in range(NHs):
             coverage = [0] * length
@@ -841,11 +830,7 @@ class Expander:
                     s = filehandle.read(covLength)
                     cov,_ = binaryIO.readCov(self.expandString(s))
 
-                    #print(cov)
-
                     for row in cov:
-                        #print(offset)
-                        #print(row)
                         l = row[1]
                         if offset < 0:
                             if offset + l > 0:

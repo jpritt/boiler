@@ -16,21 +16,13 @@ import time
 class Alignments:
     ''' A set of reads aligned to a genome '''
 
-    def __init__(self, chromosomes):
+    def __init__(self, chromosomes, debug=False):
         ''' Initialize a genome for alignments
 
             chromosomes: A dictionary with keys corresponding to chromosome names and values corresponding to lengths
         '''
 
-        '''
-        reads = [[170,220],[100,150], [140,200], [180,270], [200,300]]
-        unpairedLens = {90: 1, 50: 2}
-        pairedLens = {100: 1}
-        u, p = self.findPairsGreedy2(reads, unpairedLens, pairedLens)
-        print(u)
-        print(p)
-        exit()
-        '''
+        self.debug = debug
 
         self.origPairedDepth = 0
         self.calcPairedDepth = 0
@@ -85,15 +77,6 @@ class Alignments:
     def addSpliced(self, read):
         self.spliced += [read]
 
-        '''
-        # TODO: Try taking this out
-        # update list of exons
-        alignment = read.exons
-        for i in range(len(alignment)-1):
-            self.exons.add(alignment[i][1])
-            self.exons.add(alignment[i+1][0])
-        '''
-
     def finalizeUnmatched(self):
         # Finalize unmatched (discordant) reads
         count = 0
@@ -109,30 +92,32 @@ class Alignments:
                     else:
                         self.addSpliced(r)
 
-        print('%d unmatched' % count)
+        if self.debug:
+            print('%d unmatched' % count)
 
     def finalizeExons(self):
         ''' Convert the set of exon boundaries to a list
         '''
 
 
-        print('Sorting spliced subexons')
+        if self.debug:
+            print('Sorting spliced subexons')
         splice_exons = sorted(list(self.exons))
 
         # Convert gene boundaries to exon boundaries
-        print('Sorting gene subexons')
+        if self.debug:
+            print('Sorting gene subexons')
         gene_exons = [0] * (2*len(self.gene_bounds))
         for i in range(len(self.gene_bounds)):
             gene_exons[2*i] = self.gene_bounds[i][0]
             gene_exons[2*i+1] = self.gene_bounds[i][1]
-        print('%d gene subexons' % len(gene_exons))
-        print('%d spliced subexons' % len(self.exons))
-
+        if self.debug:
+            print('%d gene subexons' % len(gene_exons))
+            print('%d spliced subexons' % len(self.exons))
 
         gene_exons.sort()
 
         # Merge the 2 exon lists
-        print('Merging subexons')
         self.exons = [0] * (len(splice_exons) + len(gene_exons))
 
         splice_i = 0
@@ -147,7 +132,6 @@ class Alignments:
                 gene_i += 1
             else:
                 self.exons[combined_i] = splice_exons[splice_i]
-                print('%d, %d' % (splice_exons[splice_i], gene_exons[gene_i]))
                 splice_i += 1
                 gene_i += 1
             combined_i += 1
@@ -166,11 +150,6 @@ class Alignments:
         #print('%d identical exons in spliced and genes' % (len(self.exons)-combined_i))
         if combined_i < len(self.exons):
             self.exons = self.exons[:combined_i]
-
-        print('Done!')
-
-
-        #self.exons = sorted(list(self.exons) + gene_exons)
 
     def finalizeReads(self):
         ''' Now that all exon boundaries are known, fix unspliced regions that cross exon boundaries
@@ -526,7 +505,6 @@ class Alignments:
                 if bestFreq == None:
                     break
                 else:
-                    #print('Best pair: ' + str(bestL))
                     pairedLens[bestL] -= 1
                     i,j = self.findPairedDist(dists, assigned, numReads, bestL)
                     paired.append([reads[j], reads[i]])
@@ -600,7 +578,6 @@ class Alignments:
         for k,v in pairedLens.items():
             countPaired += v
         countUnpaired = numReads - 2 * countPaired
-        #print(countPaired)
 
         # Create a distance matrix between all pairs of reads
         dists = [0] * numReads
@@ -654,35 +631,17 @@ class Alignments:
 
                 countPaired -= 1
 
-        #print(countPaired)
-        #print(countUnpaired)
-        #print(len(assigned))
-        #print(sum(assigned))
         unpaired = [0] * countUnpaired
         i = 0
         for j in range(numReads):
             if not assigned[j]:
                 unpaired[i] = reads[j]
                 i += 1
-        #print('')
 
         calcPairedDepth = 0
         for p in paired:
             calcPairedDepth += p[1][1] - p[0][0]
             self.calcPairedDepth += p[1][1] - p[0][0]
-
-
-        '''
-        if float(calcPairedDepth) / float(origPairedDepth) < 0.9:
-            print('%d\t-->\t%d' % (origPairedDepth, calcPairedDepth))
-            print(origReads)
-            print(origPaired)
-            print(origUnpaired)
-            print('-->')
-            print(paired)
-            print(unpaired)
-            print('')
-        '''
 
         return unpaired, paired
 
@@ -699,10 +658,6 @@ class Alignments:
         :return:
         '''
 
-        #print(unpaired_lens)
-        #print(paired_lens)
-        #print(boundaries)
-
         numUnpaired = 0
         for k,v in unpaired_lens.items():
             numUnpaired += v
@@ -714,10 +669,6 @@ class Alignments:
         left_reads = []
         spanning_reads = []
         right_reads = []
-
-        #print(left_reads)
-        #print(spanning_reads)
-        #print(right_reads)
 
         for r in reads:
             if r[0] < boundaries[0]:
@@ -739,14 +690,12 @@ class Alignments:
         countUnpaired = 0
         for k,v in unpaired_lens.items():
             countUnpaired += v
-        if len(spanning_reads) < countUnpaired:
+        if len(spanning_reads) < countUnpaired and self.debug:
             print('%d < %d' % (len(spanning_reads), countUnpaired))
 
         countPaired = 0
         for k,v in paired_lens.items():
             countPaired += v
-
-        #print('%d, %d' % (2*countPaired+countUnpaired, len(left_reads)+len(right_reads)+len(spanning_reads)))
 
         paired = []
         unpaired = None
@@ -759,14 +708,8 @@ class Alignments:
                 break
 
             if len(left_reads) >= len(right_reads):
-                #print('Finding left read:')
-                #print('  ' + str(left_reads))
-                #print('  ' + str(spanning_reads))
-                #print('  ' + str(right_reads))
-                #print('  ' + str(paired_lens_sorted))
                 p = self.findLeftPair(left_reads, spanning_reads, right_reads, paired_lens_sorted)
                 l = p[1][1] - p[0][0]
-                #print('  Found pair ' + str(p) + ' - length ' + str(l))
                 if l in paired_lens_sorted:
                     paired_lens[l] -= 1
                     if paired_lens[l] <= 0:
@@ -777,14 +720,8 @@ class Alignments:
                 paired.append(p)
                 countPaired -= 1
             else:
-                #print('Finding right read:')
-                #print('  ' + str(left_reads))
-                #print('  ' + str(spanning_reads))
-                #print('  ' + str(right_reads))
-                #print('  ' + str(paired_lens_sorted))
                 p = self.findRightPair(left_reads, spanning_reads, right_reads, paired_lens_sorted)
                 l = p[1][1] - p[0][0]
-                #print('  Found pair ' + str(p) + ' - length ' + str(l))
                 if l in paired_lens_sorted:
                     paired_lens[l] -= 1
                     if paired_lens[l] <= 0:
@@ -809,35 +746,13 @@ class Alignments:
         else:
             unpaired = remaining_reads[i:j]
         unpaired.sort()
-        '''
-        if countPaired > 0:
-            new_paired_lens = dict()
-            for k,v in paired_lens.items():
-                if v > 0:
-                    new_paired_lens[k] = v
-            u, p = self.findPairs(remaining_reads, new_paired_lens)
 
-            paired += p
-            if not unpaired:
-                unpaired = u
-            else:
-                unpaired += u
-        else:
-            if not unpaired:
-                unpaired = remaining_reads
-        '''
-
-        if len(unpaired) != countUnpaired:
+        if len(unpaired) != countUnpaired and self.debug:
             print(s1)
             print(s2)
             print('%d reads found, looking for %d unpaired and %d paired' % (numReads, numUnpaired, numPaired))
             print('Found %d unpaired reads (instead of %d) and %d paired' % (len(unpaired), countUnpaired, len(paired)))
             print('')
-
-        #print('Final:')
-        #print(paired)
-        #print(unpaired)
-        #print('')
 
         return unpaired, paired
 
@@ -851,8 +766,6 @@ class Alignments:
         :return:
         '''
 
-        #print('  ' + str(paired_lens_sorted))
-
         if not left_reads:
             return None
 
@@ -865,12 +778,10 @@ class Alignments:
         # True if closest pair is in right_reads, false if in spanning_reads
         closest_right = True
         for l in paired_lens_sorted:
-            #print('  l = ' + str(l))
             end = r[0] + l
 
             for i in range(len(right_reads)):
                 s = right_reads[i]
-                #print('  Right read ' + str(s))
                 if s[1] == end:
                     del left_reads[0]
                     del right_reads[i]
@@ -878,15 +789,12 @@ class Alignments:
                 elif not closest_d or abs(s[1]-end) < closest_d:
                     closest_d = abs(s[1]-end)
                     closest_i = i
-                    #print('    closest_i = ' + str(closest_i))
 
         for l in paired_lens_sorted:
-            #print('  l = ' + str(l))
             end = r[0] + l
 
             for i in range(len(spanning_reads)):
                 s = spanning_reads[i]
-                #print('  Spanning read ' + str(s))
                 if s[1] == end:
                     del left_reads[0]
                     del spanning_reads[i]
@@ -894,7 +802,6 @@ class Alignments:
                 elif not closest_d or abs(s[1]-end) < closest_d:
                     closest_d = abs(s[1]-end)
                     closest_i = i
-                    #print('    closest_i = ' + str(closest_i))
                     closest_right = False
 
         if closest_i == None:
@@ -1002,10 +909,6 @@ class Alignments:
             else:
                 unmatched.append(reads[-1])
                 del reads[-1]
-
-        #if len(reads) > 0 and len(unmatched) > 0:
-        #    print('Reads and unmatched both left!')
-        #    exit()
 
         reads += unmatched
         reads.sort()
@@ -1262,29 +1165,6 @@ class Alignments:
                         j -= 1
 
         # Pair up remaining reads until we meet the quota of paired-end reads
-        '''
-        if len(pairedLensSorted) > 0:
-            numPairedReads = 0
-            for l in pairedLensSorted:
-                numPairedReads += pairedLens[l]
-
-            for _ in range(numPairedReads):
-                if len(unmatched) > 1:
-                    if unmatched[-1][0] < unmatched[0][0]:
-                        paired += [[unmatched[-1], unmatched[0]]]
-                    else:
-                        paired += [[unmatched[0], unmatched[-1]]]
-                    del unmatched[-1]
-                    del unmatched[0]
-
-        # Add remaining unmatched reads as unpaired reads
-        for r in unmatched:
-            unpaired += [r]
-
-        # Add remaining reads as unpaired reads
-        for r in reads:
-            unpaired += [r]
-        '''
 
         paired_lens_new = dict()
         for k,v in pairedLens.items():
@@ -1295,24 +1175,6 @@ class Alignments:
 
         unpaired = u
         paired += p
-
-
-        #calcPairedDepth = 0
-        #for p in paired:
-        #    self.calcPairedDepth += p[1][1] - p[0][0]
-        #    calcPairedDepth += p[1][1] - p[0][0]
-
-        '''
-        if float(origPairedDepth) > 0 and float(calcPairedDepth) / float(origPairedDepth) < 0.8:
-            print('%d\t-->\t%d' % (origPairedDepth, calcPairedDepth))
-            print(origReads)
-            print(origPaired)
-            print(origUnpaired)
-            print('-->')
-            print(paired)
-            print(unpaired)
-            print('')
-        '''
 
 
         for p in paired:
@@ -1459,7 +1321,8 @@ class Alignments:
                 pairLength = end - start
 
                 if coverage[start] == 0 or coverage[end-1] == 0:
-                    print('Endpoint is 0!')
+                    if self.debug:
+                        print('Endpoint is 0!')
                     continue
 
                 ''' Find starting read '''
@@ -1491,24 +1354,6 @@ class Alignments:
                         while not lensSortedLeft[i] == startLen:
                             i += 1
                         del lensSortedLeft[i]
-
-                '''
-                    for l in lensSorted:
-                        if start + l < len(coverage):
-                            startLen = l
-                            break
-
-                    # Find any length from original distribution
-                    if not startLen:
-                        for l in origLens:
-                            if start + l < len(coverage):
-                                startLen = l
-                                break
-
-                if not startLen:
-                    print('Error, start length is None!')
-                    exit()
-                '''
 
                 for i in range(start, start+startLen):
                     coverage[i] -= 1
@@ -1544,23 +1389,6 @@ class Alignments:
                             i += 1
                         del lensSortedRight[i]
 
-                '''
-                    for l in lensSorted:
-                        if l <= end:
-                            endLen = l
-                            break
-
-                    # Find any length from original distribution
-                    if not endLen:
-                        for l in origLens:
-                            if l <= end:
-                                endLen = l
-                                break
-                if not endLen:
-                    print('Error, end length is None!')
-                    exit()
-                '''
-
                 for i in range(end-endLen, end):
                     coverage[i] -= 1
 
@@ -1587,17 +1415,6 @@ class Alignments:
             coverage: Coverage vector containing the accumulation of many reads
             readLens: Dictionary containing the distribution of all read lengths in the coverage vector
             boundaries: Indicies in the coverage vector which reads cannot cross (e.g. exon boundaries in the unspliced coverage vector)
-        '''
-
-        '''
-        if boundaries == None:
-            boundaries = [0, len(coverage)]
-        else:
-            boundaries = list(boundaries)
-        if not len(boundaries) == 2:
-            print('%d boundaries' % len(boundaries))
-        boundBottom = 0
-        boundTop = len(boundaries)-1
         '''
 
         lens = readLens.keys()

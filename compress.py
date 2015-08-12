@@ -47,7 +47,7 @@ class Compressor:
                 else:
                     break
         self.chromosomes = self.parseSAMHeader(header)
-        self.aligned = alignments.Alignments(self.chromosomes)
+        self.aligned = alignments.Alignments(self.chromosomes, self.debug)
 
         print('Parsing alignments')
         self.parseAlignments(samFilename)
@@ -57,7 +57,8 @@ class Compressor:
             with open(min_filename, 'w') as f:
                 self.aligned.writeSAM(f)
 
-        print('Finalizing')
+        if self.debug:
+            print('Finalizing')
         self.aligned.finalizeReads()
 
         ''' TODO: No need for if/else? '''
@@ -306,8 +307,6 @@ class Compressor:
             # save length of chunk in file to index
             self.junctionChunkLens[chunkId] = filehandle.tell()-start
 
-        #print('Spliced: %d --> %d (%0.3f)' % (countBefore, countAfter, float(countAfter)/float(countBefore)))
-
 
     def compressUnspliced(self, filehandle, binary=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
@@ -355,9 +354,9 @@ class Compressor:
             j = bisect.bisect_right(self.aligned.exons, r.exons[0][0])-1
             readExons[r.NH][j] += [len(self.aligned.unspliced) - i - 1]
 
-            if len(r.exons) > 1:
+            if len(r.exons) > 1 and self.debug:
                 print('Error! %d exons' % len(r.exons))
-            if not r.readLen == (r.exons[0][1]-r.exons[0][0]):
+            if not r.readLen == (r.exons[0][1]-r.exons[0][0]) and self.debug:
                 print('Lengths %d and %d do not match!' % (r.readLen, r.exons[0][1]-r.exons[0][0]))
 
             if r.NH == 1:
@@ -524,39 +523,6 @@ class Compressor:
                     if len(lensLeft) > 0:
                         chunkString += binaryIO.writeLens(readLenBytes, lensRight)
 
-                '''
-                if len(unpairedLens) > 0 or len(pairedLens) > 0:
-                    s = str(unpairedLens) + '\n' + str(pairedLens) + '\n' + str(lensLeft) + '\n' + str(lensRight)
-                    unpaired.sort()
-                    paired.sort()
-
-                    #for r in unpaired:
-                    #    countBefore += r[1] - r[0]
-                    for p in paired:
-                        countBefore += p[1][1] - p[0][0]
-
-                    unpaired2, paired2 = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, covLong[self.aligned.exons[i]:self.aligned.exons[i+1]])
-                    unpaired2.sort()
-                    paired2.sort()
-
-                    #for r in unpaired2:
-                    #    countAfter += r[1] - r[0]
-                    for p in paired2:
-                        countAfter += p[1][1] - p[0][0]
-
-
-                    if not (unpaired == unpaired2 and paired == paired2):
-                        print('Segment %d - %d' % (self.aligned.exons[i], self.aligned.exons[i+1]))
-                        print(self.RLE(covLong[self.aligned.exons[i]:self.aligned.exons[i+1]]))
-                        print(s)
-                        print('-->')
-                        print(unpaired)
-                        print(unpaired2)
-                        print(paired)
-                        print(paired2)
-                        print('')
-                '''
-
                 if chunkId == self.exonChunkSize or i == len(reads)-1:
                     startPos = filehandle.tell()
                     filehandle.write(self.compressString(chunkString))
@@ -573,7 +539,8 @@ class Compressor:
             filehandle: SAM filehandle containing aligned reads
         '''
 
-        start = time.time()
+        if self.debug:
+            start = time.time()
 
         with open(filename, 'r') as filehandle:
             for line in filehandle:
@@ -606,19 +573,25 @@ class Compressor:
                 else:
                     self.aligned.processRead(r, row[0], paired=False)
 
-        t = time.time() - start
-        print('%0.3fs' % t)
-        start = time.time()
+        if self.debug:
+            t = time.time() - start
+            print('%0.3fs' % t)
+            start = time.time()
+            print('Finalizing unmatched')
 
-        print('Finalizing unmatched')
         self.aligned.finalizeUnmatched()
-        t = time.time() - start
-        print('%0.3fs' % t)
-        start = time.time()
-        print('Finalizing exons')
+
+        if self.debug:
+            t = time.time() - start
+            print('%0.3fs' % t)
+            start = time.time()
+            print('Finalizing exons')
+
         self.aligned.finalizeExons()
-        t = time.time() - start
-        print('%0.3fs' % t)
+
+        if self.debug:
+            t = time.time() - start
+            print('%0.3fs' % t)
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome
@@ -906,8 +879,6 @@ class Compressor:
         :return: A list of index pairs
         '''
 
-        #print('Generating pairs for %d reads' % len(reads))
-
         if len(reads) == 0:
             return []
 
@@ -923,7 +894,6 @@ class Compressor:
 
             if r.lenLeft > 0 or r.lenRight > 0:
                 start2 = start1 + r.readLen - r.lenLeft
-                #print('(%d,%d)' % (start1,start2))
                 node2 = readNode.ReadNode(start2)
                 root = root.addRead(node2)
 
