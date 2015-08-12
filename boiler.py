@@ -16,9 +16,9 @@ def go(args):
     if args.binary:
         binary = True
 
-    keep_pairs = False
-    if args.keep_pairs:
-        keep_pairs = True
+    debug = False
+    if args.debug:
+        debug = True
 
     compressedName = 'compressed/compressed_binary.txt'
     if args.output is not None:
@@ -26,7 +26,7 @@ def go(args):
 
     compressor = compress.Compressor()
     startTime = time.time()
-    compressor.compress(args.alignments, compressedName, args.intermediate, binary, keep_pairs)
+    compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
     endTime = time.time()
 
     print('Compression time: %0.3f s' % (endTime-startTime))
@@ -34,7 +34,7 @@ def go(args):
     if args.expand_to is not None:
         expander = expand.Expander()
         startTime = time.time()
-        expander.expand(compressedName, args.expand_to, binary)
+        expander.expand(compressedName, args.expand_to, binary, debug)
         endTime = time.time()
         print('Decompression time: %0.3f s' % (endTime-startTime))
 
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     parser.add_argument("--expand-to", type=str, help="After compressing, decompress to this filename")
     parser.add_argument("--output", type=str, help="Compressed filename")
     parser.add_argument("--intermediate", type=str, help="Name of SAM file to write to after processing but before compressing")
-    parser.add_argument("--keep-pairs", help="Store pair offsets instead of length distribution",
+    parser.add_argument("--debug", help="Print debug information",
         action="store_true")
 
     args = parser.parse_args(sys.argv[1:])

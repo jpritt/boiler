@@ -25,9 +25,11 @@ class Expander:
             self.bz2 = __import__('bz2')
 
 
-    def expand(self, compressedFilename, uncompressedFilename, binary=False):
+    def expand(self, compressedFilename, uncompressedFilename, binary=False, debug=False):
         ''' Expand both spliced and unspliced alignments
         '''
+
+        self.debug = debug
 
         self.aligned = None
 
@@ -35,36 +37,12 @@ class Expander:
             with open(compressedFilename, 'rb') as f:
                 self.readIndexBinary(f)
 
-                # Process discordant reads
-                self.discordant_spliced = []
-                self.discordant_unspliced = []
-                print('%d discordant' % len(self.discordant))
-                for i in range(len(self.discordant)):
-                    r = self.discordant[i][0]
-                    if r[0] == 0:
-                        self.discordant_spliced.append((r[1], r[2], i, 0))
-                    else:
-                        self.discordant_unspliced.append((r[0], r[1], r[2], i, 0))
-
-                    r = self.discordant[i][1]
-                    if r[0] == 0:
-                        self.discordant_spliced.append((r[1], r[2], i, 1))
-                    else:
-                        self.discordant_unspliced.append((r[0], r[1], r[2], i, 1))
-                self.discordant_spliced.sort()
-                self.discordant_unspliced.sort()
-
                 chroms = binaryIO.readChroms(f)
                 self.aligned = alignments.Alignments(chroms)
                 self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
-                self.aligned.discordant = self.discordant
 
                 self.expandUnsplicedBinary(f)
                 self.expandSplicedBinary(f, self.exonBytes)
-
-                print('Original depth: %d' % self.aligned.origPairedDepth)
-                print('Decompressed depth: %d' % self.aligned.calcPairedDepth)
-                print('%d dense' % self.aligned.countDense)
 
         else:
             with open(compressedFilename, 'r') as f:
@@ -83,9 +61,6 @@ class Expander:
         '''
 
         readLenBytes = binaryIO.readVal(f, 1)
-
-        # Id in self.discordant_spliced of next discordant read to look out for
-        discordant_id = 0
 
         # Read junctions in compressed chunks
         juncId = 0
@@ -119,14 +94,7 @@ class Expander:
                 junc.NH = key[-1]
                 junc.coverage = self.RLEtoVector(junc.coverage)
 
-                # Make a list of discordant read offsets in this partition
-                discordant_offsets = []
-                last_discordant_id = discordant_id
-                while discordant_id < len(self.discordant_spliced) and juncId-1 == self.discordant_spliced[discordant_id][0]:
-                    discordant_offsets.append(self.discordant_spliced[discordant_id][1])
-                    discordant_id += 1
-
-                unpaired, paired, discordant = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, discordant_offsets, junc.boundaries, debug)
+                unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, debug)
 
                 juncBounds = []
                 for j in junc.exons:
@@ -219,40 +187,9 @@ class Expander:
                     self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
                                                              self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
 
-                # Add discordant reads to correct list
-                for i in range(last_discordant_id, discordant_id):
-                    r = discordant[i - last_discordant_id]
-                    start = r[0]
-                    i = 0
-                    while i < (len(mapping)-1) and mapping[i+1] <= start:
-                        i += 1
-                    start += offsets[i] - mapping[i]
-
-                    end = r[1]
-                    j = 0
-                    while j < (len(mapping)-1) and mapping[j+1] < end:
-                        j += 1
-                    end += offsets[j] - mapping[j]
-
-                    readExons = []
-                    if i == j:
-                        readExons.append( [start+juncOffset, end+juncOffset] )
-                    else:
-                        readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-
-                        for x in range(i+1,j):
-                            readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-
-                        readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
-
-                    self.aligned.discordant[self.discordant_spliced[i][2]][self.discordant_spliced[i][3]] = read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH)
-
     def expandUnsplicedBinary(self, f):
         ''' Expand a file containing compressed unspliced alignments
         '''
-
-        # Id in self.discordant_unspliced of next discordant read to look out for
-        discordant_id = 0
 
         NHs = binaryIO.readVal(f, 2)
         self.sectionLen = binaryIO.readVal(f, 4)
@@ -280,14 +217,6 @@ class Expander:
                 i = 0
 
                 while startPos < len(lenDists):
-
-                    # Make a list of discordant read offsets in this partition
-                    discordant_offsets = []
-                    last_discordant_id = discordant_id
-                    while discordant_id < len(self.discordant_unspliced) and NH == self.discordant_unspliced[discordant_id][0] and i == self.discordant_unspliced[discordant_id][1]:
-                        discordant_offsets.append(self.discordant_unspliced[discordant_id][2])
-                        discordant_id += 1
-
                     i += 1
 
                     unpairedLens, startPos = binaryIO.readLens(lenDists, readLenBytes, startPos)
@@ -306,20 +235,13 @@ class Expander:
 
                         debug = False
 
-                        unpaired, paired, discordant = self.aligned.findReads(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart:exonEnd], discordant_offsets, None, debug)
+                        unpaired, paired = self.aligned.findReads(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart:exonEnd], None, debug)
 
                         for r in unpaired:
                             self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
                         for p in paired:
                             self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \
                                                                          self.aligned.getChromosome(p[1][0]+exonStart), [[p[1][0]+exonStart, p[1][1]+exonStart]], None, NH))
-
-                        # Add discordant reads to correct list
-                        for i in range(last_discordant_id, discordant_id):
-                            r = discordant[i - last_discordant_id]
-                            self.aligned.discordant[self.discordant_unspliced[i][3]][self.discordant_unspliced[i][4]] = read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH)
-                    elif len(discordant_offsets) > 0:
-                        print('Error! Discordant reads but no read lengths!')
 
     def readIndexBinary(self, f):
         '''
@@ -352,9 +274,6 @@ class Expander:
 
             # Read unspliced exons index
             self.unsplicedExonsIndex[NH], startPos = binaryIO.readList(s, startPos)
-
-        # Read discordant pairs
-        self.discordant, startPos = binaryIO.readDiscordant(s, startPos)
 
     def RLE(self, vector):
         rle = []
@@ -753,7 +672,7 @@ class Expander:
                         junc.NH = key[-1]
                         junc.coverage = self.RLEtoVector(junc.coverage)
 
-                        u, ps, _ = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, [], junc.boundaries, False)
+                        u, ps = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, False)
 
                         juncBounds = []
                         for j in junc.exons:
@@ -1015,7 +934,7 @@ class Expander:
 
                             debug = False
 
-                            u, p, _ = self.aligned.findReads(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart-first_exon:exonEnd-first_exon], [], None, debug)
+                            u, p = self.aligned.findReads(unpairedLens, pairs, lensLeft, lensRight, coverage[exonStart-first_exon:exonEnd-first_exon], None, debug)
 
                             for r in u:
                                 if r[0]+exonStart < end and r[1]+exonStart > start:

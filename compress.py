@@ -30,11 +30,13 @@ class Compressor:
         elif self.compressMethod == 2:
             self.bz2 = __import__('bz2')
 
-    def compress(self, samFilename, compressedFilename, min_filename=None, binary=False, keep_pairs=False):
+    def compress(self, samFilename, compressedFilename, min_filename=None, binary=False, debug=False):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
 
             file_prefix: Prefix for all output file names
         '''
+
+        self.debug = debug
 
         # Read header
         header = ''
@@ -49,14 +51,6 @@ class Compressor:
 
         print('Parsing alignments')
         self.parseAlignments(samFilename)
-
-
-        #for i in range(len(self.aligned.exons)):
-        #    if self.aligned.exons[i] >= 15749600:
-        #        print(i)
-        #        #print('\t'.join([str(e-44158252) for e in self.aligned.exons[i-5:i+5]]))
-        #        print('\t'.join([str(e) for e in self.aligned.exons[i-5:i+5]]))
-        #        exit()
 
         if min_filename:
             print('Writing intermediate SAM')
@@ -74,10 +68,10 @@ class Compressor:
                 s, self.exonBytes = binaryIO.writeExons(self.aligned.exons)
                 f.write(s)
 
-                junctions, maxReadLen = self.computeJunctions(keep_pairs)
+                junctions, maxReadLen = self.computeJunctions()
 
-                self.compressUnspliced(f, binary, keep_pairs)
-                self.compressSpliced(junctions, maxReadLen, f, binary, keep_pairs)
+                self.compressUnspliced(f, binary)
+                self.compressSpliced(junctions, maxReadLen, f, binary)
             
             # Write exons and index information
             compressed = None
@@ -229,7 +223,7 @@ class Compressor:
         return key, partitions, max_len
 
 
-    def computeJunctions(self, keep_pairs=False):
+    def computeJunctions(self):
 
         # Compute coverage levels across every exon junction
         partitions = dict()
@@ -240,67 +234,14 @@ class Compressor:
         for r in self.aligned.spliced:
             _, partitions, max_len = self.add_to_partition(r, max_len, partitions)
 
-        for p in self.aligned.discordant:
-            r = p[0]
-            if len(r.exons) == 1:
-                # Unspliced
-                for i in range(len(self.aligned.exons)-1):
-                    if r.exons[0][0] < self.aligned.exons[i+1]:
-                        p[0] = (r.NH, i, r.exons[0][0]-self.aligned.exons[i])
-                        break
-                self.aligned.addUnspliced(r)
-            else:
-                #print(r.exons)
-                #print(r.exonIds)
-                #print(r.startOffset)
-                #print(r.endOffset)
-                #print('')
-                # Spliced
-                key, partitions, max_len = self.add_to_partition(r, max_len, partitions)
-                p[0] = (0, key, r.startOffset)
-
-
-            r = p[1]
-            if len(r.exons) == 1:
-                # Unspliced
-                for i in range(len(self.aligned.exons)-1):
-                    if r.exons[0][0] < self.aligned.exons[i+1]:
-                        p[1] = (r.NH, i, r.exons[0][0]-self.aligned.exons[i])
-                        break
-                self.aligned.addUnspliced(r)
-            else:
-                #print(r.exons)
-                #print(r.exonIds)
-                #print(r.startOffset)
-                #print(r.endOffset)
-                #print('')
-                # Spliced
-                key, partitions, max_len = self.add_to_partition(r, max_len, partitions)
-                p[1] = (0, key, r.startOffset)
-
-
         # Junction index: list of junctions and length of each chunk
         self.sortedJuncs = sorted(partitions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
         self.junctionChunkLens = [0] * int(math.ceil(len(self.sortedJuncs) / self.junctionChunkSize))
 
-        # Replace partition keys with key ids
-        for p in self.aligned.discordant:
-            if p[0][0] == 0:
-                i = 0
-                while not p[0][1] == self.sortedJuncs[i]:
-                    i += 1
-                p[0] = (p[0][0], i, p[0][2])
-
-            if p[1][0] == 0:
-                i = 0
-                while not p[1][1] == self.sortedJuncs[i]:
-                    i += 1
-                p[1] = (p[1][0], i, p[1][2])
-
         return partitions, max_len
 
 
-    def compressSpliced(self, junctions, maxReadLen, filehandle, binary=False, keep_pairs=False):
+    def compressSpliced(self, junctions, maxReadLen, filehandle, binary=False):
         ''' Compress the spliced alignments to a single file
 
             filehandle: File to write to
@@ -327,7 +268,7 @@ class Compressor:
 
 
             if binary:
-                s += binaryIO.writeJunction(readLenBytes, junc, keep_pairs)
+                s += binaryIO.writeJunction(readLenBytes, junc)
 
                 if i == self.junctionChunkSize:
                     start = filehandle.tell()
@@ -368,7 +309,7 @@ class Compressor:
         #print('Spliced: %d --> %d (%0.3f)' % (countBefore, countAfter, float(countAfter)/float(countBefore)))
 
 
-    def compressUnspliced(self, filehandle, binary=False, keep_pairs=False):
+    def compressUnspliced(self, filehandle, binary=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
@@ -456,12 +397,12 @@ class Compressor:
             binaryIO.writeVal(filehandle, 4, self.sectionLen)
             binaryIO.writeVal(filehandle, 1, fragLenBytes)
             binaryIO.writeVal(filehandle, 1, readLenBytes)
-            self.writeUnsplicedBinary(filehandle, readExons, coverages, fragment_coverages, fragLenBytes, readLenBytes, keep_pairs)
+            self.writeUnsplicedBinary(filehandle, readExons, coverages, fragment_coverages, fragLenBytes, readLenBytes)
         else:
             self.writeUnspliced(filehandle, readExons, coverages)
 
 
-    def writeUnsplicedBinary(self, filehandle, readExons, coverages, fragment_coverages, fragLenBytes, readLenBytes, keep_pairs=False):
+    def writeUnsplicedBinary(self, filehandle, readExons, coverages, fragment_coverages, fragLenBytes, readLenBytes):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
@@ -533,10 +474,7 @@ class Compressor:
                 # Distribution of all read lengths
                 unpairedLens = dict()
 
-                if keep_pairs:
-                    pairs = []
-                else:
-                    pairedLens = dict()
+                pairedLens = dict()
 
                 # Distribution of all gap lengths in paired-end reads
                 lensLeft = dict()
@@ -552,17 +490,12 @@ class Compressor:
                     if read.lenLeft > 0 or read.lenRight > 0:
                         #paired.append([[read.exons[0][0]-start, read.exons[0][0]+read.lenLeft-start], [read.exons[-1][1]-read.lenRight-start, read.exons[-1][1]-start]])
 
-                        if keep_pairs:
-                            a = read.exons[0][0] - offset
-                            b = a + read.readLen
-                            pairs.append((a,b))
+                        # update paired read lengths distribution
+                        length = read.readLen
+                        if length in pairedLens:
+                            pairedLens[length] += 1
                         else:
-                            # update paired read lengths distribution
-                            length = read.readLen
-                            if length in pairedLens:
-                                pairedLens[length] += 1
-                            else:
-                                pairedLens[length] = 1
+                            pairedLens[length] = 1
 
                         if read.lenLeft in lensLeft:
                             lensLeft[read.lenLeft] += 1
@@ -584,22 +517,12 @@ class Compressor:
                             unpairedLens[length] = 1
 
                 chunkString += binaryIO.writeLens(readLenBytes, unpairedLens)
+                chunkString += binaryIO.writeLens(fragLenBytes, pairedLens)
 
-                if keep_pairs:
-                    pairBytes = binaryIO.findNumBytes(self.aligned.exons[i+1] - offset)
-                    chunkString += binaryIO.writePairs(pairs, pairBytes)
-
-                    if len(pairs) > 0:
-                        chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
-                        if len(lensLeft) > 0:
-                            chunkString += binaryIO.writeLens(readLenBytes, lensRight)
-                else:
-                    chunkString += binaryIO.writeLens(fragLenBytes, pairedLens)
-
-                    if len(pairedLens) > 0:
-                        chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
-                        if len(lensLeft) > 0:
-                            chunkString += binaryIO.writeLens(readLenBytes, lensRight)
+                if len(pairedLens) > 0:
+                    chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
+                    if len(lensLeft) > 0:
+                        chunkString += binaryIO.writeLens(readLenBytes, lensRight)
 
                 '''
                 if len(unpairedLens) > 0 or len(pairedLens) > 0:
@@ -807,9 +730,6 @@ class Compressor:
         
             # Write unspliced exon reads index
             s += binaryIO.writeList(self.unsplicedExonsIndex[k])
-
-        # Write discordant pairs
-        s += binaryIO.writeDiscordant(self.aligned.discordant, self.exonBytes)
 
         # Compress and write to file
         s = self.compressString(s)

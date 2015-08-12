@@ -332,11 +332,11 @@ def go(args):
     '''
 
     with open('times.txt', 'w') as f:
-        f.write('\t'.join([str(t) for f in true_times]))
+        f.write('\t'.join([str(t) for t in true_times]))
         f.write('\n')
-        f.write('\t'.join([str(t) for f in pred_times]))
+        f.write('\t'.join([str(t) for t in pred_times]))
         f.write('\n')
-        f.write('\t'.join([str(t) for f in counts]))
+        f.write('\t'.join([str(t) for t in counts]))
         f.write('\n')
         
 def go_profile(args):

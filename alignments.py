@@ -96,7 +96,6 @@ class Alignments:
 
     def finalizeUnmatched(self):
         # Finalize unmatched (discordant) reads
-        self.discordant = []
         count = 0
 
         for name,reads in self.unmatched.items():
@@ -109,54 +108,6 @@ class Alignments:
                         self.addUnspliced(r)
                     else:
                         self.addSpliced(r)
-
-                '''
-                # Sort reads by decreasing NH value
-                reads.sort(key=lambda x: x.NH, reverse=True)
-
-                num_reads = len(reads)
-                while num_reads > 1:
-                    r1 = reads[0]
-
-                    found = False
-                    for i in range(1, num_reads):
-                        r2 = reads[i]
-                        if r1.exons[0][0] == r2.pairOffset and r2.exons[0][0] == r1.pairOffset:
-                            found = True
-                            break
-
-                    if r1.chrom == '3L' and r1.exons[0][0] == 2063611:
-                        print(r1.chrom + ' ' + str(r1.exons[0][0]) + ', ' + str(r1.pairOffset))
-                        print(r2.chrom + ' ' + str(r2.exons[0][0]) + ', ' + str(r2.pairOffset))
-                        print('')
-
-                    if not found:
-                        print('No match!')
-
-                    if r1.NH > r2.NH:
-                        print('NH values not equal')
-                        new_r = read.Read(r1.chrom, r1.exons, r1.xs, r1.NH-r2.NH)
-                        r1.NH = r2.NH
-                        reads = [new_r] + reads[1:i] + reads[i+1:]
-                        num_reads -= 1
-                    elif r2.NH > r1.NH:
-                        print('NH values not equal')
-                        new_r = read.Read(r1.chrom, r1.exons, r1.xs, r2.NH-r1.NH)
-                        r2.NH = r1.NH
-                        reads = [new_r] + reads[1:i] + reads[i+1:]
-                        num_reads -= 1
-                    else:
-                        reads = reads[1:i] + reads[i+1:]
-                        num_reads -= 2
-
-                    self.discordant.append([r1, r2])
-
-                if num_reads == 1:
-                    if len(reads[0].exons) == 1:
-                        self.addUnspliced(reads[0])
-                    else:
-                        self.addSpliced(reads[0])
-                '''
 
         print('%d unmatched' % count)
 
@@ -276,47 +227,6 @@ class Alignments:
 
             # offset of end from last exon
             r.endOffset = self.exons[r.exonIds[-1] + 1] - exons[-1][1]
-
-
-        # Find splice sites in discordant pairs and compute subexons list for each read
-        for p in self.discordant:
-            for r in p:
-                # compute the length of the read
-                r.readLen = 0
-                for e in r.exons:
-                    r.readLen += e[1] - e[0]
-
-                if len(r.exons) == 1:
-                    exons = r.exons[0]
-                    spliceSites = self.findSpliceSites(exons[0], exons[1])
-
-                    if len(spliceSites) > 0:
-                        newExons = []
-                        newExons.append([exons[0], spliceSites[0]])
-                        for i in range(1, len(spliceSites)):
-                            newExons.append([spliceSites[i-1], spliceSites[i]])
-                        newExons.append([spliceSites[-1], exons[1]])
-
-                        r.exons = newExons
-
-                if len(r.exons) > 1:
-                    exons = r.exons
-
-                    # Find exons included in this read
-                    r.exonIds = []
-
-                    for segment in exons:
-                        exonId = bisect.bisect_right(self.exons, segment[0])-1
-                        while self.exons[exonId] < segment[1]:
-                            r.exonIds += [exonId]
-                            exonId += 1
-
-                    # offset of start into first exon
-                    r.startOffset = exons[0][0] - self.exons[r.exonIds[0]]
-
-                    # offset of end from last exon
-                    r.endOffset = self.exons[r.exonIds[-1] + 1] - exons[-1][1]
-
 
         # Convert paired reads to single long gapped reads for compressing
         for pair in self.paired:
@@ -1434,7 +1344,7 @@ class Alignments:
             exit()
         return best_id
 
-    def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage, discordant_starts, boundaries=None, debug=False):
+    def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage, boundaries=None, debug=False):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
 
@@ -1484,13 +1394,6 @@ class Alignments:
             #unpaired, paired = self.findPairs(reads, pairedLens)
             unpaired, paired = self.findPairsRandom(reads, pairedLens)
 
-
-        discordant = []
-        for s in discordant_starts:
-            i = self.findClosestRead(unpaired, s)
-            discordant.append(unpaired[i])
-            del unpaired[i]
-
         if debug:
             print('  Unpaired: %d\t->\t%d' % (countUnpaired, len(unpaired)))
             print('  Paired:   %d\t->\t%d' % (countPaired, len(paired)))
@@ -1509,7 +1412,7 @@ class Alignments:
                     self.badPaired += 1
                 self.countPaired += 1
 
-        return unpaired, paired, discordant
+        return unpaired, paired
 
     def findReadsWithPairs(self, unpairedLens, pairs, lensLeft, lensRight, coverage, debug=False):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
@@ -2081,65 +1984,6 @@ class Alignments:
                 filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\tNH:i:' + str(read.NH) + '\n')
             else:
                 filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
-            readId += 1
-
-        for p in self.discordant:
-            r1 = p[0]
-            exons1 = r1.exons
-            cigar1 = [str(exons1[0][1] - exons1[0][0]) + 'M']
-            for i in range(1, len(exons1)):
-                if exons1[i][0] - exons1[i-1][1] == 0:
-                    prevLen = int(cigar1[-1][:-1])
-                    cigar1[-1] = str(prevLen + exons1[i][1] - exons1[i][0]) + 'M'
-                else:
-                    cigar1 += [str(exons1[i][0] - exons1[i-1][1]) + 'N']
-                    cigar1 += [str(exons1[i][1] - exons1[i][0]) + 'M']
-            cigar1 = ''.join(cigar1)
-
-            chrom1 = r1.chrom
-            offset1 = self.chromOffsets[chrom1]
-
-            r2 = p[1]
-            exons2 = r2.exons
-            cigar2 = [str(exons2[0][1] - exons2[0][0]) + 'M']
-            for i in range(1, len(exons2)):
-                if exons2[i][0] - exons2[i-1][1] == 0:
-                    prevLen = int(cigar2[-1][:-1])
-                    cigar2[-1] = str(prevLen + exons2[i][1] - exons2[i][0]) + 'M'
-                else:
-                    cigar2 += [str(exons2[i][0] - exons2[i-1][1]) + 'N']
-                    cigar2 += [str(exons2[i][1] - exons2[i][0]) + 'M']
-            cigar2 = ''.join(cigar2)
-
-            chrom2 = r2.chrom
-            offset2 = self.chromOffsets[chrom2]
-
-            #dist = max(exons1[-1][1], exons2[-1][1]) - min(exons1[0][0], exons2[0][0])
-            dist = 0
-
-            if chrom1 == chrom2:
-                pair_chrom = '='
-            else:
-                print('Pair on different chromosomes')
-                pair_chrom = chrom2
-            if 'N' in cigar1:
-                print(chrom1+':'+str(readId) + '\t0\t' + chrom1 + '\t' + str(exons1[0][0]-offset1) + '\t50\t' + cigar1 + '\t' + pair_chrom + '\t' + str(exons2[0][0]-offset2) + '\t' + str(dist) + '\t*\t*\tXS:A:' + r1.xs + '\tNH:i:' + str(r1.NH) + '\n')
-                filehandle.write(chrom1+':'+str(readId) + '\t0\t' + chrom1 + '\t' + str(exons1[0][0]-offset1) + '\t50\t' + cigar1 + '\t' + pair_chrom + '\t' + str(exons2[0][0]-offset2) + '\t' + str(dist) + '\t*\t*\tXS:A:' + r1.xs + '\tNH:i:' + str(r1.NH) + '\n')
-            else:
-                print(chrom1+':'+str(readId) + '\t0\t' + chrom1 + '\t' + str(exons1[0][0]-offset1) + '\t50\t' + cigar1 + '\t' + pair_chrom + '\t' + str(exons2[0][0]-offset2) + '\t' + str(dist) + '\t*\t*\tNH:i:' + str(r1.NH) + '\n')
-                filehandle.write(chrom1+':'+str(readId) + '\t0\t' + chrom1 + '\t' + str(exons1[0][0]-offset1) + '\t50\t' + cigar1 + '\t' + pair_chrom + '\t' + str(exons2[0][0]-offset2) + '\t' + str(dist) + '\t*\t*\tNH:i:' + str(r1.NH) + '\n')
-
-            if chrom1 == chrom2:
-                pair_chrom = '='
-            else:
-                pair_chrom = chrom1
-            if 'N' in cigar2:
-                print(chrom1+':'+str(readId) + '\t0\t' + chrom2 + '\t' + str(exons2[0][0]-offset2) + '\t50\t' + cigar2 + '\t' + pair_chrom + '\t' + str(exons1[0][0]-offset1) + '\t' + str(-dist) + '\t*\t*\tXS:A:' + r2.xs + '\tNH:i:' + str(r2.NH) + '\n')
-                filehandle.write(chrom1+':'+str(readId) + '\t0\t' + chrom2 + '\t' + str(exons2[0][0]-offset2) + '\t50\t' + cigar2 + '\t' + pair_chrom + '\t' + str(exons1[0][0]-offset1) + '\t' + str(-dist) + '\t*\t*\tXS:A:' + r2.xs + '\tNH:i:' + str(r2.NH) + '\n')
-            else:
-                print(chrom1+':'+str(readId) + '\t0\t' + chrom2 + '\t' + str(exons2[0][0]-offset2) + '\t50\t' + cigar2 + '\t' + pair_chrom + '\t' + str(exons1[0][0]-offset1) + '\t' + str(-dist) + '\t*\t*\tNH:i:' + str(r2.NH) + '\n')
-                filehandle.write(chrom1+':'+str(readId) + '\t0\t' + chrom2 + '\t' + str(exons2[0][0]-offset2) + '\t50\t' + cigar2 + '\t' + pair_chrom + '\t' + str(exons1[0][0]-offset1) + '\t' + str(-dist) + '\t*\t*\tNH:i:' + str(r2.NH) + '\n')
-
             readId += 1
         
         for pair in self.paired:

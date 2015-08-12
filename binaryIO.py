@@ -233,34 +233,21 @@ def readJunctionsList(s, start=0):
 
     return junctions, exonBytes, start
 
-def writeJunction(readLenBytes, junc, keep_pairs=False):
+def writeJunction(readLenBytes, junc):
     s = writeCov(junc.coverage)
     s += writeLens(readLenBytes, junc.unpairedLens)
 
-    if keep_pairs:
-        # Find max number of bytes needed to encode pair offsets
-        covLen = 0
-        for c in junc.coverage:
-            covLen += c[1]
-        pairBytes = findNumBytes(covLen)
-
-        s += writePairs(junc.pairs, pairBytes)
-        if len(junc.pairs) > 0:
-            s += writeLens(readLenBytes, junc.lensLeft)
-            if len(junc.lensLeft) > 0:
-                s += writeLens(readLenBytes, junc.lensRight)
+    # Find max number of bytes needed to encode fragment lengths
+    if len(junc.pairedLens) == 0:
+        fragLenBytes = 1
     else:
-        # Find max number of bytes needed to encode fragment lengths
-        if len(junc.pairedLens) == 0:
-            fragLenBytes = 1
-        else:
-            fragLenBytes = findNumBytes(max(junc.pairedLens))
-        s += valToBinary(1, fragLenBytes)
-        s += writeLens(fragLenBytes, junc.pairedLens)
-        if len(junc.pairedLens) > 0:
-            s += writeLens(readLenBytes, junc.lensLeft)
-            if len(junc.lensLeft) > 0:
-                s += writeLens(readLenBytes, junc.lensRight)
+        fragLenBytes = findNumBytes(max(junc.pairedLens))
+    s += valToBinary(1, fragLenBytes)
+    s += writeLens(fragLenBytes, junc.pairedLens)
+    if len(junc.pairedLens) > 0:
+        s += writeLens(readLenBytes, junc.lensLeft)
+        if len(junc.lensLeft) > 0:
+            s += writeLens(readLenBytes, junc.lensRight)
 
     return s
 
@@ -307,38 +294,6 @@ def skipJunction(s, readLenBytes, start=0):
 
     return start
 '''
-
-def writeDiscordant(discordant, numBytes):
-    s = valToBinary(1, numBytes)
-    s += valToBinary(numBytes, len(discordant))
-    for p in discordant:
-        r = p[0]
-        s += valToBinary(numBytes, r[0])
-        s += valToBinary(numBytes, r[1])
-        s += valToBinary(numBytes, r[2])
-
-        r = p[1]
-        s += valToBinary(numBytes, r[0])
-        s += valToBinary(numBytes, r[1])
-        s += valToBinary(numBytes, r[2])
-    return s
-
-def readDiscordant(s, start=0):
-    numBytes, start = binaryToVal(s, 1, start)
-    num, start = binaryToVal(s, numBytes, start)
-    discordant = []
-    for _ in range(num):
-        a, start = binaryToVal(s, numBytes, start)
-        b, start = binaryToVal(s, numBytes, start)
-        c, start = binaryToVal(s, numBytes, start)
-
-        d, start = binaryToVal(s, numBytes, start)
-        e, start = binaryToVal(s, numBytes, start)
-        f, start = binaryToVal(s, numBytes, start)
-        discordant.append([(a,b,c), (d,e,f)])
-
-    return discordant, start
-
 
 def writeLens(lenBytes, lens):
     # Write number of lengths
