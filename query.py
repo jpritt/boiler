@@ -200,7 +200,6 @@ def go(args):
                 counts += [0] * add
 
             startTime = time.time()
-            print('%s: %d - %d' % (chrom, start, end))
             trueUnpaired, truePaired = sam.getReads(chrom, start, end)
             endTime = time.time()
 
