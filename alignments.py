@@ -85,7 +85,7 @@ class Alignments:
             if reads:
                 count += len(reads)
                 for r in reads:
-                    self.updateGeneBounds([r.exons[0][0], r.exons[-1][1]])
+                    self.updateGeneBoundsBinary([r.exons[0][0], r.exons[-1][1]])
 
                     if len(r.exons) == 1:
                         self.addUnspliced(r)
@@ -1665,10 +1665,10 @@ class Alignments:
                 self.exons.add(alignment[i][1])
                 self.exons.add(alignment[i+1][0])
 
-        #self.updateGeneBounds([read.exons[0][0], read.exons[-1][1]])
+        #self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
 
         if not paired:
-            self.updateGeneBounds([read.exons[0][0], read.exons[-1][1]])
+            self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
 
             # unpaired read
             if len(read.exons) == 1:
@@ -1690,7 +1690,7 @@ class Alignments:
                         start = min(match.exons[0][0], read.exons[0][0])
                         end = max(match.exons[-1][1], read.exons[-1][1])
                         if end-start < 100000:
-                            self.updateGeneBounds([start, end])
+                            self.updateGeneBoundsBackwards([start, end])
 
                         # Update NH values
                         if match.NH <= read.NH:
@@ -1741,11 +1741,14 @@ class Alignments:
         return 0
 
 
-    def updateGeneBounds(self, segment):
+    def updateGeneBoundsBackwards(self, segment):
+        '''
+        Merge this segment with the list of gene bounds, merging any intervals with < overlap_radius bases between them.
+        Search backwards from the end of the list for speed.
 
-
-        if segment[1] - segment[0] > 1000000:
-            print(segment)
+        :param segment:
+        :return:
+        '''
 
         if len(self.gene_bounds) == 0:
             self.gene_bounds = [segment]
@@ -1767,8 +1770,16 @@ class Alignments:
             self.gene_bounds[i] = segment
         else:
             self.gene_bounds = self.gene_bounds[:i] + [segment] + self.gene_bounds[j:]
-        '''
 
+
+    def updateGeneBoundsBinary(self, segment):
+        '''
+        Merge this segment with the list of gene bounds, merging any intervals with < overlap_radius bases between them.
+        Use binary search for speed
+
+        :param segment:
+        :return:
+        '''
 
         i = bisect.bisect_left(self.gene_bounds, segment)
 
@@ -1787,7 +1798,6 @@ class Alignments:
             new_gene[1] = max(self.gene_bounds[k-1][1], segment[1])
 
         self.gene_bounds = self.gene_bounds[:j] + [new_gene] + self.gene_bounds[k:]
-        '''
 
 
     def writeSAM(self, filehandle):
