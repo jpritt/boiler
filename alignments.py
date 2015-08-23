@@ -1742,6 +1742,34 @@ class Alignments:
 
 
     def updateGeneBounds(self, segment):
+
+        '''
+        if segment[1] - segment[0] > 1000000:
+            print(segment)
+
+        if len(self.gene_bounds) == 0:
+            self.gene_bounds = [segment]
+            return
+
+        j = len(self.gene_bounds)
+        while j > 0 and self.gene_bounds[j-1][0] - segment[1] > self.overlap_radius:
+            j -= 1
+        i = j
+        while i > 0 and segment[0] - self.gene_bounds[i-1][1] <= self.overlap_radius:
+            i -= 1
+
+        if i < len(self.gene_bounds):
+            segment[0] = min(segment[0], self.gene_bounds[i][0])
+        if j > 0:
+            segment[1] = max(segment[1], self.gene_bounds[j-1][1])
+
+        if j == i+1:
+            self.gene_bounds[i] = segment
+        else:
+            self.gene_bounds = self.gene_bounds[:i] + [segment] + self.gene_bounds[j:]
+        '''
+
+
         i = bisect.bisect_left(self.gene_bounds, segment)
 
         j = i
@@ -1759,6 +1787,7 @@ class Alignments:
             new_gene[1] = max(self.gene_bounds[k-1][1], segment[1])
 
         self.gene_bounds = self.gene_bounds[:j] + [new_gene] + self.gene_bounds[k:]
+
 
     def writeSAM(self, filehandle):
         ''' Write all alignments to a SAM file
