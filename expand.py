@@ -35,14 +35,31 @@ class Expander:
 
         if binary:
             with open(compressedFilename, 'rb') as f:
+                if self.debug:
+                    start = time.time()
                 self.readIndexBinary(f)
+                if self.debug:
+                    end = time.time()
+                    print('Read index time: %0.3fs' % (end-start))
+                    start = time.time()
 
                 chroms = binaryIO.readChroms(f)
                 self.aligned = alignments.Alignments(chroms, self.debug)
                 self.aligned.exons = binaryIO.readExons(f, self.exonBytes)
+                if self.debug:
+                    end = time.time()
+                    print('Read exons time: %0.3fs' % (end-start))
+                    start = time.time()
 
                 self.expandUnsplicedBinary(f)
+                if self.debug:
+                    end = time.time()
+                    print('Read unspliced time: %0.3fs' % (end-start))
+                    start = time.time()
                 self.expandSplicedBinary(f, self.exonBytes)
+                if self.debug:
+                    end = time.time()
+                    print('Read spliced time: %0.3fs' % (end-start))
 
         else:
             with open(compressedFilename, 'r') as f:

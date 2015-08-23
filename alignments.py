@@ -1743,7 +1743,7 @@ class Alignments:
 
     def updateGeneBounds(self, segment):
 
-        '''
+
         if segment[1] - segment[0] > 1000000:
             print(segment)
 
@@ -1787,6 +1787,7 @@ class Alignments:
             new_gene[1] = max(self.gene_bounds[k-1][1], segment[1])
 
         self.gene_bounds = self.gene_bounds[:j] + [new_gene] + self.gene_bounds[k:]
+        '''
 
 
     def writeSAM(self, filehandle):
