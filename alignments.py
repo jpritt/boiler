@@ -95,6 +95,28 @@ class Alignments:
         if self.debug:
             print('%d unmatched' % count)
 
+    def finalizeUnmatched_profile(self):
+        import cProfile
+        import io
+        import pstats
+        pr = cProfile.Profile()
+        pr.enable()
+
+        start = time.time()
+        self.finalizeUnmatched()
+        end = time.time()
+        print('Total time: %0.3f s' % (end-start))
+        print('')
+
+        pr.disable()
+        s = io.StringIO()
+        sortby = 'tottime'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats(30)
+        print(s.getvalue())
+
+        exit()
+
     def finalizeExons(self):
         ''' Convert the set of exon boundaries to a list
         '''
@@ -147,7 +169,6 @@ class Alignments:
                 splice_i += 1
             combined_i += 1
 
-        #print('%d identical exons in spliced and genes' % (len(self.exons)-combined_i))
         if combined_i < len(self.exons):
             self.exons = self.exons[:combined_i]
 
@@ -1721,6 +1742,8 @@ class Alignments:
 
 
     def updateGeneBounds(self, segment):
+
+        '''
         if segment[1] - segment[0] > 1000000:
             print(segment)
 
@@ -1744,8 +1767,9 @@ class Alignments:
             self.gene_bounds[i] = segment
         else:
             self.gene_bounds = self.gene_bounds[:i] + [segment] + self.gene_bounds[j:]
-
         '''
+
+
         i = bisect.bisect_left(self.gene_bounds, segment)
 
         j = i
@@ -1763,7 +1787,7 @@ class Alignments:
             new_gene[1] = max(self.gene_bounds[k-1][1], segment[1])
 
         self.gene_bounds = self.gene_bounds[:j] + [new_gene] + self.gene_bounds[k:]
-        '''
+
 
     def writeSAM(self, filehandle):
         ''' Write all alignments to a SAM file

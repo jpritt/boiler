@@ -50,7 +50,12 @@ class Compressor:
         self.aligned = alignments.Alignments(self.chromosomes, self.debug)
 
         print('Parsing alignments')
+        if self.debug:
+            start = time.time()
         self.parseAlignments(samFilename)
+        if self.debug:
+            end = time.time()
+            print('Parsing time: %0.3fs' % (end-start))
 
         if min_filename:
             print('Writing intermediate SAM')
@@ -59,7 +64,11 @@ class Compressor:
 
         if self.debug:
             print('Finalizing')
+            start = time.time()
         self.aligned.finalizeReads()
+        if self.debug:
+            end = time.time()
+            print('Finalizing time: %0.3fs' % (end-start))
 
         ''' TODO: No need for if/else? '''
         if binary:
@@ -69,18 +78,36 @@ class Compressor:
                 s, self.exonBytes = binaryIO.writeExons(self.aligned.exons)
                 f.write(s)
 
+                if self.debug:
+                    start = time.time()
                 junctions, maxReadLen = self.computeJunctions()
 
+                if self.debug:
+                    end = time.time()
+                    print('Computing junctions time: %0.3fs'% (end-start))
+                    start = time.time()
                 self.compressUnspliced(f, binary)
+                if self.debug:
+                    end = time.time()
+                    print('Unspliced time: %0.3fs'% (end-start))
+                    start = time.time()
                 self.compressSpliced(junctions, maxReadLen, f, binary)
+                if self.debug:
+                    end = time.time()
+                    print('Spliced time: %0.3fs'% (end-start))
             
             # Write exons and index information
+            if self.debug:
+                start = time.time()
             compressed = None
             with open(compressedFilename, 'rb') as f:
                 compressed = f.read()
             with open(compressedFilename, 'wb') as f:
                 self.writeIndexBinary(f)
                 f.write(compressed)
+            if self.debug:
+                end = time.time()
+                print('Writing index time: %0.3fs' % (end-start))
 
         else:
             with open(compressedFilename, 'w') as f:
