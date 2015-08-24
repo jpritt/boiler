@@ -77,11 +77,10 @@ def go(args):
 
     lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
     #lens = [10000,100000]
-    #chroms = ['2R', '2L', '3R', '3L', 'X']
-    chroms = ['2R']
+    chroms = ['2R', '2L', '3R', '3L', 'X']
     chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
 
-    '''
+
     print('Querying coverage')
     for l in lens:
         timeTrue = 0.0
@@ -122,49 +121,10 @@ def go(args):
         print('Length %d:' % l)
         print('  SAM:        %0.3f s' % timeTrueAvg)
         print('  Compressed: %0.3f s' % timePredAvg)
-    '''
+
 
     print('Querying reads')
 
-    '''
-    trueUnpaired,truePaired = sam.getReads('2R', 14020520, 14021520)
-    #print('Unpaired (%d):' % len(u))
-    #print(u)
-    #print('Paired (%d):' % len(p))
-    #print(p)
-
-    #print('')
-    predUnpaired,predPaired = expander.getReads(args['compressed'], '2R', 14020520, 14021520)
-    #print('Unpaired (%d):' % len(u))
-    #print(u)
-    #print('Paired (%d):' % len(p))
-    #print(p)
-
-    pred = predUnpaired[:]
-    correctUnpaired = 0
-    for r in trueUnpaired:
-        for i in range(len(pred)):
-            if r == pred[i]:
-                correctUnpaired += 1
-                del pred[i]
-                break
-
-    pred = predPaired[:]
-    correctPaired = 0
-    for r in truePaired:
-        for i in range(len(pred)):
-            if r == pred[i]:
-                correctPaired += 1
-                del pred[i]
-                break
-
-    print('Unpaired:')
-    print('%d true reads, %d predicted, %d correct' % (len(trueUnpaired), len(predUnpaired), correctUnpaired))
-    print('Paired:')
-    print('%d true reads, %d predicted, %d correct' % (len(truePaired), len(predPaired), correctPaired))
-    print('')
-    exit()
-    '''
 
     # Index i in these lists corresponds to the range of lengths [10^i, 10^(i+1))
     true_times = []
@@ -199,9 +159,23 @@ def go(args):
                 pred_times += [0] * add
                 counts += [0] * add
 
-            startTime = time.time()
+            import cProfile
+            import pstats
+            import io
+            pr = cProfile.Profile()
+            pr.enable()
+
+            #startTime = time.time()
             trueUnpaired, truePaired = sam.getReads(chrom, start, end)
-            endTime = time.time()
+            #endTime = time.time()
+
+            pr.disable()
+            s = io.StringIO()
+            sortby = 'tottime'
+            ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            ps.print_stats(30)
+            print(s.getvalue())
+            exit()
 
             true_times[bin] += float(endTime - startTime)
 
