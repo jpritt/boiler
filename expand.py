@@ -16,7 +16,8 @@ class Expander:
     # 2 - bz2
     compressMethod = 0
 
-    def __init__(self):    
+    def __init__(self):
+        self.debug = False
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
         elif self.compressMethod == 1:

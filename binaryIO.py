@@ -210,26 +210,30 @@ def readJunctionsList(s, start=0):
     for j in range(numJunctions):
         # Read number of exons
         v = unpack_from('b', s[start:start+1])[0]
+
         start += 1
-        numExons = abs(v)
 
         # Read XS value
         if v < 0:
             xs = '-'
+            numExons = -v
         else:
             xs = '+'
-        
+            numExons = v
 
         # Read exons
-        juncExons = [0] * numExons
+        juncExons = [0] * (numExons+2)
         for e in range(numExons):
             juncExons[e], start = binaryToVal(s, exonBytes, start)
 
         # Read NH value
         NH, start = binaryToVal(s, 2, start)
 
+        juncExons[-2] = xs
+        juncExons[-1] = NH
+
         # Create junction string
-        junctions[j] = juncExons + [xs, NH]
+        junctions[j] = juncExons
 
     return junctions, exonBytes, start
 
