@@ -159,15 +159,26 @@ def go(args):
                 pred_times += [0] * add
                 counts += [0] * add
 
+            startTime = time.time()
+            trueUnpaired, truePaired = sam.getReads(chrom, start, end)
+            endTime = time.time()
+
+            print('True time: %0.3fs' % (endTime-startTime))
+
+            true_times[bin] += float(endTime - startTime)
+
             import cProfile
             import pstats
             import io
             pr = cProfile.Profile()
             pr.enable()
 
-            #startTime = time.time()
-            trueUnpaired, truePaired = sam.getReads(chrom, start, end)
-            #endTime = time.time()
+            startTime = time.time()
+            predUnpaired, predPaired = expander.getReads(args['compressed'], chrom, start, end)
+            endTime = time.time()
+
+            print('Pred time: %0.3fs' % (endTime-startTime))
+            print('')
 
             pr.disable()
             s = io.StringIO()
@@ -176,12 +187,6 @@ def go(args):
             ps.print_stats(30)
             print(s.getvalue())
             exit()
-
-            true_times[bin] += float(endTime - startTime)
-
-            startTime = time.time()
-            predUnpaired, predPaired = expander.getReads(args['compressed'], chrom, start, end)
-            endTime = time.time()
 
             pred_times[bin] += float(endTime - startTime)
             counts[bin] += 1
