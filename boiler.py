@@ -34,7 +34,22 @@ def go(args):
     if args.expand_to is not None:
         expander = expand.Expander()
         startTime = time.time()
+
+        import cProfile
+        import pstats
+        import io
+        pr = cProfile.Profile()
+        pr.enable()
+
         expander.expand(compressedName, args.expand_to, binary, debug)
+
+        pr.disable()
+        s = io.StringIO()
+        sortby = 'tottime'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats(30)
+        print(s.getvalue())
+
         endTime = time.time()
         print('Decompression time: %0.3f s' % (endTime-startTime))
 

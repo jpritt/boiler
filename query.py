@@ -68,6 +68,11 @@ def go(args):
                 row = line.strip().split('\t')
                 chromosomes[row[1][3:]] = int(row[2][3:])
 
+    expander = expand.Expander()
+    for chrom in ['2R', '2L', '3R', '3L', '4', 'M', 'X']:
+        cov = expander.getCoverage(args['compressed'], chrom)
+    exit()
+
     sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
     expander = expand.Expander()
     pro = readPRO.ReadPRO(args['pro'])
