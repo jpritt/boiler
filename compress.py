@@ -9,6 +9,7 @@ import binaryIO
 import math
 import readNode
 import time
+import os
 
 class Compressor:
     aligned = None
@@ -48,6 +49,9 @@ class Compressor:
                     break
         self.chromosomes = self.parseSAMHeader(header)
         self.aligned = alignments.Alignments(self.chromosomes, self.debug)
+
+        self.compressByCluster(samFilename, compressedFilename, min_filename)
+        return
 
         print('Parsing alignments')
         if self.debug:
@@ -130,7 +134,7 @@ class Compressor:
 
                 f.write(compressed)
 
-    def add_to_partition(self, r, max_len, partitions):
+    def add_to_partition(self, r, max_len, partitions, debug=False):
         '''
 
         :param r: Read to add
@@ -163,6 +167,11 @@ class Compressor:
                 partitions[key].NH = r.NH
 
                 partitions[key].countBefore = 0
+
+                if debug:
+                    print(key)
+                    print(partitions[key].coverage)
+                    print('')
             j = partitions[key]
         else:
             # XS not defined for this read, so see which one (+/-) is in the dict already or add + by default
@@ -200,6 +209,11 @@ class Compressor:
                 partitions[key1].countBefore = 0
 
                 j = partitions[key1]
+
+                if debug:
+                    print(key1)
+                    print(partitions[key1].coverage)
+                    print('')
 
                 key = key1
 
@@ -251,7 +265,7 @@ class Compressor:
         return key, partitions, max_len
 
 
-    def computeJunctions(self):
+    def computeJunctions(self, debug=False):
 
         # Compute coverage levels across every exon junction
         partitions = dict()
@@ -269,70 +283,42 @@ class Compressor:
         return partitions, max_len
 
 
-    def compressSpliced(self, junctions, maxReadLen, filehandle, binary=False):
+    def compressSpliced(self, junctions, maxReadLen, filehandle, binary=False, debug=False):
         ''' Compress the spliced alignments to a single file
 
             filehandle: File to write to
         '''
 
-        if binary:
-            # Determine the number of bytes for read lengths
-            readLenBytes = binaryIO.findNumBytes(maxReadLen)
-            binaryIO.writeVal(filehandle, 1, readLenBytes)
+        # Determine the number of bytes for read lengths
+        readLenBytes = binaryIO.findNumBytes(maxReadLen)
+        s = binaryIO.valToBinary(1, readLenBytes)
 
-        i = 0
-        s = b''
-        chunkId = 0
+        s += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
+
         for key in self.sortedJuncs:
-            i += 1
-
-
             junc = junctions[key]
 
-            c = []
-            for x in junc.coverage:
-                c += [x[0]] * x[1]
+            #c = []
+            #for x in junc.coverage:
+            #    c += [x[0]] * x[1]
 
-
+            #if debug:
+            #    print(junc.coverage)
+            #    print(junc.unpairedLens)
+            #    print(junc.pairedLens)
 
             if binary:
                 s += binaryIO.writeJunction(readLenBytes, junc)
-
-                if i == self.junctionChunkSize:
-                    start = filehandle.tell()
-
-                    # Write to file
-                    filehandle.write(self.compressString(s))
-
-                    # save length of chunk in file to index
-                    self.junctionChunkLens[chunkId] = filehandle.tell()-start
-                    chunkId += 1
-
-                    i = 0
-                    s = b''
             else:
-                # write junction information
-                filehandle.write('>' + key + '\n')
+                print('Non-binary spliced encoding is not supported')
+                exit()
 
-                # write read lengths
-                filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.unpairedLens.items()] ) + '\n')
-                filehandle.write('\t'.join( [str(k)+','+str(v) for k,v in junc.pairedLens.items()] ) + '\n')
+        # Write to file
+        start = filehandle.tell()
+        filehandle.write(self.compressString(s))
 
-                # Write left and right read lengths
-                filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensLeft.items()]) + '\n')
-                filehandle.write('\t'.join([str(k)+','+str(v) for k,v in junc.lensRight.items()]) + '\n')
-
-                # write coverage
-                self.writeRLE(junc.coverage, filehandle)
-        if binary and i > 0:
-            # Write final junctions
-            start = filehandle.tell()
-
-            # Write to file
-            filehandle.write(self.compressString(s))
-
-            # save length of chunk in file to index
-            self.junctionChunkLens[chunkId] = filehandle.tell()-start
+        # return length of chunk in file
+        return filehandle.tell()-start
 
 
     def compressUnspliced(self, filehandle, binary=False):
@@ -341,13 +327,18 @@ class Compressor:
             filename: Name of file to compress to
         '''
 
+        st = time.time()
+
         maxFragLen = 0
         maxReadLen = 0
 
-        # sort reads into exons
-        readExons = dict()
+        # divide reads by NH value
+        reads_by_NH = dict()
         coverages = dict()
         fragment_coverages = dict()
+
+        range_start = self.aligned.exons[0]
+        range_end = self.aligned.exons[-1]
 
         for i in range(len(self.aligned.unspliced)):
             r = self.aligned.unspliced[len(self.aligned.unspliced) - i - 1]
@@ -365,88 +356,89 @@ class Compressor:
                     if r.readLen > maxFragLen:
                         maxFragLen = r.readLen
 
-            if not r.NH in readExons:
-                readExons[r.NH] = []
+            if not r.NH in reads_by_NH:
+                reads_by_NH[r.NH] = []
                 for n in range(len(self.aligned.exons)-1):
-                    readExons[r.NH] += [[]]
+                    reads_by_NH[r.NH] += [[]]
 
                 if r.NH == 1:
-                    coverages[r.NH] = [0] * self.aligned.exons[-1]
-                    fragment_coverages[r.NH] = [0] * self.aligned.exons[-1]
+                    coverages[r.NH] = [0] * (range_end - range_start)
+                    #fragment_coverages[r.NH] = [0] * self.aligned.exons[-1]
                 else:
-                    coverages[r.NH] = [ [0, self.aligned.exons[-1]] ]
-                    fragment_coverages[r.NH] = [ [0, self.aligned.exons[-1]] ]
-
+                    coverages[r.NH] = [ [0, range_end-range_start] ]
+                    #fragment_coverages[r.NH] = [ [0, self.aligned.exons[-1]] ]
 
             j = bisect.bisect_right(self.aligned.exons, r.exons[0][0])-1
-            readExons[r.NH][j] += [len(self.aligned.unspliced) - i - 1]
+            reads_by_NH[r.NH][j] += [len(self.aligned.unspliced) - i - 1]
 
-            if len(r.exons) > 1 and self.debug:
-                print('Error! %d exons' % len(r.exons))
-            if not r.readLen == (r.exons[0][1]-r.exons[0][0]) and self.debug:
-                print('Lengths %d and %d do not match!' % (r.readLen, r.exons[0][1]-r.exons[0][0]))
+            if self.debug:
+                if len(r.exons) > 1:
+                    print('Error! %d exons' % len(r.exons))
+                if not r.readLen == (r.exons[0][1]-r.exons[0][0]):
+                    print('Lengths %d and %d do not match!' % (r.readLen, r.exons[0][1]-r.exons[0][0]))
 
             if r.NH == 1:
-                for n in range(r.exons[0][0], r.exons[0][1]):
-                    fragment_coverages[r.NH][n] += 1
+                #for n in range(r.exons[0][0], r.exons[0][1]):
+                #    fragment_coverages[r.NH][n] += 1
 
                 # update coverage vector
                 if r.lenLeft == 0 and r.lenRight == 0:
-                    for n in range(r.exons[0][0], r.exons[0][1]):
+                    for n in range(r.exons[0][0]-range_start, r.exons[0][1]-range_start):
                         coverages[r.NH][n] += 1
-                        fragment_coverages[r.NH][n] += 1
+                        #fragment_coverages[r.NH][n] += 1
                 else:
-                    for n in range(r.exons[0][0], r.exons[0][0]+r.lenLeft):
+                    for n in range(r.exons[0][0]-range_start, r.exons[0][0]-range_start+r.lenLeft):
                         coverages[r.NH][n] += 1
-                    for n in range(r.exons[0][1]-r.lenRight, r.exons[0][1]):
+                    for n in range(r.exons[0][1]-range_start-r.lenRight, r.exons[0][1]-range_start):
                         coverages[r.NH][n] += 1
             else:
-                fragment_coverages[r.NH] = self.updateRLE(fragment_coverages[r.NH], r.exons[0][0], r.exons[0][1]-r.exons[0][0], 1)
+                #fragment_coverages[r.NH] = self.updateRLE(fragment_coverages[r.NH], r.exons[0][0], r.exons[0][1]-r.exons[0][0], 1)
 
                 # update coverage vector
                 if r.lenLeft == 0 and r.lenRight == 0:
-                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.exons[0][1]-r.exons[0][0], 1)
+                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0]-range_start, r.exons[0][1]-r.exons[0][0], 1)
                 else:
-                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0], r.lenLeft, 1)
-                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-r.lenRight, r.lenRight, 1)
+                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][0]-range_start, r.lenLeft, 1)
+                    coverages[r.NH] = self.updateRLE(coverages[r.NH], r.exons[0][1]-range_start-r.lenRight, r.lenRight, 1)
 
-        coverages[1] = self.RLE(coverages[1])
-        fragment_coverages[1] = self.RLE(fragment_coverages[1])
+
+        if 1 in coverages:
+            coverages[1] = self.RLE(coverages[1])
+            #fragment_coverages[1] = self.RLE(fragment_coverages[1])
 
         if binary:
             # find length in bytes to fit fragment and read lengths
             fragLenBytes = binaryIO.findNumBytes(maxFragLen)
             readLenBytes = binaryIO.findNumBytes(maxReadLen)
 
-            # Write number of exons and NH values
-            binaryIO.writeVal(filehandle, 2, len(coverages))
-            binaryIO.writeVal(filehandle, 4, self.sectionLen)
-            binaryIO.writeVal(filehandle, 1, fragLenBytes)
-            binaryIO.writeVal(filehandle, 1, readLenBytes)
-            self.writeUnsplicedBinary(filehandle, readExons, coverages, fragment_coverages, fragLenBytes, readLenBytes)
+            length = self.writeUnsplicedBinary(filehandle, reads_by_NH, coverages, fragment_coverages, fragLenBytes, readLenBytes)
+            return length
         else:
-            self.writeUnspliced(filehandle, readExons, coverages)
+            print('Non-binary unspliced compression not supported')
+            exit()
+            self.writeUnspliced(filehandle, reads_by_NH, coverages)
 
 
-    def writeUnsplicedBinary(self, filehandle, readExons, coverages, fragment_coverages, fragLenBytes, readLenBytes):
+    def writeUnsplicedBinary(self, filehandle, reads_by_NH, coverages, fragment_coverages, fragLenBytes, readLenBytes):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
         '''
 
-        # For each NH value and for each exon, store the byte offset in the file for the given exon in the coverage vector
-        self.unsplicedIndex = dict()
-        self.unsplicedExonsIndex = dict()
+        s = binaryIO.valToBinary(2, len(coverages))
+        s += binaryIO.valToBinary(1, fragLenBytes)
+        s += binaryIO.valToBinary(1, readLenBytes)
 
-        breakpoints = range(0, self.aligned.exons[-1], self.sectionLen)
-
-        for NH in sorted(readExons.keys()):
-            binaryIO.writeVal(filehandle, 2, NH)
+        for NH in sorted(reads_by_NH.keys()):
+            s += binaryIO.valToBinary(2, NH)
 
             #cov = fragment_coverages[NH]
             cov = coverages[NH]
-            reads = readExons[NH]
+            reads = reads_by_NH[NH]
 
+            s += binaryIO.writeCov(cov)
+
+            '''
             # Write coverage vector
             offsets = [0] * len(breakpoints)
 
@@ -460,7 +452,7 @@ class Compressor:
                     length = breakpoints[currBreakpoint+1] - pos
                     if length > 0:
                         segmentRLE.append([c[0], length])
-                    
+
                     if len(segmentRLE) == 1 and segmentRLE[0][0] == 0:
                         offsets[currBreakpoint] = 0
                     else:
@@ -486,16 +478,12 @@ class Compressor:
                     offsets[currBreakpoint] = filehandle.tell() - start
 
             self.unsplicedIndex[NH] = offsets
+            '''
 
-
-            # Write lengths for each exon
-            exonsIndex = []
-            chunkId = 0
-            chunkString = b''
+            # Write read length distributions
             for i in range(len(reads)):
                 start = self.aligned.exons[i]
 
-                chunkId += 1
 
                 # Distribution of all read lengths
                 unpairedLens = dict()
@@ -542,22 +530,226 @@ class Compressor:
                         else:
                             unpairedLens[length] = 1
 
-                chunkString += binaryIO.writeLens(readLenBytes, unpairedLens)
-                chunkString += binaryIO.writeLens(fragLenBytes, pairedLens)
+                s += binaryIO.writeLens(readLenBytes, unpairedLens)
+                s += binaryIO.writeLens(fragLenBytes, pairedLens)
 
                 if len(pairedLens) > 0:
-                    chunkString += binaryIO.writeLens(readLenBytes, lensLeft)
+                    s += binaryIO.writeLens(readLenBytes, lensLeft)
                     if len(lensLeft) > 0:
-                        chunkString += binaryIO.writeLens(readLenBytes, lensRight)
+                        s += binaryIO.writeLens(readLenBytes, lensRight)
 
-                if chunkId == self.exonChunkSize or i == len(reads)-1:
-                    startPos = filehandle.tell()
-                    filehandle.write(self.compressString(chunkString))
-                    exonsIndex.append(filehandle.tell() - startPos)
-                    chunkId = 0
-                    chunkString = b''
+        startPos = filehandle.tell()
+        filehandle.write(self.compressString(s))
+        return filehandle.tell() - startPos
 
-            self.unsplicedExonsIndex[NH] = exonsIndex
+
+    def compressByCluster(self, input_name, compressed_name, intermediate_name=None):
+        '''
+        Read a sorted SAM file and compress in segments determined by clusters of reads
+
+        :param filename:
+        :return:
+        '''
+
+        countUnspliced = 0
+        countSpliced = 0
+        countPaired = 0
+
+        # If coverage is 0 for at least this many bases end of a potential gene
+        overlapRadius = 50
+
+        if self.debug:
+            start_time = time.time()
+
+        unspliced_index = []
+        spliced_index = []
+        clusters = []
+
+        step = 0
+
+        tf = open('temp.sam', 'w')
+
+        first = True
+
+        with open(input_name, 'r') as filehandle:
+            # End of current potential gene
+            gene_end = 0
+
+            for line in filehandle:
+                row = line.strip().split('\t')
+
+                if len(row) > 5:
+                    row2 = row[:]
+                    row2[0] = row2[0][:14]
+                    row2[9] = '*'
+                    row2[10] = '*'
+                    tf.write('\t'.join(row2) + '\n')
+                else:
+                    tf.write(line)
+
+                #print(row)
+
+                # Check if header line
+                if len(row) < 5:
+                    continue
+
+                if not row[2] in self.chromosomes.keys():
+                    print('Chromosome ' + str(row[2]) + ' not found!')
+                    continue
+
+                start = self.aligned.chromOffsets[row[2]] + int(row[3])
+
+                if gene_end > 0 and start > gene_end + overlapRadius:
+                    # Compress most recent cluster
+                    self.aligned.exons.add(gene_end)
+
+                    # TODO: Find accuracy lost by tossing far away paired reads
+                    #self.aligned.finalizeUnmatchedCluster(gene_end)
+
+                    st = time.time()
+                    self.aligned.finalizeUnmatched()
+                    self.aligned.finalizeExons()
+
+                    clusters.append(self.aligned.exons)
+
+                    if intermediate_name:
+                        if first:
+                            with open(intermediate_name, 'w') as f:
+                                self.aligned.writeSAM(f, True)
+                            first = False
+                        else:
+                            with open(intermediate_name, 'a') as f:
+                                self.aligned.writeSAM(f, False)
+
+                    self.aligned.finalizeReads()
+                    et = time.time()
+
+                    countUnspliced += len(self.aligned.unspliced)
+                    countSpliced += len(self.aligned.spliced)
+                    countPaired += len(self.aligned.paired)
+
+                    #print('Compressing cluster (%d, %d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
+                    #print('  %d unspliced' % len(self.aligned.unspliced))
+                    #print('  %d spliced' % len(self.aligned.spliced))
+
+                    debug = False
+                    if step == 0:
+                        step += 1
+                    elif step == 1:
+                        step += 1
+                        debug = True
+
+                    #countUnspliced += len(self.aligned.unspliced)
+                    #countSpliced += len(self.aligned.spliced)
+                    #countPaired += len(self.aligned.paired)
+
+                    junctions, maxReadLen = self.computeJunctions(debug)
+
+                    with open('temp.bin', 'ab') as f:
+                        l = self.compressUnspliced(f, binary=True)
+                        unspliced_index.append(l)
+
+                        l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=debug)
+                        spliced_index.append(l)
+
+                    #break
+
+                    # Start new cluster
+                    self.aligned.resetCluster()
+                    self.aligned.exons.add(start)
+
+
+                exons = self.parseCigar(row[5], int(row[3]))
+
+                # find XS value:
+                xs = None
+                NH = 1
+                for r in row[11 : len(row)]:
+                    if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                        xs = r[5]
+                    elif r[0:3] == 'NH:':
+                        NH = int(r[5:])
+
+
+                r = read.Read(row[2], exons, xs, NH)
+                if row[6] == '=':
+                    r.pairOffset = int(row[7])
+                    end = self.aligned.processRead(r, row[0], paired=True)
+                else:
+                    end = self.aligned.processRead(r, row[0], paired=False)
+
+                if end > gene_end:
+                    gene_end = end
+
+            tf.close()
+
+
+            # Compress final cluster
+            self.aligned.exons.add(gene_end)
+
+            # TODO: Find accuracy lost by tossing far away paired reads
+            #self.aligned.finalizeUnmatchedCluster(gene_end)
+
+            st = time.time()
+            self.aligned.finalizeUnmatched()
+            self.aligned.finalizeExons()
+
+            clusters.append(self.aligned.exons)
+
+            if intermediate_name:
+                with open(intermediate_name, 'a') as f:
+                    self.aligned.writeSAM(f, first)
+
+            self.aligned.finalizeReads()
+            et = time.time()
+
+            #print('Compressing cluster (%d, %d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
+            #print('  %d unspliced' % len(self.aligned.unspliced))
+            #print('  %d spliced' % len(self.aligned.spliced))
+
+            debug = False
+            if step == 0:
+                step += 1
+            elif step == 1:
+                step += 1
+                debug = True
+
+            junctions, maxReadLen = self.computeJunctions(debug)
+
+            countUnspliced += len(self.aligned.unspliced)
+            countSpliced += len(self.aligned.spliced)
+            countPaired += len(self.aligned.paired)
+
+            with open('temp.bin', 'ab') as f:
+                l = self.compressUnspliced(f, binary=True)
+                unspliced_index.append(l)
+
+                l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=debug)
+                spliced_index.append(l)
+
+
+        # Write index information and append spliced and unspliced files
+        with open(compressed_name, 'wb') as f:
+            s = binaryIO.writeChroms(self.aligned.chromosomes)
+            s += binaryIO.writeClusters(clusters)
+            s += binaryIO.writeList(unspliced_index)
+            s += binaryIO.writeList(spliced_index)
+            f.write(s)
+
+            with open('temp.bin', 'rb') as f2:
+                f.write(f2.read())
+
+        os.remove('temp.bin')
+
+
+        if self.debug:
+            end_time = time.time()
+            print('Compression time: %0.3fs' % (end_time - start_time))
+
+        print(countUnspliced)
+        print(countSpliced)
+        print(countPaired)
+        print('')
 
     def parseAlignments(self, filename):
         ''' Parse a file in SAM format

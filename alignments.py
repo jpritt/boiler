@@ -28,10 +28,6 @@ class Alignments:
         self.calcPairedDepth = 0
         self.countDense = 0
 
-        self.pairedCounts = [0] * 14
-        self.unpairedCounts = [0] * 14
-
-
         self.totalPaired = 0
         self.totalUnpaired = 0
 
@@ -44,7 +40,7 @@ class Alignments:
         self.chromosomeNames = sorted(chromosomes.keys())
 
         # Initialize exon breaks between all chromosomes
-        self.exons = [0]
+        self.exons = set()
 
         # Offset of each chromosome from the start of the genome
         self.chromOffsets = dict()
@@ -53,9 +49,9 @@ class Alignments:
         for c in self.chromosomeNames:
             self.chromOffsets[c] = nextOffset
             nextOffset += chromosomes[c]
-            self.exons += [nextOffset]
+            #self.exons += [nextOffset]
 
-        self.exons = set(self.exons)
+        #self.exons = set(self.exons)
 
         # List of potential gene boundaries as tuples
         self.gene_bounds = []
@@ -92,35 +88,48 @@ class Alignments:
                     else:
                         self.addSpliced(r)
 
+        self.unmatched = dict()
+
         if self.debug:
             print('%d unmatched' % count)
 
-    def finalizeUnmatched_profile(self):
-        import cProfile
-        import io
-        import pstats
-        pr = cProfile.Profile()
-        pr.enable()
+    def finalizeUnmatchedCluster(self, end):
+        # Finalize unmatched (discordant) reads
+        count = 0
 
-        start = time.time()
-        self.finalizeUnmatched()
-        end = time.time()
-        print('Total time: %0.3f s' % (end-start))
-        print('')
+        newUnmatched = dict()
 
-        pr.disable()
-        s = io.StringIO()
-        sortby = 'tottime'
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats(30)
-        print(s.getvalue())
+        for name,reads in self.unmatched.items():
+            # Reads whose pairs extend outside the given range
+            remaining = []
 
-        exit()
+            for r in reads:
+                if r.pairOffset <= end:
+                    count += 1
+
+                    self.updateGeneBoundsBinary([r.exons[0][0], r.exons[-1][1]])
+
+                    if len(r.exons) == 1:
+                        self.addUnspliced(r)
+                    else:
+                        self.addSpliced(r)
+                else:
+                    remaining.append(r)
+
+            if remaining:
+                newUnmatched[name] = remaining
+                count += len(remaining)
+
+        print(count)
+        # Reset unmatched for next cluster
+        self.unmatched = newUnmatched
+
+        if self.debug:
+            print('%d unmatched' % count)
 
     def finalizeExons(self):
         ''' Convert the set of exon boundaries to a list
         '''
-
 
         if self.debug:
             print('Sorting spliced subexons')
@@ -162,12 +171,12 @@ class Alignments:
             while gene_i < len(gene_exons):
                 self.exons[combined_i] = gene_exons[gene_i]
                 gene_i += 1
-            combined_i += 1
+                combined_i += 1
         elif gene_i == len(gene_exons):
             while splice_i < len(splice_exons):
                 self.exons[combined_i] = splice_exons[splice_i]
                 splice_i += 1
-            combined_i += 1
+                combined_i += 1
 
         if combined_i < len(self.exons):
             self.exons = self.exons[:combined_i]
@@ -315,7 +324,13 @@ class Alignments:
                 self.unspliced += [newRead]
             else:
                 self.spliced += [newRead]
-        del self.paired
+
+    def resetCluster(self):
+        self.exons = set()
+        self.gene_bounds = []
+        self.unspliced = []
+        self.spliced = []
+        self.paired = []
 
     # Returns the element from list1 and the element from list2 with the smallest distance between them
     def findClosestVals(self, list1, list2):
@@ -1267,6 +1282,17 @@ class Alignments:
 
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
 
+        if coverage[:774] == [0]*773 + [1]:
+            print(coverage)
+            print(unpairedLens)
+            print(pairedLens)
+            print(lensLeft)
+            print(lensRight)
+            print('')
+            print(reads)
+            print('')
+
+
         if debug:
             print('Reads:')
             print(reads)
@@ -1667,8 +1693,12 @@ class Alignments:
 
         #self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
 
-        if not paired:
+        if paired:
+            read.pairOffset += offset
+
+        if not paired or abs(read.pairOffset - read.exons[0][0]) > 100000:
             self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
+            gene_end = read.exons[-1][1]
 
             # unpaired read
             if len(read.exons) == 1:
@@ -1676,7 +1706,8 @@ class Alignments:
             else:
                 self.addSpliced(read)
         else:
-            read.pairOffset += offset
+            gene_end = max(read.exons[-1][1], read.pairOffset)
+
             if name in self.unmatched:
                 foundMatch = False
                 for i in range(len(self.unmatched[name])):
@@ -1689,8 +1720,8 @@ class Alignments:
 
                         start = min(match.exons[0][0], read.exons[0][0])
                         end = max(match.exons[-1][1], read.exons[-1][1])
-                        if end-start < 100000:
-                            self.updateGeneBoundsBackwards([start, end])
+                        #if end-start < 100000:
+                        self.updateGeneBoundsBackwards([start, end])
 
                         # Update NH values
                         if match.NH <= read.NH:
@@ -1709,6 +1740,8 @@ class Alignments:
                     self.unmatched[name].append(read)
             else:
                 self.unmatched[name] = [read]
+
+        return gene_end
 
     def conflicts(self, exonsA, exonsB):
         '''
@@ -1800,14 +1833,15 @@ class Alignments:
         self.gene_bounds = self.gene_bounds[:j] + [new_gene] + self.gene_bounds[k:]
 
 
-    def writeSAM(self, filehandle):
+    def writeSAM(self, filehandle, header=True):
         ''' Write all alignments to a SAM file
         '''
-        
+
         # write header
-        filehandle.write('@HD\tVN:1.0\tSO:unsorted\n')
-        for k,v in self.chromosomes.items():
-            filehandle.write('@SQ\tSN:' + str(k) + '\tLN:' + str(v) + '\n')
+        if header:
+            filehandle.write('@HD\tVN:1.0\tSO:unsorted\n')
+            for k,v in self.chromosomes.items():
+                filehandle.write('@SQ\tSN:' + str(k) + '\tLN:' + str(v) + '\n')
 
         readId = 0
         for read in self.unspliced:

@@ -154,6 +154,16 @@ def readList(s, start=0):
         vals[i], start = binaryToVal(s, valBytes, start)
     return vals, start
 
+def readListFromFile(f):
+    ''' Generic method to read a list of integers in the format written by writeList() '''
+    valBytes = readVal(f, 1)
+    numVals = readVal(f, 4)
+
+    vals = [0] * numVals
+    for i in range(numVals):
+        vals[i] = readVal(f, valBytes)
+    return vals
+
 def writeExons(exons):
     ''' Write the list of exons. More specific version of writeList() above '''
     maxExon = exons[-1]
@@ -181,6 +191,51 @@ def readExons(f, numExonBytes):
     for _ in range(numExons):
         exons.append(readVal(f, exonBytes))
     return exons
+
+def writeClusters(clusters):
+    '''
+
+    :param clusters: 2d list of splice sites, grouped by cluster
+    :return:
+    '''
+
+    maxExon = clusters[-1][-1]
+
+    # find length in bytes to fit all numbers
+    exonBytes = findNumBytes(maxExon)
+
+    # length in bytes to fit all exon ids
+    max_exons = 0
+    for c in clusters:
+        if len(c) > max_exons:
+            max_exons = len(c)
+    exonIdBytes = findNumBytes(max_exons)
+
+    s = valToBinary(1, exonBytes)
+    s += valToBinary(1, exonIdBytes)
+    s += valToBinary(exonBytes, len(clusters))
+    for c in clusters:
+        s += valToBinary(exonIdBytes, len(c))
+        for e in c:
+            s += valToBinary(exonBytes, e)
+
+    return s
+
+def readClusters(f):
+    exonBytes = readVal(f, 1)
+    exonIdBytes = readVal(f, 1)
+
+    clusters = []
+    num_c = readVal(f, exonBytes)
+
+    for i in range(num_c):
+        num_e = readVal(f, exonIdBytes)
+        splice_sites = [0] * num_e
+        for j in range(num_e):
+            splice_sites[j] = readVal(f, exonBytes)
+        clusters.append(splice_sites)
+
+    return clusters
 
 def writeJunctionsList(junctions, exonBytes):
     s = valToBinary(4, len(junctions))
@@ -380,7 +435,7 @@ def writeCov(cov):
     s += valToBinary(1, covBytes)
 
     # Write the length of the vector
-    s += valToBinary(2, len(cov))
+    s += valToBinary(4, len(cov))
 
     for c in cov:
         s += valToBinary(covBytes, c[0])
@@ -394,7 +449,7 @@ def readCov(s, start=0):
     covBytes, start = binaryToVal(s, 1, start)
 
     # Read the length of the vector
-    lenCov, start = binaryToVal(s, 2, start)
+    lenCov, start = binaryToVal(s, 4, start)
 
     cov = []
     for _ in range(lenCov):
