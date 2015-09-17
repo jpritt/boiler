@@ -115,6 +115,7 @@ def compareSAMs(file1, file2):
     print('Precision = TP / TP+FP = %f' % (float(tp) / len(reads2)))
     print('')
 
+
     print('Pairing:')
     tp = 0
     id = 0
@@ -122,12 +123,12 @@ def compareSAMs(file1, file2):
         while id < len(reads2) and reads2[id][0] == r[0] and reads2[id][1] < r[1]:
             id += 1
 
-        i = id
-        while i < len(reads2) and reads2[i][0] == r[0] and reads2[i][1] == r[1]:
-            if reads2[i][2] == r[2] and reads2[i][3] == r[3] and reads2[i][4] == r[4]:
+        id2 = id
+        while id2 < len(reads2) and reads2[id2][0] == r[0] and reads2[id2][1] == r[1]:
+            if reads2[id2][2] == r[2] and reads2[id2][3] == r[3] and reads2[id2][4] == r[4]:
                 tp += 1
                 break
-            i += 1
+            id2 += 1
 
     print('TP: %d' % tp)
     print('FN: %d' % (len(reads1)-tp))

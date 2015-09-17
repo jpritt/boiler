@@ -567,8 +567,6 @@ class Compressor:
 
         step = 0
 
-        tf = open('temp.sam', 'w')
-
         first = True
 
         with open(input_name, 'r') as filehandle:
@@ -577,15 +575,6 @@ class Compressor:
 
             for line in filehandle:
                 row = line.strip().split('\t')
-
-                if len(row) > 5:
-                    row2 = row[:]
-                    row2[0] = row2[0][:14]
-                    row2[9] = '*'
-                    row2[10] = '*'
-                    tf.write('\t'.join(row2) + '\n')
-                else:
-                    tf.write(line)
 
                 #print(row)
 
@@ -681,8 +670,6 @@ class Compressor:
                 if end > gene_end:
                     gene_end = end
 
-            tf.close()
-
 
             # Compress final cluster
             self.aligned.exons.add(gene_end)
@@ -738,9 +725,6 @@ class Compressor:
 
             with open('temp.bin', 'rb') as f2:
                 f.write(f2.read())
-
-        os.remove('temp.bin')
-
 
         if self.debug:
             end_time = time.time()
