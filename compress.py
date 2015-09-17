@@ -726,6 +726,9 @@ class Compressor:
             with open('temp.bin', 'rb') as f2:
                 f.write(f2.read())
 
+        os.remove('temp.bin')
+
+
         if self.debug:
             end_time = time.time()
             print('Compression time: %0.3fs' % (end_time - start_time))
