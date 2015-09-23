@@ -605,12 +605,12 @@ class Compressor:
 
                     if intermediate_name:
                         if first:
-                            with open(intermediate_name, 'w') as f:
-                                self.aligned.writeSAM(f, True)
+                            with open(intermediate_name, 'w') as f1:
+                                self.aligned.writeSAM(f1, True)
                             first = False
                         else:
-                            with open(intermediate_name, 'a') as f:
-                                self.aligned.writeSAM(f, False)
+                            with open(intermediate_name, 'a') as f1:
+                                self.aligned.writeSAM(f1, False)
 
                     #print('  Finalizing reads')
                     self.aligned.finalizeReads()
@@ -644,7 +644,7 @@ class Compressor:
                         unspliced_index.append(l)
 
                         #print('  Compressing spliced')
-                        #l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=debug)
+                        l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=debug)
                         spliced_index.append(l)
 
                     #break
@@ -692,8 +692,8 @@ class Compressor:
             clusters.append(self.aligned.exons)
 
             if intermediate_name:
-                with open(intermediate_name, 'a') as f:
-                    self.aligned.writeSAM(f, first)
+                with open(intermediate_name, 'a') as f1:
+                    self.aligned.writeSAM(f1, first)
 
             self.aligned.finalizeReads()
             et = time.time()
