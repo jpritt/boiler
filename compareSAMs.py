@@ -120,15 +120,12 @@ def compareSAMs(file1, file2):
     tp = 0
     id = 0
     for r in reads1:
-        while id < len(reads2) and reads2[id][0] == r[0] and reads2[id][1] < r[1]:
+        while id < len(reads2) and reads2[id] < r:
             id += 1
 
-        id2 = id
-        while id2 < len(reads2) and reads2[id2][0] == r[0] and reads2[id2][1] == r[1]:
-            if reads2[id2][2] == r[2] and reads2[id2][3] == r[3] and reads2[id2][4] == r[4]:
+        if reads2[id] == r:
                 tp += 1
-                break
-            id2 += 1
+                id += 1
 
     print('TP: %d' % tp)
     print('FN: %d' % (len(reads1)-tp))

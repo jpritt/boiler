@@ -69,9 +69,6 @@ def go(args):
                 chromosomes[row[1][3:]] = int(row[2][3:])
 
     expander = expand.Expander()
-    for chrom in ['2R', '2L', '3R', '3L', '4', 'M', 'X']:
-        cov = expander.getCoverage(args['compressed'], chrom)
-    exit()
 
     sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
     expander = expand.Expander()
@@ -80,13 +77,31 @@ def go(args):
     #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
     #intervals = [['2R', 100000, 200000]]
 
-    lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
-    #lens = [10000,100000]
+    #lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
+    lens = [10000000]
     chroms = ['2R', '2L', '3R', '3L', 'X']
     chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
 
 
     print('Querying coverage')
+
+    '''
+    trueCov = sam.getCoverage('3L', 24317666, 24417666)
+    predCov = expander.getCoverage(args['compressed'], '3L', 24317666, 24417666)
+    print(predCov[380:386])
+    print(sum(trueCov))
+    print(sum(predCov))
+    for x in range(len(trueCov)):
+        if abs(trueCov[x] - predCov[x]) > 0.0001:
+            print('Error!')
+            print(x)
+            for n in range(x-5,x+5):
+                print(str(trueCov[n]) + '\t' + str(predCov[n]))
+            exit()
+    exit()
+    '''
+
+
     for l in lens:
         timeTrue = 0.0
         timePred = 0.0
@@ -168,30 +183,12 @@ def go(args):
             trueUnpaired, truePaired = sam.getReads(chrom, start, end)
             endTime = time.time()
 
-            print('True time: %0.3fs' % (endTime-startTime))
-
             true_times[bin] += float(endTime - startTime)
-
-            import cProfile
-            import pstats
-            import io
-            pr = cProfile.Profile()
-            pr.enable()
 
             startTime = time.time()
             predUnpaired, predPaired = expander.getReads(args['compressed'], chrom, start, end)
             endTime = time.time()
 
-            print('Pred time: %0.3fs' % (endTime-startTime))
-            print('')
-
-            pr.disable()
-            s = io.StringIO()
-            sortby = 'tottime'
-            ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-            ps.print_stats(30)
-            print(s.getvalue())
-            exit()
 
             pred_times[bin] += float(endTime - startTime)
             counts[bin] += 1

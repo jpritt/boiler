@@ -382,6 +382,16 @@ def readLens(s, lenBytes, start=0):
 
     return lens, start
 
+def skipLens(s, lenBytes, start=0):
+    numLens, start = binaryToVal(s, 2, start)
+
+    if numLens == 0:
+        return False, start
+    else:
+        freqBytes, start = binaryToVal(s, 1, start)
+        start += (lenBytes+freqBytes) * numLens
+        return True, start
+
 def writePairs(pairs, numBytes=3):
     '''
     Writes a list of index pairs as a simple list
