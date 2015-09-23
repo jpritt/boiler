@@ -1519,7 +1519,7 @@ class Alignments:
                             closestEndpoint = readStart + length
 
                 # Don't extend into section where coverage is 0
-                if coverage[readStart+length] == 0:
+                if (readStart+length) >= len(coverage) or coverage[readStart+length] == 0:
                     break
             if readEnd == readStart:
                 if closestEndpoint == None:
