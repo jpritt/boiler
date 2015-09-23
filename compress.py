@@ -601,6 +601,8 @@ class Compressor:
 
                     clusters.append(self.aligned.exons)
 
+                    print('Compressing (%d,%d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
+
                     if intermediate_name:
                         if first:
                             with open(intermediate_name, 'w') as f:
@@ -610,6 +612,7 @@ class Compressor:
                             with open(intermediate_name, 'a') as f:
                                 self.aligned.writeSAM(f, False)
 
+                    print('  Finalizing reads')
                     self.aligned.finalizeReads()
                     et = time.time()
 
@@ -632,16 +635,21 @@ class Compressor:
                     #countSpliced += len(self.aligned.spliced)
                     #countPaired += len(self.aligned.paired)
 
+                    print('  Computing junctions')
                     junctions, maxReadLen = self.computeJunctions(debug)
 
                     with open('temp.bin', 'ab') as f:
+                        print('  Compressing unspliced')
                         l = self.compressUnspliced(f, binary=True)
                         unspliced_index.append(l)
 
+                        print('  Compressing spliced')
                         l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=debug)
                         spliced_index.append(l)
 
                     #break
+
+                    print('  Done!')
 
                     # Start new cluster
                     self.aligned.resetCluster()

@@ -115,7 +115,6 @@ def compareSAMs(file1, file2):
     print('Precision = TP / TP+FP = %f' % (float(tp) / len(reads2)))
     print('')
 
-
     print('Pairing:')
     tp = 0
     id = 0
