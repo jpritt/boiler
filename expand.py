@@ -45,7 +45,7 @@ class Expander:
                 chroms = binaryIO.readChroms(f)
                 self.aligned = alignments.Alignments(chroms, self.debug)
 
-                self.expandByCluster(f)
+                self.expandByCluster(f, uncompressedFilename)
 
                 if self.debug:
                     end = time.time()
@@ -54,9 +54,6 @@ class Expander:
         else:
             print('Non-binary expanding not supported')
             exit()
-
-        with open(uncompressedFilename, 'w') as f:
-            self.aligned.writeSAM(f)
 
     '''
     def expandSplicedBinary(self, f, exonBytes):
@@ -335,7 +332,6 @@ class Expander:
             #print(junc.pairedLens)
             #print('')
 
-            print(key)
             unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, debug)
 
             juncBounds = []
@@ -430,7 +426,7 @@ class Expander:
                                                          self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
 
 
-    def expandByCluster(self, f):
+    def expandByCluster(self, f, out_name):
         clusters = binaryIO.readClusters(f)
         unspliced_index = binaryIO.readListFromFile(f)
         spliced_index = binaryIO.readListFromFile(f)
@@ -442,9 +438,16 @@ class Expander:
             self.expandUnsplicedBinary(f, unspliced_index[i])
             self.expandSplicedBinary(f, spliced_index[i])
 
-        print(len(self.aligned.unspliced))
-        print(len(self.aligned.spliced))
-        print(len(self.aligned.paired))
+            if i == 0:
+                with open(out_name, 'w') as f2:
+                    self.aligned.writeSAM(f2, header=True)
+            else:
+                with open(out_name, 'a') as f2:
+                    self.aligned.writeSAM(f2, header=False)
+
+            self.aligned.unspliced = []
+            self.aligned.spliced = []
+            self.aligned.paired = []
 
 
     def readIndexBinary(self, f):
