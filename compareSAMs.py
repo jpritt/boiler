@@ -94,9 +94,6 @@ def compareSAMs(file1, file2):
     reads1.sort()
     reads2.sort()
 
-    print(reads1[:10])
-    print(reads2[:10])
-
     print('No pairing:')
     tp = 0
     id = 0

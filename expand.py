@@ -335,6 +335,7 @@ class Expander:
             #print(junc.pairedLens)
             #print('')
 
+            print(key)
             unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, debug)
 
             juncBounds = []

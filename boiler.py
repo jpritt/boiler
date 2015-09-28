@@ -24,12 +24,12 @@ def go(args):
     if args.output is not None:
         compressedName = args.output
 
-    compressor = compress.Compressor()
-    startTime = time.time()
-    compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
-    endTime = time.time()
+    #compressor = compress.Compressor()
+    #startTime = time.time()
+    #compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
+    #endTime = time.time()
 
-    print('Compression time: %0.3f s' % (endTime-startTime))
+    #print('Compression time: %0.3f s' % (endTime-startTime))
 
     if args.expand_to is not None:
         expander = expand.Expander()

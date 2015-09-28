@@ -681,7 +681,24 @@ class Alignments:
 
         return unpaired, paired
 
-    def findPairsWithBoundaries(self, reads, unpaired_lens, paired_lens, boundaries):
+    def RLE(self, vector):
+        rle = []
+
+        val = vector[0]
+        length = 0
+        for v in vector:
+            if v == val:
+                length += 1
+            else:
+                rle.append([val, length])
+                val = v
+                length = 1
+
+        rle.append([val, length])
+
+        return rle
+
+    def findPairsWithBoundaries(self, reads, unpaired_lens, paired_lens, boundaries, cov=None):
         '''
         Use the fact that all reads must span all the subexons to improve our pairing
 
@@ -694,13 +711,23 @@ class Alignments:
         :return:
         '''
 
+        #covDist = 0
+
         numUnpaired = 0
         for k,v in unpaired_lens.items():
             numUnpaired += v
+            #covDist += k * v
         numPaired = 0
         for k,v in paired_lens.items():
             numPaired += v
+            #covDist += k * v
         numReads = len(reads)
+
+        #cov = 0
+        #for r in reads:
+        #    cov += r[1] - r[0]
+        #print('Reads coverage: %d' % cov)
+        #print('Dist coverage:  %d' % covDist)
 
         left_reads = []
         spanning_reads = []
@@ -715,13 +742,21 @@ class Alignments:
             elif r[1] > boundaries[-1]:
                 right_reads.append(r)
             else:
+                spanning_reads.append(r)
                 print('Read does not overlap left or right...?')
+                #print(self.RLE(cov))
+                #print(boundaries)
+                #print(reads)
+                #print(unpaired_lens)
+                #print(paired_lens)
                 exit()
 
         left_reads.sort()
         spanning_reads.sort()
         right_reads.sort()
         paired_lens_sorted = sorted(paired_lens, reverse=True)
+
+        #print('%d left, %d right, %d spanning' % (len(left_reads), len(right_reads), len(spanning_reads)))
 
         countUnpaired = 0
         for k,v in unpaired_lens.items():
@@ -768,27 +803,27 @@ class Alignments:
                 paired.append(p)
                 countPaired -= 1
 
-        s1 = 'After pairing: %d paired remaining, %d left, %d right' % (countPaired, len(left_reads), len(right_reads))
+        #s1 = 'After pairing: %d paired remaining, %d left, %d right, %d spanning' % (countPaired, len(left_reads), len(right_reads), len(spanning_reads))
+        #print(s1)
+        #print('')
         remaining_reads = left_reads + spanning_reads + right_reads
         i = 0
         j = len(remaining_reads)
         for _ in range(countPaired):
-            paired.append([remaining_reads[i], remaining_reads[j-1]])
+            if i < j:
+                paired.append([remaining_reads[i], remaining_reads[j-1]])
             i += 1
             j -= 1
-        s2 = str(i) + ', ' + str(j)
-        if unpaired:
-            unpaired += remaining_reads[i:j]
-        else:
-            unpaired = remaining_reads[i:j]
+
+        if i < j:
+            if unpaired:
+                unpaired += remaining_reads[i:j]
+            else:
+                unpaired = remaining_reads[i:j]
+        elif not unpaired:
+            unpaired = []
         unpaired.sort()
 
-        if len(unpaired) != countUnpaired and self.debug:
-            print(s1)
-            print(s2)
-            print('%d reads found, looking for %d unpaired and %d paired' % (numReads, numUnpaired, numPaired))
-            print('Found %d unpaired reads (instead of %d) and %d paired' % (len(unpaired), countUnpaired, len(paired)))
-            print('')
 
         return unpaired, paired
 
@@ -1280,17 +1315,9 @@ class Alignments:
             for k,v in pairedLens.items():
                 countPaired += v
 
-        reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
+        cov2 = coverage[:]
 
-        if coverage[:774] == [0]*773 + [1]:
-            print(coverage)
-            print(unpairedLens)
-            print(pairedLens)
-            print(lensLeft)
-            print(lensRight)
-            print('')
-            print(reads)
-            print('')
+        reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
 
 
         if debug:
@@ -1298,7 +1325,7 @@ class Alignments:
             print(reads)
 
         if boundaries:
-            unpaired, paired = self.findPairsWithBoundaries(reads, unpairedLens, pairedLens, boundaries)
+            unpaired, paired = self.findPairsWithBoundaries(reads, unpairedLens, pairedLens, boundaries, cov2)
         else:
             #unpaired, paired = self.findPairs(reads, pairedLens)
             unpaired, paired = self.findPairsRandom(reads, pairedLens)
@@ -1322,6 +1349,7 @@ class Alignments:
                 self.countPaired += 1
 
         return unpaired, paired
+    
 
     def findReadsWithPairs(self, unpairedLens, pairs, lensLeft, lensRight, coverage, debug=False):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
