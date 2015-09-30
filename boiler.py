@@ -36,7 +36,7 @@ def go(args):
 
         print('Compression time: %0.3f s' % (endTime-startTime))
 
-    if args.expand:
+    if args.decompress:
         if args.expand_to is None:
             print('In order to run decompression, you must specify a file to expand to with the --expand-to flag')
             exit()
@@ -73,7 +73,7 @@ if __name__ == '__main__':
             formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--compress', help="Run compression", action="store_true")
     parser.add_argument('--decompress', help="Run decompression", action="store_true")
-    parser.add_argument('--alignments', type=str, required=True, help='Full path of SAM file containing aligned reads')
+    parser.add_argument('--alignments', type=str, help='Full path of SAM file containing aligned reads')
     parser.add_argument("--binary", help="Write in binary format", action="store_true")
     parser.add_argument("--expand-to", type=str, help="After compressing, decompress to this filename")
     parser.add_argument("--output", type=str, help="Compressed filename")

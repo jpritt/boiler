@@ -430,8 +430,14 @@ class Expander:
             self.aligned.exons = clusters[i]
             #print('Expanding (%d,%d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
 
+            #print('%d' % (self.aligned.exons[-1]-self.aligned.exons[0]))
+            #t1 = time.time()
             self.expandUnsplicedBinary(f, unspliced_index[i])
+            #t2 = time.time()
+            #print('\t%f' % (t2-t1))
             self.expandSplicedBinary(f, spliced_index[i])
+            #t3 = time.time()
+            #print('\t%f' % (t3-t2))
 
             if i == 0:
                 with open(out_name, 'w') as f2:
@@ -439,6 +445,9 @@ class Expander:
             else:
                 with open(out_name, 'a') as f2:
                     self.aligned.writeSAM(f2, header=False)
+
+            #t4 = time.time()
+            #print('\t%f' % (t4-t3))
 
             self.aligned.unspliced = []
             self.aligned.spliced = []
