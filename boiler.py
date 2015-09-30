@@ -29,6 +29,8 @@ def go(args):
             print('In order to run compression, you must specify a SAM file to compress with the --alignments flag')
             exit()
 
+        print('Compressing to %s' % compressedName)
+
         compressor = compress.Compressor()
         startTime = time.time()
         compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
@@ -40,6 +42,8 @@ def go(args):
         if args.expand_to is None:
             print('In order to run decompression, you must specify a file to expand to with the --expand-to flag')
             exit()
+
+        print('Decompressing from %s' % compressedName)
 
         expander = expand.Expander()
         startTime = time.time()
