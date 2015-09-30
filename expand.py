@@ -274,11 +274,6 @@ class Expander:
                     exonStart = self.aligned.exons[i]
                     exonEnd = self.aligned.exons[i+1]
 
-                    #print(cov[exonStart-self.aligned.exons[0]:exonEnd-self.aligned.exons[0]])
-                    #print(unpairedLens)
-                    #print(pairedLens)
-                    #print('')
-
                     unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, cov[exonStart-self.aligned.exons[0]:exonEnd-self.aligned.exons[0]], None, debug=False)
 
                     for r in unpaired:

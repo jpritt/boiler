@@ -711,23 +711,12 @@ class Alignments:
         :return:
         '''
 
-        #covDist = 0
-
         numUnpaired = 0
         for k,v in unpaired_lens.items():
             numUnpaired += v
-            #covDist += k * v
         numPaired = 0
         for k,v in paired_lens.items():
             numPaired += v
-            #covDist += k * v
-        numReads = len(reads)
-
-        #cov = 0
-        #for r in reads:
-        #    cov += r[1] - r[0]
-        #print('Reads coverage: %d' % cov)
-        #print('Dist coverage:  %d' % covDist)
 
         left_reads = []
         spanning_reads = []
@@ -810,7 +799,7 @@ class Alignments:
         i = 0
         j = len(remaining_reads)
         for _ in range(countPaired):
-            if i < j:
+            if i < j-1:
                 paired.append([remaining_reads[i], remaining_reads[j-1]])
             i += 1
             j -= 1
@@ -1489,7 +1478,7 @@ class Alignments:
 
             coverage: Coverage vector containing the accumulation of many reads
             readLens: Dictionary containing the distribution of all read lengths in the coverage vector
-            boundaries: Indicies in the coverage vector which reads cannot cross (e.g. exon boundaries in the unspliced coverage vector)
+            boundaries: Start and end points, of which all reads must cross at least 1
         '''
 
         lens = readLens.keys()
@@ -1512,15 +1501,17 @@ class Alignments:
             end -= 1
 
         while end > start:
-            #while boundaries[boundBottom] <= start:
-            #    boundBottom += 1
 
             # find a read from the beginning
             readStart = start
             readEnd = start
 
             closestEndpoint = None
-            for length in range(1, maxLen+1):
+            if boundaries and readStart >= boundaries[0]:
+                minLen = boundaries[1]+1 - start
+            else:
+                minLen = 1
+            for length in range(minLen, maxLen+1):
                 if (readStart+length == end) or (readStart+length < end and coverage[readStart + length] < coverage[readStart + length - 1]):
                     if length in readLens:
                         readEnd = readStart + length
@@ -1596,16 +1587,15 @@ class Alignments:
 
 
             if end > start:
-                #while boundaries[boundTop] >= end:
-                #    boundTop -= 1
-
-                # find a read from the end
                 readEnd = end
                 readStart = end
 
                 closestEndpoint = None
-                for length in range(1, maxLen+1):
-                #for length in range(1, maxLen+1):
+                if boundaries and readEnd <= boundaries[1]:
+                    minLen = readEnd+1 - boundaries[0]
+                else:
+                    minLen = 1
+                for length in range(minLen, maxLen+1):
                     if (readEnd-length == start) or (readEnd-length > start and coverage[readEnd - length] > coverage[readEnd - length - 1]):
                         if length in readLens:
                             readStart = readEnd - length
@@ -1724,7 +1714,7 @@ class Alignments:
         if paired:
             read.pairOffset += offset
 
-        if not paired or abs(read.pairOffset - read.exons[0][0]) > 100000:
+        if not paired:# or abs(read.pairOffset - read.exons[0][0]) > 100000:
             self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
             gene_end = read.exons[-1][1]
 

@@ -24,31 +24,40 @@ def go(args):
     if args.output is not None:
         compressedName = args.output
 
-    #compressor = compress.Compressor()
-    #startTime = time.time()
-    #compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
-    #endTime = time.time()
+    if args.compress:
+        if args.alignments is None:
+            print('In order to run compression, you must specify a SAM file to compress with the --alignments flag')
+            exit()
 
-    #print('Compression time: %0.3f s' % (endTime-startTime))
+        compressor = compress.Compressor()
+        startTime = time.time()
+        compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
+        endTime = time.time()
 
-    if args.expand_to is not None:
+        print('Compression time: %0.3f s' % (endTime-startTime))
+
+    if args.expand:
+        if args.expand_to is None:
+            print('In order to run decompression, you must specify a file to expand to with the --expand-to flag')
+            exit()
+
         expander = expand.Expander()
         startTime = time.time()
 
-        import cProfile
-        import pstats
-        import io
-        pr = cProfile.Profile()
-        pr.enable()
+        #import cProfile
+        #import pstats
+        #import io
+        #pr = cProfile.Profile()
+        #pr.enable()
 
         expander.expand(compressedName, args.expand_to, binary, debug)
 
-        pr.disable()
-        s = io.StringIO()
-        sortby = 'tottime'
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats(30)
-        print(s.getvalue())
+        #pr.disable()
+        #s = io.StringIO()
+        #sortby = 'tottime'
+        #ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        #ps.print_stats(30)
+        #print(s.getvalue())
 
         endTime = time.time()
         print('Decompression time: %0.3f s' % (endTime-startTime))
@@ -62,15 +71,14 @@ if __name__ == '__main__':
     # Print file's docstring if -h is invoked
     parser = argparse.ArgumentParser(description=__doc__, 
             formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--alignments', type=str, required=True, 
-        help='Full path of SAM file containing aligned reads')
-    parser.add_argument("--binary", help="Write in binary format",
-        action="store_true")
+    parser.add_argument('--compress', help="Run compression", action="store_true")
+    parser.add_argument('--decompress', help="Run decompression", action="store_true")
+    parser.add_argument('--alignments', type=str, required=True, help='Full path of SAM file containing aligned reads')
+    parser.add_argument("--binary", help="Write in binary format", action="store_true")
     parser.add_argument("--expand-to", type=str, help="After compressing, decompress to this filename")
     parser.add_argument("--output", type=str, help="Compressed filename")
     parser.add_argument("--intermediate", type=str, help="Name of SAM file to write to after processing but before compressing")
-    parser.add_argument("--debug", help="Print debug information",
-        action="store_true")
+    parser.add_argument("--debug", help="Print debug information", action="store_true")
 
     args = parser.parse_args(sys.argv[1:])
 
