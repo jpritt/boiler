@@ -126,8 +126,8 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
 
                 score += bestA.scoreTranscript(bestB, threshold)
         
-    print('%d / %d transcripts from file 1' % (matches, len(transcriptsCompA)))
-    print('%d / %d transcripts from file 2' % (matches, len(transcriptsCompB)))
+    print('%d / %d  = %0.4f transcripts from file 1' % (matches, len(transcriptsCompA), float(matches)/len(transcriptsCompA)))
+    print('%d / %d  = %0.4f transcripts from file 2' % (matches, len(transcriptsCompB), float(matches)/len(transcriptsCompB)))
     print('Score: %f' % (score / matches))
 
     #plt.scatter(xs, ys)
