@@ -51,6 +51,8 @@ class Alignments:
             nextOffset += chromosomes[c]
             #self.exons += [nextOffset]
 
+        print(self.chromOffsets)
+
         #self.exons = set(self.exons)
 
         # List of potential gene boundaries as tuples
@@ -698,7 +700,7 @@ class Alignments:
 
         return rle
 
-    def findPairsWithBoundaries(self, reads, unpaired_lens, paired_lens, boundaries, cov=None):
+    def findPairsWithBoundaries(self, reads, unpaired_lens, paired_lens, boundaries):
         '''
         Use the fact that all reads must span all the subexons to improve our pairing
 
@@ -710,6 +712,8 @@ class Alignments:
         :param boundaries: Boundaries between subexons
         :return:
         '''
+
+        #print('Pairing %d reads with boundaries' % len(reads))
 
         numUnpaired = 0
         for k,v in unpaired_lens.items():
@@ -733,91 +737,199 @@ class Alignments:
             else:
                 spanning_reads.append(r)
                 print('Read does not overlap left or right...?')
-                #print(self.RLE(cov))
-                #print(boundaries)
-                #print(reads)
-                #print(unpaired_lens)
-                #print(paired_lens)
-                exit()
+                #exit()
 
         left_reads.sort()
         spanning_reads.sort()
         right_reads.sort()
-        paired_lens_sorted = sorted(paired_lens, reverse=True)
 
-        #print('%d left, %d right, %d spanning' % (len(left_reads), len(right_reads), len(spanning_reads)))
+        if left_reads:
+            unique = [left_reads[0]]
+            left_counts = [1]
+            for r in left_reads[1:]:
+                if r == unique[-1]:
+                    left_counts[-1] += 1
+                else:
+                    unique.append(r)
+                    left_counts.append(1)
+            left_reads = unique
+            left_bounds = [0, len(left_reads)]
+        else:
+            left_counts = []
+            left_bounds = [0, 0]
+
+
+        if spanning_reads:
+            unique = [spanning_reads[0]]
+            spanning_counts = [1]
+            for r in spanning_reads[1:]:
+                if r == unique[-1]:
+                    spanning_counts[-1] += 1
+                else:
+                    unique.append(r)
+                    spanning_counts.append(1)
+            spanning_reads = unique
+            spanning_bounds = [0, len(spanning_reads)]
+        else:
+            spanning_counts = []
+            spanning_bounds = [0, 0]
+
+        if right_reads:
+            unique = [right_reads[0]]
+            right_counts = [1]
+            for r in right_reads[1:]:
+                if r == unique[-1]:
+                    right_counts[-1] += 1
+                else:
+                    unique.append(r)
+                    right_counts.append(1)
+            right_reads = unique
+            right_bounds = [0, len(right_reads)]
+        else:
+            right_counts = []
+            right_bounds = [0, 0]
+
+        count_left = sum(left_counts)
+        count_right = sum(right_counts)
+        count_spanning = sum(spanning_counts)
+
+        #paired_lens_sorted = sorted(paired_lens, reverse=True)
 
         countUnpaired = 0
         for k,v in unpaired_lens.items():
             countUnpaired += v
-        if len(spanning_reads) < countUnpaired and self.debug:
-            print('%d < %d' % (len(spanning_reads), countUnpaired))
 
         countPaired = 0
         for k,v in paired_lens.items():
             countPaired += v
 
+
+        #print('Finding pairs')
+        #print('%d reads, %d pairs' % (len(reads),countPaired))
+
         paired = []
         unpaired = None
+        unmatched = []
         while countPaired > 0:
-            if not unpaired and len(spanning_reads) <= countUnpaired:
+            '''
+            if not unpaired and count_spanning <= countUnpaired:
                 unpaired = spanning_reads
                 spanning_reads = []
+            '''
 
-            if (not left_reads and not right_reads) or (not left_reads and not spanning_reads) or (not right_reads and not spanning_reads):
+            #left_empty = (left_bounds[0] >= left_bounds[1])
+            #right_empty = (right_bounds[0] >= right_bounds[1])
+            #spanning_empty = (spanning_bounds[0] >= spanning_bounds[1])
+
+            #if (left_empty and spanning_empty) or (right_empty and spanning_empty):
+            #    break
+
+            if count_spanning == 0 and (count_left == 0 or count_right == 0):
                 break
 
-            if len(left_reads) >= len(right_reads):
-                p = self.findLeftPair(left_reads, spanning_reads, right_reads, paired_lens_sorted)
-                l = p[1][1] - p[0][0]
-                if l in paired_lens_sorted:
-                    paired_lens[l] -= 1
-                    if paired_lens[l] <= 0:
-                        i = 0
-                        while not paired_lens_sorted[i] == l:
-                            i += 1
-                        del paired_lens_sorted[i]
-                paired.append(p)
-                countPaired -= 1
+            #print(left_counts)
+            #print(left_bounds)
+            #print(count_left)
+            #print(right_counts)
+            #print(right_bounds)
+            #print(count_right)
+            #print('')
+
+            #if left_empty and right_empty:
+            if count_left == 0 and count_right == 0:
+                if countPaired % 2 == 0:
+                    p = self.findLeftPairRandom(spanning_reads, paired_lens, spanning_counts, spanning_bounds)
+                else:
+                    p = self.findRightPairRandom(spanning_reads, paired_lens, spanning_counts, spanning_bounds)
+                if len(p) == 2:
+                    #print('Found 2 spanning')
+                    paired.append([spanning_reads[p[0]][:], spanning_reads[p[1]][:]])
+                    countPaired -= 1
+                    count_spanning -= 2
+                else:
+                    #print('Found no spanning match')
+                    unmatched.append(spanning_reads[p[0]][:])
+                    count_spanning -= 1
+
+            elif count_left >= count_right:
+                p = self.findLeftPair(left_reads, spanning_reads, right_reads, left_counts, spanning_counts, right_counts, left_bounds, spanning_bounds, right_bounds, paired_lens)
+                count_left -= 1
+                if len(p) == 3:
+                    if p[1] < 0:
+                        #print('Found left and right')
+                        paired.append([left_reads[p[0]][:], right_reads[p[2]][:]])
+                        count_right -= 1
+                    else:
+                        #print('Found left and spanning')
+                        paired.append([left_reads[p[0]][:], spanning_reads[p[1]][:]])
+                        count_spanning -= 1
+                    countPaired -= 1
+                else:
+                    #print('Found no left match')
+                    unmatched.append(left_reads[p[0]][:])
             else:
-                p = self.findRightPair(left_reads, spanning_reads, right_reads, paired_lens_sorted)
-                l = p[1][1] - p[0][0]
-                if l in paired_lens_sorted:
-                    paired_lens[l] -= 1
-                    if paired_lens[l] <= 0:
-                        i = 0
-                        while not paired_lens_sorted[i] == l:
-                            i += 1
-                        del paired_lens_sorted[i]
-                paired.append(p)
-                countPaired -= 1
+                p = self.findRightPair(left_reads, spanning_reads, right_reads, left_counts, spanning_counts, right_counts, left_bounds, spanning_bounds, right_bounds, paired_lens)
+                count_right -= 1
+                if len(p) == 3:
+                    if p[1] < 0:
+                        #print('Found left and right')
+                        paired.append([left_reads[p[0]][:], right_reads[p[2]][:]])
+                        count_left -= 1
+                    else:
+                        #print('Found spanning and right')
+                        paired.append([spanning_reads[p[1]][:], right_reads[p[2]][:]])
+                        count_spanning -= 1
+                    countPaired -= 1
+                else:
+                    #print('Found no right match')
+                    unmatched.append(right_reads[p[0]][:])
+
+        #print('--->')
+        #print(len(unmatched))
+        #print(left_counts)
+        #print(spanning_counts)
+        #print(spanning_bounds)
+        #print(right_counts)
 
         #s1 = 'After pairing: %d paired remaining, %d left, %d right, %d spanning' % (countPaired, len(left_reads), len(right_reads), len(spanning_reads))
         #print(s1)
         #print('')
-        remaining_reads = left_reads + spanning_reads + right_reads
+
+        for i in range(left_bounds[0], left_bounds[1]):
+            for _ in range(left_counts[i]):
+                unmatched.append([left_reads[i][0], left_reads[i][1]])
+        for i in range(spanning_bounds[0], spanning_bounds[1]):
+            for _ in range(spanning_counts[i]):
+                unmatched.append([spanning_reads[i][0], spanning_reads[i][1]])
+        for i in range(right_bounds[0], right_bounds[1]):
+            for _ in range(right_counts[i]):
+                unmatched.append([right_reads[i][0], right_reads[i][1]])
+        unmatched.sort()
+
+        #print('%d pairs found, %d left' % (len(paired),countPaired))
+        #print('%d unmatched' % len(unmatched))
+        #print('')
+
         i = 0
-        j = len(remaining_reads)
+        j = len(unmatched)
         for _ in range(countPaired):
             if i < j-1:
-                paired.append([remaining_reads[i], remaining_reads[j-1]])
+                paired.append([unmatched[i], unmatched[j-1]])
             i += 1
             j -= 1
 
         if i < j:
             if unpaired:
-                unpaired += remaining_reads[i:j]
+                unpaired += unmatched[i:j]
             else:
-                unpaired = remaining_reads[i:j]
+                unpaired = unmatched[i:j]
         elif not unpaired:
             unpaired = []
-        unpaired.sort()
 
-
+        #print('Done')
         return unpaired, paired
 
-
-    def findLeftPair(self, left_reads, spanning_reads, right_reads, paired_lens_sorted):
+    def findLeftPair(self, left_reads, spanning_reads, right_reads, left_counts, spanning_counts, right_counts, left_bounds, spanning_bounds, right_bounds, paired_lens):
         '''
         :param left_reads:
         :param spanning_reads:
@@ -826,58 +938,53 @@ class Alignments:
         :return:
         '''
 
-        if not left_reads:
-            return None
+        i = left_bounds[0]
+        start = left_reads[i][0]
+        left_counts[left_bounds[0]] -= 1
+        while left_bounds[0] < left_bounds[1] and left_counts[left_bounds[0]] == 0:
+            left_bounds[0] += 1
 
-        r = left_reads[0]
+        # Look for a match among right reads
+        for j in range(right_bounds[0],right_bounds[1]):
+            if right_counts[j] == 0:
+                continue
 
-        # Index of closest non-exact pair
-        closest_i = None
-        # Error distance for this pair
-        closest_d = None
-        # True if closest pair is in right_reads, false if in spanning_reads
-        closest_right = True
-        for l in paired_lens_sorted:
-            end = r[0] + l
+            l = right_reads[j][1] - start
+            if l in paired_lens:
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+                right_counts[j] -= 1
+                while right_bounds[1] > right_bounds[0] and right_counts[right_bounds[1]-1] == 0:
+                    right_bounds[1] -= 1
+                while right_bounds[0] < right_bounds[1] and right_counts[right_bounds[0]] == 0:
+                    right_bounds[0] += 1
 
-            for i in range(len(right_reads)):
-                s = right_reads[i]
-                if s[1] == end:
-                    del left_reads[0]
-                    del right_reads[i]
-                    return [r, s]
-                elif not closest_d or abs(s[1]-end) < closest_d:
-                    closest_d = abs(s[1]-end)
-                    closest_i = i
+                return [i, -1, j]
 
-        for l in paired_lens_sorted:
-            end = r[0] + l
+        # Look for a match among left reads
+        for j in range(spanning_bounds[0],spanning_bounds[1]):
+            if spanning_counts[j] == 0:
+                continue
 
-            for i in range(len(spanning_reads)):
-                s = spanning_reads[i]
-                if s[1] == end:
-                    del left_reads[0]
-                    del spanning_reads[i]
-                    return [r, s]
-                elif not closest_d or abs(s[1]-end) < closest_d:
-                    closest_d = abs(s[1]-end)
-                    closest_i = i
-                    closest_right = False
+            l = spanning_reads[j][1] - start
+            if l in paired_lens:
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+                spanning_counts[j] -= 1
+                while spanning_bounds[1] > spanning_bounds[0] and spanning_counts[spanning_bounds[1]-1] == 0:
+                    spanning_bounds[1] -= 1
+                while spanning_bounds[0] < spanning_bounds[1] and spanning_counts[spanning_bounds[0]] == 0:
+                    spanning_bounds[0] += 1
 
-        if closest_i == None:
-            print('Error! No closest pair found!')
-            exit()
-        else:
-            del left_reads[0]
-            if closest_right:
-                s = right_reads[closest_i]
-                del right_reads[closest_i]
-            else:
-                s = spanning_reads[closest_i]
-                del spanning_reads[closest_i]
-            return [r, s]
+                return [i, j, -1]
 
-    def findRightPair(self, left_reads, spanning_reads, right_reads, paired_lens_sorted):
+        return [i]
+
+    def findRightPair(self, left_reads, spanning_reads, right_reads, left_counts, spanning_counts, right_counts, left_bounds, spanning_bounds, right_bounds, paired_lens):
         '''
         :param left_reads:
         :param spanning_reads:
@@ -886,208 +993,288 @@ class Alignments:
         :return:
         '''
 
-        if not right_reads:
-            return None
+        j = right_bounds[1]-1
+        end = right_reads[j][1]
+        right_counts[right_bounds[1]-1] -= 1
+        while right_bounds[0] < right_bounds[1] and right_counts[right_bounds[1]-1] == 0:
+            right_bounds[1] -= 1
 
-        r = right_reads[-1]
+        # Look for a match among left reads
+        for i in range(left_bounds[0],left_bounds[1]):
+            if left_counts[i] == 0:
+                continue
 
-        # Index of closest non-exact pair
-        closest_i = None
-        # Error distance for this pair
-        closest_d = None
-        # True if closest pair is in left_reads, false if in spanning_reads
-        closest_left = True
-        for l in paired_lens_sorted:
-            start = r[1] - l
+            l = end - left_reads[i][1]
+            if l in paired_lens:
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+                left_counts[i] -= 1
+                while left_bounds[1] > left_bounds[0] and left_counts[left_bounds[1]-1] == 0:
+                    left_bounds[1] -= 1
+                while left_bounds[0] < left_bounds[1] and left_counts[left_bounds[0]] == 0:
+                    left_bounds[0] += 1
 
-            for i in range(len(left_reads)):
-                s = left_reads[i]
-                if s[0] == start:
-                    del right_reads[-1]
-                    del left_reads[i]
-                    return [s, r]
-                elif not closest_d or abs(s[0]-start) < closest_d:
-                    closest_d = abs(s[0]-start)
-                    closest_i = i
+                return [i, -1, j]
 
-        for l in paired_lens_sorted:
-            start = r[1] - l
+        # Look for a match among left reads
+        for i in range(spanning_bounds[0],spanning_bounds[1]):
+            if spanning_counts[i] == 0:
+                continue
 
-            for i in range(len(spanning_reads)):
-                s = spanning_reads[i]
-                if s[0] == start:
-                    del right_reads[-1]
-                    del spanning_reads[i]
-                    return [s, r]
-                elif not closest_d or abs(s[0]-start) < closest_d:
-                    closest_d = abs(s[0]-start)
-                    closest_i = i
-                    closest_left = False
+            l = end - spanning_reads[i][0]
+            if l in paired_lens:
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+                spanning_counts[i] -= 1
+                while spanning_bounds[1] > spanning_bounds[0] and spanning_counts[spanning_bounds[1]-1] == 0:
+                    spanning_bounds[1] -= 1
+                while spanning_bounds[0] < spanning_bounds[1] and spanning_counts[spanning_bounds[0]] == 0:
+                    spanning_bounds[0] += 1
 
-        if closest_i == None:
-            print('Error! No closest pair found!')
-            exit()
-        else:
-            del right_reads[-1]
-            if closest_left:
-                s = left_reads[closest_i]
-                del left_reads[closest_i]
-            else:
-                s = spanning_reads[closest_i]
-                del spanning_reads[closest_i]
-            return [s, r]
+                return [-1, i, j]
+
+        return [j]
 
 
+    def findPairsRandom(self, reads, paired_lens, debug=False):
+        #print('Pairing %d reads' % len(reads))
 
-
-
-    def findPairsRandom(self, reads, paired_lens):
         countPairs = 0
         for k,v in paired_lens.items():
             countPairs += v
 
         reads.sort()
 
-        unmatched = []
+        unique_reads = [reads[0]]
+        read_counts = [1]
+        for r in reads[1:]:
+            if r == unique_reads[-1]:
+                read_counts[-1] += 1
+            else:
+                unique_reads.append(r)
+                read_counts.append(1)
+
+        # Index of first and last reads in array that have not been used yet
+        read_bounds = [0, len(read_counts)]
+
         paired = []
-        while countPairs > 0 and reads:
-            p = self.findLeftPairRandom(reads, paired_lens)
-            if p:
-                paired.append(p)
+        unmatched = []
+        unmatched_counts = []
+        while countPairs > 0 and read_bounds[0] < read_bounds[1]:
+            p = self.findLeftPairRandom(unique_reads, paired_lens, read_counts, read_bounds)
+            if len(p) == 2:
+                paired.append([unique_reads[p[0]][:], unique_reads[p[1]][:]])
                 countPairs -= 1
             else:
-                unmatched.append(reads[0])
-                del reads[0]
+                self.add_to_unmatched(unmatched, unmatched_counts, unique_reads[p[0]], 1)
 
-            if countPairs == 0 or not reads:
+            if countPairs == 0 or read_bounds[0] >= read_bounds[1]:
                 break
 
-            p = self.findRightPairRandom(reads, paired_lens)
-            if p:
-                paired.append(p)
+            p = self.findRightPairRandom(unique_reads, paired_lens, read_counts, read_bounds)
+            if debug:
+                print(p)
+            if len(p) == 2:
+                paired.append([unique_reads[p[0]][:], unique_reads[p[1]][:]])
                 countPairs -= 1
             else:
-                unmatched.append(reads[-1])
-                del reads[-1]
+                self.add_to_unmatched(unmatched, unmatched_counts, unique_reads[p[0]], 1)
 
-        reads += unmatched
-        reads.sort()
+        # Add remaining reads to unmatched
+        for i in range(read_bounds[0], read_bounds[1]):
+            if read_counts[i] > 0:
+                self.add_to_unmatched(unmatched, unmatched_counts, unique_reads[i], read_counts[i])
 
-        while countPairs > 0:
-            p = self.findClosestLeftPair(reads, paired_lens)
+        num_remaining = sum(unmatched_counts)
+        bounds = [0, len(unmatched)]
+
+        paired_lens_sorted = sorted(paired_lens)
+
+        while countPairs > 0 and num_remaining > 1:
+            p = self.findClosestLeftPair(unmatched, unmatched_counts, bounds, paired_lens_sorted)
             paired.append(p)
             countPairs -= 1
+            num_remaining -= 2
 
-            if countPairs == 0:
+            if countPairs == 0 or num_remaining < 2:
                 break
 
-            p = self.findClosestRightPair(reads, paired_lens)
+            p = self.findClosestRightPair(unmatched, unmatched_counts, bounds, paired_lens_sorted)
             paired.append(p)
             countPairs -= 1
+            num_remaining -= 2
 
-        return reads, paired
+        #print('Done!')
+        return unmatched, paired
 
-
-    def findLeftPairRandom(self, reads, paired_lens):
-        start = reads[0][0]
-
-        matches = []
-
-        for i in range(1, len(reads)):
-            end = reads[i][1]
-            if end-start in paired_lens:
-                matches.append(i)
-
-        if matches:
-            # If there is at least one exact match, return one of them at random
-            i = random.choice(matches)
-
-            pair = [reads[0], reads[i]]
-
-            l = reads[i][1] - start
-            if paired_lens[l] > 1:
-                paired_lens[l] -= 1
-            else:
-                del paired_lens[l]
-            del reads[i]
-            del reads[0]
-
-            return pair
+    def add_to_unmatched(self, unmatched, counts, read, num):
+        i = bisect.bisect_left(unmatched, read)
+        if i < len(unmatched) and unmatched[i] == read:
+            counts[i] += num
         else:
-            return None
+            unmatched.insert(i, read)
+            counts.insert(i, num)
 
-    def findRightPairRandom(self, reads, paired_lens):
-        end = reads[-1][1]
 
-        matches = []
+    def findLeftPairRandom(self, reads, paired_lens, read_counts, read_bounds):
+        i = read_bounds[0]
+        read_counts[i] -= 1
 
-        for i in range(len(reads)-1):
-            start = reads[i][0]
-            if end-start in paired_lens:
-                matches.append(i)
+        while read_bounds[0] < read_bounds[1] and read_counts[read_bounds[0]] == 0:
+            read_bounds[0] += 1
 
-        if matches:
-            # If there is at least one exact match, return one of them at random
-            i = random.choice(matches)
+        for j in range(read_bounds[0], read_bounds[1]):
+            if read_counts[j] == 0:
+                continue
 
-            pair = [reads[i], reads[-1]]
+            l = reads[j][1] - reads[i][0]
+            if l in paired_lens:
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+                read_counts[j] -= 1
+                while read_bounds[1] > read_bounds[0] and read_counts[read_bounds[1]-1] == 0:
+                    read_bounds[1] -= 1
+                while read_bounds[0] < read_bounds[1] and read_counts[read_bounds[0]] == 0:
+                    read_bounds[0] += 1
 
-            l = end - reads[i][0]
-            if paired_lens[l] > 1:
-                paired_lens[l] -= 1
-            else:
-                del paired_lens[l]
-            del reads[-1]
-            del reads[i]
+                return [i, j]
+        return [i]
 
-            return pair
-        else:
-            return None
+    def findRightPairRandom(self, reads, paired_lens, read_counts, read_bounds):
+        j = read_bounds[1]-1
+        read_counts[j] -= 1
 
-    def findClosestLeftPair(self, reads, paired_lens):
-        start = reads[0][0]
+        while read_bounds[1] > read_bounds[0] and read_counts[read_bounds[1]-1] == 0:
+            read_bounds[1] -= 1
 
+        for i in range(read_bounds[1]-1, read_bounds[0]-1, -1):
+            if read_counts[i] == 0:
+                continue
+
+            l = reads[j][1] - reads[i][0]
+            if l in paired_lens:
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+                read_counts[i] -= 1
+                while read_bounds[0] < read_bounds[1] and read_counts[read_bounds[0]] == 0:
+                    read_bounds[0] += 1
+                while read_bounds[1] > read_bounds[0] and read_counts[read_bounds[1]-1] == 0:
+                    read_bounds[1] -= 1
+
+                return [i,j]
+        return [j]
+
+    def findClosestLeftPair(self, reads, counts, bounds, paired_lens_sorted):
+        i = bounds[0]
+        start = reads[i][0]
+        counts[i] -= 1
+        while bounds[0] < bounds[1] and counts[bounds[0]] == 0:
+            bounds[0] += 1
+
+        num_lens = len(paired_lens_sorted)
+
+        # Distance to closest match
         closestD = None
-        closestI = None
+        # Index of closest match
+        closestJ = None
+        # Length of closest match
         closestL = None
-        for i in range(1, len(reads)):
-            l = reads[i][1] - start
-            for pl in paired_lens:
-                if closestD == None or abs(l-pl) < closestD:
-                    closestD = abs(l-pl)
-                    closestI = i
-                    closestL = pl
+        for j in range(bounds[0], bounds[1]):
+            if counts[j] == 0:
+                continue
+
+            l = reads[j][1] - start
+            id = bisect.bisect_left(paired_lens_sorted, l)
+            if id < num_lens:
+                d = abs(l - paired_lens_sorted[id])
+                if d == 0:
+                    closestD = 0
+                    closestJ = j
+                    closestL = paired_lens_sorted[id]
+                    break
+                elif closestD == None or d < closestD:
+                    closestD = 0
+                    closestJ = j
+                    closestL = paired_lens_sorted[id]
+            if id > 0:
+                d = abs(l - paired_lens_sorted[id-1])
+                if closestD == None or d < closestD:
+                    closestD = 0
+                    closestJ = j
+                    closestL = paired_lens_sorted[id-1]
 
         if closestD == None:
             print('Error! Trying to pair only 1 read?')
             exit()
 
-        pair = [reads[0], reads[closestI]]
-        del reads[closestI]
-        del reads[0]
+        pair = [reads[i][:], reads[closestJ][:]]
+        counts[closestJ] -= 1
+        while bounds[0] < bounds[1] and counts[bounds[0]] == 0:
+            bounds[0] += 1
+        while bounds[0] < bounds[1] and counts[bounds[1]-1] == 0:
+            bounds[1] -= 1
+
         return pair
 
-    def findClosestRightPair(self, reads, paired_lens):
-        end = reads[-1][1]
+    def findClosestRightPair(self, reads, counts, bounds, paired_lens_sorted):
+        j = bounds[1]-1
+        end = reads[j][1]
+        counts[j] -= 1
+        while bounds[0] < bounds[1] and counts[bounds[1]-1] == 0:
+            bounds[1] -= 1
 
+        num_lens = len(paired_lens_sorted)
+
+        # Distance to closest match
         closestD = None
+        # Index of closest match
         closestI = None
+        # Length of closest match
         closestL = None
-        for i in range(len(reads)-1):
-            l = end - reads[i][0]
-            for pl in paired_lens:
-                if closestD == None or abs(l-pl) < closestD:
-                    closestD = abs(l-pl)
+        for i in range(bounds[1]-1, bounds[0]-1, -1):
+            if counts[i] == 0:
+                continue
+
+            l = end - reads[i][1]
+            id = bisect.bisect_left(paired_lens_sorted, l)
+            if id < num_lens:
+                d = abs(l - paired_lens_sorted[id])
+                if d == 0:
+                    closestD = 0
                     closestI = i
-                    closestL = pl
+                    closestL = paired_lens_sorted[id]
+                    break
+                elif closestD == None or d < closestD:
+                    closestD = 0
+                    closestI = i
+                    closestL = paired_lens_sorted[id]
+            if id > 0:
+                d = abs(l - paired_lens_sorted[id-1])
+                if closestD == None or d < closestD:
+                    closestD = 0
+                    closestI = i
+                    closestL = paired_lens_sorted[id-1]
+
 
         if closestD == None:
             print('Error! Trying to pair only 1 read?')
             exit()
 
-        pair = [reads[closestI], reads[-1]]
-        del reads[-1]
-        del reads[closestI]
+        pair = [reads[closestI][:], reads[j][:]]
+        counts[closestI] -= 1
+        while bounds[0] < bounds[1] and counts[bounds[0]] == 0:
+            bounds[0] += 1
+        while bounds[0] < bounds[1] and counts[bounds[1]-1] == 0:
+            bounds[1] -= 1
+
         return pair
 
 
@@ -1271,6 +1458,7 @@ class Alignments:
         '''
 
         if debug:
+            print(coverage)
             print('Unpaired:')
             print(unpairedLens)
             print('Paired:')
@@ -1304,27 +1492,43 @@ class Alignments:
             for k,v in pairedLens.items():
                 countPaired += v
 
-        cov2 = coverage[:]
-
+        t1 = time.time()
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
-
+        t2 = time.time()
+        #print('  %d reads:\t%f' % (len(reads), t2-t1))
 
         if debug:
             print('Reads:')
             print(reads)
+            print('--->')
 
         if boundaries:
-            unpaired, paired = self.findPairsWithBoundaries(reads, unpairedLens, pairedLens, boundaries, cov2)
+            #print(reads)
+            #print(len(reads))
+            #print(unpairedLens)
+            #print(pairedLens)
+            unpaired, paired = self.findPairsWithBoundaries(reads, unpairedLens, pairedLens, boundaries)
+            #print('---->')
+            #print(unpaired)
+            #print(len(unpaired))
+            #print(paired)
+            #print(len(paired))
+            #exit()
         else:
             #unpaired, paired = self.findPairs(reads, pairedLens)
             unpaired, paired = self.findPairsRandom(reads, pairedLens)
+        t3 = time.time()
+        #print('  %d pairs:\t%f' % (len(paired), t3-t2))
+
 
         if debug:
             print('  Unpaired: %d\t->\t%d' % (countUnpaired, len(unpaired)))
+            print(unpaired)
             print('  Paired:   %d\t->\t%d' % (countPaired, len(paired)))
+            print(paired)
             print('')
 
-
+        '''
         if boundaries:
             start = boundaries[0]
             end = boundaries[-1]
@@ -1336,8 +1540,9 @@ class Alignments:
                 if p[0][0] >= start or p[1][1] <= end:
                     self.badPaired += 1
                 self.countPaired += 1
+        '''
 
-        return unpaired, paired
+        return unpaired, paired, t2-t1, t3-t2
     
 
     def findReadsWithPairs(self, unpairedLens, pairs, lensLeft, lensRight, coverage, debug=False):
@@ -1714,7 +1919,7 @@ class Alignments:
         if paired:
             read.pairOffset += offset
 
-        if not paired:# or abs(read.pairOffset - read.exons[0][0]) > 100000:
+        if not paired or abs(read.pairOffset - read.exons[0][0]) > 100000:
             self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
             gene_end = read.exons[-1][1]
 

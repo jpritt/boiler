@@ -7,6 +7,7 @@ import time
 import math
 import binaryIO
 import bisect
+import resource
 
 class Expander:
     aligned = None
@@ -26,13 +27,17 @@ class Expander:
         elif self.compressMethod == 2:
             self.bz2 = __import__('bz2')
 
+        self.readCounts = []
+        self.readTimes = []
+        self.pairCounts = []
+        self.pairTimes = []
+        self.pairCountsB = []
+        self.pairTimesB = []
+
 
     def expand(self, compressedFilename, uncompressedFilename, binary=False, debug=False):
         ''' Expand both spliced and unspliced alignments
         '''
-
-        print('Expanding')
-
         self.debug = debug
 
         self.aligned = None
@@ -54,6 +59,29 @@ class Expander:
         else:
             print('Non-binary expanding not supported')
             exit()
+
+        '''
+        print('Average read time:')
+        for i in range(1,len(self.readCounts)):
+            if self.readCounts[i] > 0:
+                t = self.readTimes[i] / self.readCounts[i]
+                print('%d\t%f\t%f' % (i, t, t/i))
+        print('')
+
+        print('Average pairing time without boundaries:')
+        for i in range(1,len(self.pairCounts)):
+            if self.pairCounts[i] > 0:
+                t = self.pairTimes[i] / self.pairCounts[i]
+                print('%d\t%f\t%f' % (i, t, t/i))
+        print('')
+
+        print('Average pairing time with boundaries:')
+        for i in range(1,len(self.pairCountsB)):
+            if self.pairCountsB[i] > 0:
+                t = self.pairTimesB[i] / self.pairCountsB[i]
+                print('%d\t%f\t%f' % (i, t, t/i))
+        print('')
+        '''
 
     '''
     def expandSplicedBinary(self, f, exonBytes):
@@ -257,7 +285,6 @@ class Expander:
             cov = self.RLEtoVector(cov)
 
             for i in range(len(self.aligned.exons)-1):
-
                 unpairedLens, start = binaryIO.readLens(s, readLenBytes, start)
                 pairedLens, start = binaryIO.readLens(s, fragLenBytes, start)
                 if len(pairedLens) > 0:
@@ -274,7 +301,20 @@ class Expander:
                     exonStart = self.aligned.exons[i]
                     exonEnd = self.aligned.exons[i+1]
 
-                    unpaired, paired = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, cov[exonStart-self.aligned.exons[0]:exonEnd-self.aligned.exons[0]], None, debug=False)
+                    unpaired, paired, t1, t2 = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, cov[exonStart-self.aligned.exons[0]:exonEnd-self.aligned.exons[0]], None, debug=False)
+
+                    numP = len(paired)
+                    numR = len(unpaired) + 2 * numP
+                    if numR >= len(self.readCounts):
+                        self.readCounts += [0] * (numR - len(self.readCounts) + 1)
+                        self.readTimes += [0] * (numR - len(self.readTimes) + 1)
+                    if numP >= len(self.pairCounts):
+                        self.pairCounts += [0] * (numP - len(self.pairCounts) + 1)
+                        self.pairTimes += [0] * (numP - len(self.pairTimes) + 1)
+                    self.readCounts[numR] += 1
+                    self.readTimes[numR] += t1
+                    self.pairCounts[numP] += 1
+                    self.pairTimes[numP] += t2
 
                     for r in unpaired:
                         self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
@@ -310,7 +350,8 @@ class Expander:
                     else:
                         boundaries.append(boundaries[-1] + subexon_length)
 
-            debug = False
+            if self.debug:
+                print(exons)
 
             # Read the rest of the junction information
             junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
@@ -327,7 +368,21 @@ class Expander:
             #print(junc.pairedLens)
             #print('')
 
-            unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, debug)
+            unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, self.debug)
+
+
+            numP = len(paired)
+            numR = len(unpaired) + 2 * numP
+            if numR >= len(self.readCounts):
+                self.readCounts += [0] * (numR - len(self.readCounts) + 1)
+                self.readTimes += [0] * (numR - len(self.readTimes) + 1)
+            if numP >= len(self.pairCountsB):
+                self.pairCountsB += [0] * (numP - len(self.pairCountsB) + 1)
+                self.pairTimesB += [0] * (numP - len(self.pairTimesB) + 1)
+            self.readCounts[numR] += 1
+            self.readTimes[numR] += t1
+            self.pairCountsB[numP] += 1
+            self.pairTimesB[numP] += t2
 
             juncBounds = []
             for j in junc.exons:
@@ -428,6 +483,10 @@ class Expander:
 
         for i in range(len(clusters)):
             self.aligned.exons = clusters[i]
+
+            #self.debug = False
+            #if clusters[i] == [13977818, 13978281]:
+            #    self.debug = True
             #print('Expanding (%d,%d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
 
             #print('%d' % (self.aligned.exons[-1]-self.aligned.exons[0]))
@@ -445,6 +504,8 @@ class Expander:
             else:
                 with open(out_name, 'a') as f2:
                     self.aligned.writeSAM(f2, header=False)
+
+            #print('\t\t\t%0.5fMB' % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024.0 * 1024.0)))
 
             #t4 = time.time()
             #print('\t%f' % (t4-t3))
