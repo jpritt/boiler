@@ -1108,8 +1108,15 @@ class Alignments:
             countPairs -= 1
             num_remaining -= 2
 
+        unpaired = [0] * sum(unmatched_counts)
+        id = 0
+        for i in range(bounds[0], bounds[1]):
+            for _ in range(unmatched_counts[i]):
+                unpaired[id] = [unmatched[i][0], unmatched[i][1]]
+                id += 1
+
         #print('Done!')
-        return unmatched, paired
+        return unpaired, paired
 
     def add_to_unmatched(self, unmatched, counts, read, num):
         i = bisect.bisect_left(unmatched, read)
@@ -1127,7 +1134,7 @@ class Alignments:
         while read_bounds[0] < read_bounds[1] and read_counts[read_bounds[0]] == 0:
             read_bounds[0] += 1
 
-        for j in range(read_bounds[0], read_bounds[1]):
+        for j in range(read_bounds[1]-1, read_bounds[0]-1, -1):
             if read_counts[j] == 0:
                 continue
 
@@ -1153,7 +1160,7 @@ class Alignments:
         while read_bounds[1] > read_bounds[0] and read_counts[read_bounds[1]-1] == 0:
             read_bounds[1] -= 1
 
-        for i in range(read_bounds[1]-1, read_bounds[0]-1, -1):
+        for i in range(read_bounds[0], read_bounds[1]):
             if read_counts[i] == 0:
                 continue
 
@@ -1201,13 +1208,13 @@ class Alignments:
                     closestL = paired_lens_sorted[id]
                     break
                 elif closestD == None or d < closestD:
-                    closestD = 0
+                    closestD = d
                     closestJ = j
                     closestL = paired_lens_sorted[id]
             if id > 0:
                 d = abs(l - paired_lens_sorted[id-1])
                 if closestD == None or d < closestD:
-                    closestD = 0
+                    closestD = d
                     closestJ = j
                     closestL = paired_lens_sorted[id-1]
 
@@ -1253,13 +1260,13 @@ class Alignments:
                     closestL = paired_lens_sorted[id]
                     break
                 elif closestD == None or d < closestD:
-                    closestD = 0
+                    closestD = d
                     closestI = i
                     closestL = paired_lens_sorted[id]
             if id > 0:
                 d = abs(l - paired_lens_sorted[id-1])
                 if closestD == None or d < closestD:
-                    closestD = 0
+                    closestD = d
                     closestI = i
                     closestL = paired_lens_sorted[id-1]
 

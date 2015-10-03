@@ -297,11 +297,18 @@ class Expander:
                     lensLeft = dict()
                     lensRight = dict()
 
+                debug = False
+                #if self.aligned.exons[i] == 74903:
+                #    debug = True
+
                 if len(unpairedLens) > 0 or len(pairedLens) > 0:
                     exonStart = self.aligned.exons[i]
                     exonEnd = self.aligned.exons[i+1]
 
-                    unpaired, paired, t1, t2 = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, cov[exonStart-self.aligned.exons[0]:exonEnd-self.aligned.exons[0]], None, debug=False)
+                    unpaired, paired, t1, t2 = self.aligned.findReads(unpairedLens, pairedLens, lensLeft, lensRight, cov[exonStart-self.aligned.exons[0]:exonEnd-self.aligned.exons[0]], None, debug=debug)
+
+                    #if debug:
+                    #    exit()
 
                     numP = len(paired)
                     numR = len(unpaired) + 2 * numP
@@ -481,8 +488,14 @@ class Expander:
         unspliced_index = binaryIO.readListFromFile(f)
         spliced_index = binaryIO.readListFromFile(f)
 
+        print('%d clusters' % len(clusters))
+        maxLen = 0
+
         for i in range(len(clusters)):
             self.aligned.exons = clusters[i]
+            l = self.aligned.exons[-1] - self.aligned.exons[0]
+            if l > maxLen:
+                maxLen = l
 
             #self.debug = False
             #if clusters[i] == [13977818, 13978281]:
@@ -513,6 +526,7 @@ class Expander:
             self.aligned.unspliced = []
             self.aligned.spliced = []
             self.aligned.paired = []
+        print('Max cluster size: %d' % maxLen)
 
 
     def readIndexBinary(self, f):
