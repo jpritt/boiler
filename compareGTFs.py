@@ -116,9 +116,9 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
 
         if closestScore > 0:
             totalScore += closestScore
-        else:
-            print(t1.name)
-            #print '%s\t%s\t%f' % (t1.name, closestT.name, closestScore)
+        #else:
+        #    print(t1.name)
+        #    #print '%s\t%s\t%f' % (t1.name, closestT.name, closestScore)
         transcriptsTrueCount += 1
 
     transcriptsPredictedCount = len(transcriptsPredicted)

@@ -1490,14 +1490,13 @@ class Alignments:
                 else:
                     fragmentLens[k] = v
 
-
-        if debug:
-            countUnpaired = 0
-            for k,v in unpairedLens.items():
-                countUnpaired += v
-            countPaired = 0
-            for k,v in pairedLens.items():
-                countPaired += v
+        #if debug:
+        countUnpaired = 0
+        for k,v in unpairedLens.items():
+            countUnpaired += v
+        countPaired = 0
+        for k,v in pairedLens.items():
+            countPaired += v
 
         t1 = time.time()
         reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
@@ -1508,6 +1507,7 @@ class Alignments:
             print('Reads:')
             print(reads)
             print('--->')
+        numR = len(reads)
 
         if boundaries:
             #print(reads)
@@ -1521,9 +1521,13 @@ class Alignments:
             #print(paired)
             #print(len(paired))
             #exit()
+            if len(paired) < countPaired:
+                print('Spliced   - Seeking %d unpaired, %d paired: %d reads, %d unpaired, %d paired' % (countUnpaired, countPaired, numR, len(unpaired), len(paired)))
         else:
             #unpaired, paired = self.findPairs(reads, pairedLens)
             unpaired, paired = self.findPairsRandom(reads, pairedLens)
+            if len(paired) < countPaired:
+                print('Unspliced - Seeking %d unpaired, %d paired: %d reads, %d unpaired, %d paired' % (countUnpaired, countPaired, numR, len(unpaired), len(paired)))
         t3 = time.time()
         #print('  %d pairs:\t%f' % (len(paired), t3-t2))
 

@@ -45,43 +45,56 @@ def bin(data, width):
     return new_data
 
 def compareSAMs(file1, file2):
-    chromOffsets = {'3L': 44158252, '4': 96606862, '3R': 68701809, 'X': 97978236, 'M': 97958719, '2L': 0, '2R': 23011544}
-    covLen = 120401063
-    cov1 = [0] * covLen
-    cov2 = [0] * covLen
-
     fragment_lengths1 = [0] * 100000
     reads1 = []
     countUnpaired = 0
     countPaired = 0
 
+    header = True
+    chromOffsets = dict()
+    covLen = 0
+
     with open(file1, 'r') as f:
         for line in f:
             row = line.rstrip().split('\t')
+            if header and line[0] == '@':
+                if row[0] == '@SQ':
+                    chrom = row[1].split(':')[1]
+                    length = int(row[2].split(':')[1])
 
-            if len(row) < 6:
-                continue
+                    chromOffsets[chrom] = length
+                    covLen += length
 
-            if row[6] == '*':
-                countUnpaired += 1
             else:
-                countPaired += 1
+                if header:
+                    # End of header
+                    header = False
+                    cov1 = [0] * covLen
+                    cov2 = [0] * covLen
 
-                if row[6] == '=':
-                    l = int(row[8])
+                if len(row) < 6:
+                    continue
 
-                    if l > 0:
-                        if l >= len(fragment_lengths1):
-                            fragment_lengths1 += [0] * (l + 1 - len(fragment_lengths1))
-                        fragment_lengths1[l] += 1
+                if row[6] == '*':
+                    countUnpaired += 1
+                else:
+                    countPaired += 1
 
-            exons = parseCigar(row[5], chromOffsets[row[2]]+int(row[3]))
-            for e in exons:
-                for c in range(e[0], e[1]):
-                    cov1[c] += 1
+                    if row[6] == '=':
+                        l = int(row[8])
 
-            read = (row[2], int(row[3]), row[5], row[6], int(row[7]))
-            reads1.append(read)
+                        if l > 0:
+                            if l >= len(fragment_lengths1):
+                                fragment_lengths1 += [0] * (l + 1 - len(fragment_lengths1))
+                            fragment_lengths1[l] += 1
+
+                exons = parseCigar(row[5], chromOffsets[row[2]]+int(row[3]))
+                for e in exons:
+                    for c in range(e[0], e[1]):
+                        cov1[c] += 1
+
+                read = (row[2], int(row[3]), row[5], row[6], int(row[7]))
+                reads1.append(read)
     print('%d unpaired, %d paired' % (countUnpaired, countPaired))
 
     fragment_lengths2 = [0] * len(fragment_lengths1)
@@ -135,16 +148,28 @@ def compareSAMs(file1, file2):
     print('')
     '''
 
-    for i in range(30):
-        print('%d\t%d' % (fragment_lengths1[i], fragment_lengths2[i]))
+    #for i in range(30):
+    #    print('%d\t%d' % (fragment_lengths1[i], fragment_lengths2[i]))
 
-    a, = plt.plot(range(5,100), fragment_lengths1[5:100])
-    b, = plt.plot(range(5,100), fragment_lengths2[5:100])
+    x_range = 100
+    a, = plt.plot(range(x_range), fragment_lengths1[:x_range])
+    b, = plt.plot(range(x_range), fragment_lengths2[:x_range])
     plt.xlabel('Fragment Length (kb)')
     plt.ylabel('Frequency')
+    plt.yscale('log')
     plt.legend([a,b], ['Original', 'Compressed'])
     plt.savefig('frag_len_dist.png')
+    plt.clf()
 
+    diffs = [0] * x_range
+    for i in range(x_range):
+        diffs[i] = fragment_lengths1[i] - fragment_lengths2[i]
+
+    plt.plot(range(x_range), diffs)
+    plt.xlabel('Fragment Length (kb)')
+    plt.ylabel('Original - Compressed Frequency')
+    plt.savefig('frag_len_diff.png')
+    plt.clf()
 
     reads1.sort()
     reads2.sort()
