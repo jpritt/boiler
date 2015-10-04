@@ -69,8 +69,8 @@ def compareSAMs(file1, file2):
                 if header:
                     # End of header
                     header = False
-                    cov1 = [0] * covLen
-                    cov2 = [0] * covLen
+                    #cov1 = [0] * covLen
+                    #cov2 = [0] * covLen
 
                 if len(row) < 6:
                     continue
@@ -88,10 +88,10 @@ def compareSAMs(file1, file2):
                                 fragment_lengths1 += [0] * (l + 1 - len(fragment_lengths1))
                             fragment_lengths1[l] += 1
 
-                exons = parseCigar(row[5], chromOffsets[row[2]]+int(row[3]))
-                for e in exons:
-                    for c in range(e[0], e[1]):
-                        cov1[c] += 1
+                #exons = parseCigar(row[5], chromOffsets[row[2]]+int(row[3]))
+                #for e in exons:
+                #    for c in range(e[0], e[1]):
+                #        cov1[c] += 1
 
                 read = (row[2], int(row[3]), row[5], row[6], int(row[7]))
                 reads1.append(read)
@@ -123,9 +123,9 @@ def compareSAMs(file1, file2):
                         fragment_lengths2[l] += 1
 
             exons = parseCigar(row[5], chromOffsets[row[2]]+int(row[3]))
-            for e in exons:
-                for c in range(e[0], e[1]):
-                    cov2[c] += 1
+            #for e in exons:
+            #    for c in range(e[0], e[1]):
+            #        cov2[c] += 1
 
             read = (row[2], int(row[3]), row[5], row[6], int(row[7]))
             reads2.append(read)
