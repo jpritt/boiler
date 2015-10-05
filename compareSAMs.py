@@ -108,7 +108,7 @@ def compareSAMs(file1, file2):
         tp = 0
         id = 0
         for r in reads1:
-            while id < len(reads2) and reads2[id][0] == r[0] and reads2[id][1] < r[1]:
+            while id < len(reads2)-1 and reads2[id][0] == r[0] and reads2[id][1] < r[1]:
                 id += 1
 
             if reads2[id][0] == r[0] and reads2[id][1] == r[1] and reads2[id][2] == r[2]:
@@ -122,7 +122,7 @@ def compareSAMs(file1, file2):
         tp = 0
         id = 0
         for r in reads1:
-            while id < len(reads2) and reads2[id] < r:
+            while id < len(reads2)-1 and reads2[id] < r:
                 id += 1
 
             if reads2[id] == r:
