@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 import sys
 import re
+import argparse
 from matplotlib import pyplot as plt
 
 def parseCigar(cigar, offset):
@@ -70,7 +71,7 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired):
 
     return reads, countUnpaired, countPaired
 
-def compareSAMs(file1, file2):
+def compareSAMs(file1, file2, plot):
     fragment_lengths1 = [0] * 100000
     fragment_lengths2 = [0] * 100000
     countUnpaired1 = 0
@@ -153,25 +154,11 @@ def compareSAMs(file1, file2):
     print('File 2: %d unpaired, %d paired' % (countUnpaired2, countPaired2))
     print('')
 
-
     fragment_lengths1 = bin(fragment_lengths1, 1000)
     fragment_lengths2 = bin(fragment_lengths2, 1000)
+    return fragment_lengths1, fragment_lengths2
 
-    '''
-    for i in range(min(len(fragment_lengths1), len(fragment_lengths2))):
-        print('%d\t%d' % (fragment_lengths1[i], fragment_lengths2[i]))
-    if len(fragment_lengths1) > len(fragment_lengths2):
-        for i in range(len(fragment_lengths2), len(fragment_lengths1)):
-            print('%d\t%d' % (fragment_lengths1[i], 0))
-    elif len(fragment_lengths2) > len(fragment_lengths1):
-        for i in range(len(fragment_lengths1), len(fragment_lengths2)):
-            print('%d\t%d' % (0, fragment_lengths2[i]))
-    print('')
-    '''
-
-    #for i in range(30):
-    #    print('%d\t%d' % (fragment_lengths1[i], fragment_lengths2[i]))
-
+def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     x_range = 100
     a, = plt.plot(range(x_range), fragment_lengths1[:x_range])
     b, = plt.plot(range(x_range), fragment_lengths2[:x_range])
@@ -192,4 +179,39 @@ def compareSAMs(file1, file2):
     plt.savefig('frag_len_diff.png')
     plt.clf()
 
-compareSAMs(sys.argv[1], sys.argv[2])
+def write_frag_lens(filename, fragment_lengths1, fragment_lengths2):
+    with open(filename, 'w') as f:
+        f.write(','.join([str(l) for l in fragment_lengths1]) + '\n')
+        f.write(','.join([str(l) for l in fragment_lengths2]) + '\n')
+
+def read_frag_lens(filename):
+    with open(filename, 'r') as f:
+        fragment_lengths1 = [int(l) for l in f.readline().rstrip().split(',')]
+        fragment_lengths2 = [int(l) for l in f.readline().rstrip().split(',')]
+    return fragment_lengths1, fragment_lengths2
+
+if __name__ == '__main__':
+
+    # Print file's docstring if -h is invoked
+    parser = argparse.ArgumentParser(description=__doc__,
+            formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--sam1', type=str, help='Full path of first SAM file to compare')
+    parser.add_argument('--sam2', type=str, help='Full path of first SAM file to compare')
+    parser.add_argument('--out-frags', type=str, help="File to write fragment length distributions to")
+    parser.add_argument('--plot', help="Plot fragment length distribution graphs", action="store_true")
+
+    args = parser.parse_args(sys.argv[1:])
+
+    if args.sam1 and args.sam2:
+        frags1, frags2 = compareSAMs(args.sam1, args.sam2, args.plot)
+
+        if args.out_frags:
+            write_frag_lens(args.out_frags, frags1, frags2)
+    elif args.out_frags:
+        frags1, frags2 = read_frag_lens(args.out_frags)
+    else:
+        print('Include either 2 SAM files to compare, or the path to a fragment length distribution')
+        exit()
+
+    if args.plot:
+        plot_frag_lens(frags1, frags2)
