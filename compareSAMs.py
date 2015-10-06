@@ -108,25 +108,31 @@ def compareSAMs(file1, file2, plot):
         # No pairing
         tp = 0
         id = 0
-        for r in reads1:
-            while id < len(reads2)-1 and reads2[id][0] == r[0] and reads2[id][1] < r[1]:
+        for read in reads1:
+            r = read[:3]
+            while id < len(reads2) and reads2[id][:3] < r:
                 id += 1
 
-            if reads2[id][0] == r[0] and reads2[id][1] == r[1] and reads2[id][2] == r[2]:
+            if id < len(reads2) and reads2[id][:3] == r:
                 tp += 1
                 id += 1
+            elif id > 0 and id < len(reads2):
+                print(r)
+                print(reads2[id-1])
+                print(reads2[id])
 
         TP_no_pairs += tp
         FN_no_pairs += len(reads1) - tp
         FP_no_pairs += len(reads2) - tp
 
+        # Pairing
         tp = 0
         id = 0
         for r in reads1:
-            while id < len(reads2)-1 and reads2[id] < r:
+            while id < len(reads2) and reads2[id] < r:
                 id += 1
 
-            if reads2[id] == r:
+            if id < len(reads2) and reads2[id] == r:
                     tp += 1
                     id += 1
         TP_pairs += tp
