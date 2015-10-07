@@ -551,6 +551,8 @@ class Compressor:
         :return:
         '''
 
+        readLens = dict()
+
         countUnspliced = 0
         countSpliced = 0
         countPaired = 0
@@ -658,6 +660,15 @@ class Compressor:
 
                 exons = self.parseCigar(row[5], int(row[3]))
 
+
+                length = 0
+                for e in exons:
+                    length += e[1]-e[0]
+                if length in readLens:
+                    readLens[length] += 1
+                else:
+                    readLens[length] = 1
+
                 # find XS value:
                 xs = None
                 NH = 1
@@ -710,6 +721,10 @@ class Compressor:
                 debug = True
 
             junctions, maxReadLen = self.computeJunctions(debug)
+
+            print('Read lengths:')
+            print(readLens)
+            print('')
 
             countUnspliced += len(self.aligned.unspliced)
             countSpliced += len(self.aligned.spliced)
