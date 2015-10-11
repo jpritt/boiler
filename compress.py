@@ -23,6 +23,9 @@ class Compressor:
     # 2 - bz2
     compressMethod = 0
 
+    total_regions = 0
+    multi_len_regions = 0
+
     def __init__(self):   
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
@@ -308,6 +311,18 @@ class Compressor:
             #    print(junc.pairedLens)
 
             if binary:
+                unique_lens = set()
+                for l in junc.unpairedLens.keys():
+                    unique_lens.add(l)
+                for l in junc.lensLeft.keys():
+                    unique_lens.add(l)
+                for l in junc.lensRight.keys():
+                    unique_lens.add(l)
+                if len(unique_lens) > 0:
+                    self.total_regions += 1
+                if len(unique_lens) > 1:
+                    self.multi_len_regions += 1
+
                 s += binaryIO.writeJunction(readLenBytes, junc)
             else:
                 print('Non-binary spliced encoding is not supported')
@@ -484,6 +499,7 @@ class Compressor:
             for i in range(len(reads)):
                 start = self.aligned.exons[i]
 
+                unique_lens = set()
 
                 # Distribution of all read lengths
                 unpairedLens = dict()
@@ -520,6 +536,9 @@ class Compressor:
                             lensRight[read.lenRight] += 1
                         else:
                             lensRight[read.lenRight] = 1
+
+                        unique_lens.add(read.lenLeft)
+                        unique_lens.add(read.lenRight)
                     else:
                         #unpaired.append([read.exons[0][0]-start, read.exons[-1][1]-start])
 
@@ -529,6 +548,13 @@ class Compressor:
                             unpairedLens[length] += 1
                         else:
                             unpairedLens[length] = 1
+
+                        unique_lens.add(length)
+
+                if len(unique_lens) > 0:
+                    self.total_regions += 1
+                if len(unique_lens) > 1:
+                    self.multi_len_regions += 1
 
                 s += binaryIO.writeLens(readLenBytes, unpairedLens)
                 s += binaryIO.writeLens(fragLenBytes, pairedLens)
@@ -712,6 +738,8 @@ class Compressor:
             #print('Compressing cluster (%d, %d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
             #print('  %d unspliced' % len(self.aligned.unspliced))
             #print('  %d spliced' % len(self.aligned.spliced))
+
+            print('%d / %d (%0.2f%%) regions have non-unique read lengths' % (self.multi_len_regions, self.total_regions, 100.0*float(self.multi_len_regions)/float(self.total_regions)))
 
             debug = False
             if step == 0:

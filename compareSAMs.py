@@ -116,10 +116,10 @@ def compareSAMs(file1, file2, plot):
             if id < len(reads2) and reads2[id][:3] == r:
                 tp += 1
                 id += 1
-            elif id > 0 and id < len(reads2):
-                print(r)
-                print(reads2[id-1])
-                print(reads2[id])
+            #elif id > 0 and id < len(reads2):
+            #    print(r)
+            #    print(reads2[id-1])
+            #    print(reads2[id])
 
         TP_no_pairs += tp
         FN_no_pairs += len(reads1) - tp
