@@ -336,7 +336,7 @@ class Compressor:
         return filehandle.tell()-start
 
 
-    def compressUnspliced(self, filehandle, binary=False):
+    def compressUnspliced(self, filehandle, binary=False, debug=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
@@ -426,7 +426,7 @@ class Compressor:
             fragLenBytes = binaryIO.findNumBytes(maxFragLen)
             readLenBytes = binaryIO.findNumBytes(maxReadLen)
 
-            length = self.writeUnsplicedBinary(filehandle, reads_by_NH, coverages, fragment_coverages, fragLenBytes, readLenBytes)
+            length = self.writeUnsplicedBinary(filehandle, reads_by_NH, coverages, fragment_coverages, fragLenBytes, readLenBytes, debug)
             return length
         else:
             print('Non-binary unspliced compression not supported')
@@ -434,7 +434,7 @@ class Compressor:
             self.writeUnspliced(filehandle, reads_by_NH, coverages)
 
 
-    def writeUnsplicedBinary(self, filehandle, reads_by_NH, coverages, fragment_coverages, fragLenBytes, readLenBytes):
+    def writeUnsplicedBinary(self, filehandle, reads_by_NH, coverages, fragment_coverages, fragLenBytes, readLenBytes, debug=False):
         ''' Compress the unspliced alignments as a run-length-encoded coverage vector
 
             filename: Name of file to compress to
@@ -444,12 +444,23 @@ class Compressor:
         s += binaryIO.valToBinary(1, fragLenBytes)
         s += binaryIO.valToBinary(1, readLenBytes)
 
+        if debug:
+            print('Exons:')
+            print(self.aligned.exons)
+            print('')
+
         for NH in sorted(reads_by_NH.keys()):
+            if debug:
+                print('NH: ' + str(NH))
             s += binaryIO.valToBinary(2, NH)
 
             #cov = fragment_coverages[NH]
             cov = coverages[NH]
             reads = reads_by_NH[NH]
+
+            if debug:
+                print('Reads:')
+                print(reads)
 
             s += binaryIO.writeCov(cov)
 
@@ -497,6 +508,25 @@ class Compressor:
 
             # Write read length distributions
             for i in range(len(reads)):
+                if i == len(reads)-1 and debug:
+                    all_r = []
+                    for id in reads[i]:
+                        r = self.aligned.unspliced[id]
+                        if r.lenLeft == 0 and r.lenRight == 0:
+                            all_r.append(r.exons[0])
+                        else:
+                            all_r.append([r.exons[0][0], r.exons[0][0]+r.lenLeft])
+                            all_r.append([r.exons[0][1]-r.lenRight, r.exons[0][1]])
+                    print('Reads:')
+                    print(all_r) 
+
+                    print('Fragments:')
+                    print([self.aligned.unspliced[id].exons for id in reads[i]])
+                    cov_start = self.aligned.exons[0]
+                    print('Coverage:')
+                    c = self.RLEtoVector(coverages[NH])
+                    print(c[self.aligned.exons[i]-cov_start:self.aligned.exons[i+1]-cov_start])
+
                 start = self.aligned.exons[i]
 
                 unique_lens = set()
@@ -550,6 +580,13 @@ class Compressor:
                             unpairedLens[length] = 1
 
                         unique_lens.add(length)
+                
+                if i == len(reads)-1 and debug:
+                    print(unpairedLens)
+                    print(pairedLens)
+                    print(lensLeft)
+                    print(lensRight)
+                    print('')
 
                 if len(unique_lens) > 0:
                     self.total_regions += 1
@@ -666,9 +703,15 @@ class Compressor:
                     #print('  Computing junctions')
                     junctions, maxReadLen = self.computeJunctions(debug)
 
+                    debug = False
+                    #if self.aligned.exons[0] <= self.aligned.offset_i and self.aligned.exons[-1] > self.aligned.offset_i:
+                    #    debug=True
+
                     with open('temp.bin', 'ab') as f:
                         #print('  Compressing unspliced')
-                        l = self.compressUnspliced(f, binary=True)
+                        l = self.compressUnspliced(f, binary=True, debug=debug)
+                        #if debug:
+                        #    exit()
                         unspliced_index.append(l)
 
                         #print('  Compressing spliced')

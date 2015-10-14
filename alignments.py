@@ -51,7 +51,8 @@ class Alignments:
             nextOffset += chromosomes[c]
             #self.exons += [nextOffset]
 
-        print(self.chromOffsets)
+        self.offset_i = self.chromOffsets['chrY'] + 59276162
+        print('Read start: %d + %d = %d' % (self.chromOffsets['chrY'], 59276162, self.offset_i))
 
         #self.exons = set(self.exons)
 
@@ -182,6 +183,11 @@ class Alignments:
 
         if combined_i < len(self.exons):
             self.exons = self.exons[:combined_i]
+
+        if self.exons[0] <= self.offset_i and self.exons[-1] > self.offset_i:
+            print('Exons:')
+            print(self.exons)
+            print('')
 
     def finalizeReads(self):
         ''' Now that all exon boundaries are known, fix unspliced regions that cross exon boundaries
@@ -1499,7 +1505,7 @@ class Alignments:
             countPaired += v
 
         t1 = time.time()
-        reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
+        reads = self.findReadsInCoverage_v2(coverage, fragmentLens)
         t2 = time.time()
         #print('  %d reads:\t%f' % (len(reads), t2-t1))
 
@@ -2585,7 +2591,7 @@ class Alignments:
 
         # Read lengths sorted first by frequency, largest to smallest, then by length (smallest to largest)
         #lensSorted = sorted(readLens, key=readLens.get, reverse=True)
-        lensSorted = [v[0] for v in sorted(readLens.iteritems(), key = lambda k,v: (v, -k), reverse=True)]
+        lensSorted = [v[0] for v in sorted(readLens.items(), key = lambda x: (x[1], -x[0]), reverse=True)]
 
 
         reads = []
