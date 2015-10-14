@@ -51,8 +51,7 @@ class Alignments:
             nextOffset += chromosomes[c]
             #self.exons += [nextOffset]
 
-        self.offset_i = self.chromOffsets['chrY'] + 59276162
-        print('Read start: %d + %d = %d' % (self.chromOffsets['chrY'], 59276162, self.offset_i))
+        print(self.chromOffsets)
 
         #self.exons = set(self.exons)
 
@@ -183,11 +182,6 @@ class Alignments:
 
         if combined_i < len(self.exons):
             self.exons = self.exons[:combined_i]
-
-        if self.exons[0] <= self.offset_i and self.exons[-1] > self.offset_i:
-            print('Exons:')
-            print(self.exons)
-            print('')
 
     def finalizeReads(self):
         ''' Now that all exon boundaries are known, fix unspliced regions that cross exon boundaries
@@ -1483,14 +1477,19 @@ class Alignments:
             print('  -->')
 
         fragmentLens = copy.copy(unpairedLens)
+        numFragments = 0
+        for k,v in unpairedLens.items():
+            numFragments += v
         for k,v in lensLeft.items():
             if k > 0:
+                numFragments += v
                 if k in fragmentLens:
                     fragmentLens[k] += v
                 else:
                     fragmentLens[k] = v
         for k,v in lensRight.items():
             if k > 0:
+                numFragments += v
                 if k in fragmentLens:
                     fragmentLens[k] += v
                 else:
@@ -1504,10 +1503,22 @@ class Alignments:
         for k,v in pairedLens.items():
             countPaired += v
 
+        #print('Finding reads:')
+        #print(fragmentLens)
+        #print(coverage)
         t1 = time.time()
-        reads = self.findReadsInCoverage_v2(coverage, fragmentLens)
+        # If the number of potential start sites is equal to the number of reads, then we can solve it with high accuracy with v1. Otherwise use v3
+        starts = 0
+        for i in range(len(coverage)-1):
+            if coverage[i+1] > coverage[i]:
+                starts += coverage[i+1] - coverage[i]
+        if starts == numFragments:
+            reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
+        else:
+            reads = self.findReadsInCoverage_v3(coverage, fragmentLens)
         t2 = time.time()
-        #print('  %d reads:\t%f' % (len(reads), t2-t1))
+        #print(t2-t1)
+        #print('')
 
         if debug:
             print('Reads:')
@@ -2591,7 +2602,7 @@ class Alignments:
 
         # Read lengths sorted first by frequency, largest to smallest, then by length (smallest to largest)
         #lensSorted = sorted(readLens, key=readLens.get, reverse=True)
-        lensSorted = [v[0] for v in sorted(readLens.items(), key = lambda x: (x[1], -x[0]), reverse=True)]
+        lensSorted = [v[0] for v in sorted(readLens.items(), key = lambda x: x[1], reverse=True)]
 
 
         reads = []
@@ -2769,6 +2780,250 @@ class Alignments:
             print('Error! %d =/= %d!' % (countReads, len(reads)))
             exit()
         return reads
+
+
+
+    def findReadsInCoverage_v3(self, cov, frag_lens):
+        reads = []
+
+        start = 0
+        end = len(cov)
+        while start < end and cov[start] <= 0:
+            start += 1
+        while start < end and cov[end-1] <= 0:
+            end -= 1
+
+        min_len = None
+        max_len = None
+        mode_len = 0
+        mode_freq = 0
+        for l,f in frag_lens.items():
+            if not min_len or l < min_len:
+                min_len = l
+            if not max_len or l > max_len:
+                max_len = l
+            if f > mode_freq:
+                mode_freq = f
+                mode_len = l
+
+        while start < end:
+            start, end = self.findReadLeft(cov, start, end, reads, min_len, max_len, mode_len)
+
+            if start < end:
+                start, end = self.findReadRight(cov, start, end, reads, min_len, max_len, mode_len)
+
+        return reads
+
+    def findReadEndingAt(self, reads, end):
+        for i in range(len(reads)-1, -1, -1):
+            if reads[i][1] == end:
+                return i
+        return -1
+
+    def findReadStartingAt(self, reads, start):
+        for i in range(len(reads)-1, -1, -1):
+            if reads[i][0] == start:
+                return i
+        return -1
+
+    def findNextGap(self, cov, start, end, modeLen):
+        gap = False
+        for i in range(min(modeLen,end-start)):
+            if cov[start+i] > 0:
+                if gap:
+                    return [gap_start, i]
+            else:
+                if not gap:
+                    gap_start = i
+                    gap = True
+        if gap:
+            return [gap_start, i+1]
+        else:
+            return None
+
+    def findPrevGap(self, cov, start, end, modeLen):
+        gap = False
+        for i in range(min(modeLen,end-start)):
+            if cov[end-i-1] > 0:
+                if gap:
+                    return [gap_start, i]
+            else:
+                if not gap:
+                    gap_start = i
+                    gap = True
+        if gap:
+            return [gap_start, i+1]
+        else:
+            return None
+
+    def extendReadRight(self, cov, start, stop, reads):
+        '''
+        Extend the right end of a read ending at 'start' up to 'stop'
+        '''
+        for r in reads:
+            if r[1] == start:
+                r[1] = stop
+                for i in range(start, stop):
+                    cov[i] -= 1
+                return True
+        return False
+
+    def extendReadLeft(self, cov, start, stop, reads):
+        '''
+        Extend the left end of a read beginning at 'start' down to 'stop'
+        '''
+        for r in reads:
+            if r[0] == start:
+                r[0] = stop
+                for i in range(stop, start):
+                    cov[i] -= 1
+                return True
+        return False
+
+    def shortenReadRight(self, cov, start, stop, reads, max_shorten):
+        '''
+        Shorten the right end of a read ending at 'stop' down to 'start'
+        '''
+
+        for i in range(stop, start+max_shorten+1):
+            for r in reads:
+                if r[1] == i:
+                    r[1] = start
+                    for j in range(start, i):
+                        cov[j] += 1
+                    return True
+        return False
+
+
+    def shortenReadLeft(self, cov, start, stop, reads, max_shorten):
+        '''
+        Shorten the left end of a read beginning at 'stop' up to 'start'
+        '''
+
+        for i in range(stop, start-max_shorten-1, -1):
+            for r in reads:
+                if r[0] == i:
+                    r[0] = start
+                    for i in range(i, start):
+                        cov[i] += 1
+                    return True
+        return False
+
+    def shiftReadsRight(self, start, reads, max_shift):
+        for shift in range(1, max_shift+1):
+            first = self.findReadEndingAt(reads, start-shift)
+            second = self.findReadStartingAt(reads, start-shift)
+
+            if first >= 0 and second >= 0:
+                reads[first][1] += shift
+                reads[second][0] += shift
+                return True
+
+        return False
+
+    def shiftReadsLeft(self, start, reads, max_shift):
+        for shift in range(1, max_shift+1):
+            first = self.findReadEndingAt(reads, start+shift)
+            second = self.findReadStartingAt(reads, start+shift)
+
+            if first >= 0 and second >= 0:
+                reads[first][1] -= shift
+                reads[second][0] -= shift
+                return True
+
+        return False
+
+    def findReadLeft(self, cov, start, end, reads, min_len, max_len, mode_len):
+        gap = self.findNextGap(cov, start, end, mode_len)
+
+        #if start == 62 and cov[start] == 1:
+        #    print(gap)
+
+        if not gap:
+            readEnd = min(start+mode_len,end)
+
+            found = False
+            if readEnd-start <= (max_len - mode_len):
+                found = self.extendReadRight(cov, start, readEnd, reads)
+                if not found:
+                    found = self.shiftReadsRight(start, reads, max_len-mode_len) and self.extendReadRight(cov, start, readEnd, reads)
+            if not found:
+                reads.append([start, readEnd])
+                for i in range(start, readEnd):
+                    cov[i] -= 1
+        else:
+            found = False
+            if gap[0] <= (max_len - mode_len):
+                found = self.extendReadRight(cov, start, start+gap[0], reads)
+                if not found:
+                    found = self.shiftReadsRight(start, reads, max_len - mode_len) and self.extendReadRight(cov, start, start+gap[0], reads)
+
+            if not found and (gap[1] - gap[0]) <= (mode_len - min_len):
+                found = self.shortenReadRight(cov, start+gap[0], start+gap[1], reads, mode_len-min_len)
+
+            if not found:
+                if gap[0] >= min_len:
+                    readEnd = start+gap[0]
+                else:
+                    readEnd = min(start+mode_len, end)
+                reads.append([start, readEnd])
+                for i in range(start, readEnd):
+                    cov[i] -= 1
+
+        #if start > 63:
+        #    exit()
+
+        while start < end and cov[start] <= 0:
+            start += 1
+        while start < end and cov[end-1] <= 0:
+            end -= 1
+
+        return start, end
+
+    def findReadRight(self, cov, start, end, reads, min_len, max_len, mode_len):
+        gap = self.findPrevGap(cov, start, end, mode_len)
+
+        if not gap:
+            readStart = max(end-mode_len,start)
+
+            found = False
+            if end-readStart <= (max_len - mode_len):
+                found = self.extendReadLeft(cov, end, readStart, reads)
+                if not found:
+                    found = self.shiftReadsLeft(end, reads, max_len-mode_len) and self.extendReadLeft(cov, end, readStart, reads)
+            if not found:
+                reads.append([readStart, end])
+                for i in range(readStart, end):
+                    cov[i] -= 1
+        else:
+            found = False
+            if gap[0] <= (max_len - mode_len):
+                found = self.extendReadLeft(cov, end, end-gap[0], reads)
+                if not found:
+                    found = self.shiftReadsLeft(end, reads, max_len - mode_len) and self.extendReadLeft(cov, end, end-gap[0], reads)
+
+            if not found and (gap[1] - gap[0]) <= (mode_len - min_len):
+                found = self.shortenReadLeft(cov, end-gap[0], end-gap[1], reads, mode_len-min_len)
+
+            if not found:
+                if gap[0] >= min_len:
+                    readStart = end-gap[0]
+                else:
+                    readStart = max(end-mode_len, start)
+                reads.append([readStart, end])
+                for i in range(readStart, end):
+                    cov[i] -= 1
+
+        while start < end and cov[start] <= 0:
+            start += 1
+        while start < end and cov[end-1] <= 0:
+            end -= 1
+
+        return start, end
+
+
+
+
 
 
 
