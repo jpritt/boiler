@@ -1947,7 +1947,7 @@ class Alignments:
         if paired:
             read.pairOffset += offset
 
-        if not paired or abs(read.pairOffset - read.exons[0][0]) > 100000:
+        if not paired:# or abs(read.pairOffset - read.exons[0][0]) > 100000:
             self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
             gene_end = read.exons[-1][1]
 

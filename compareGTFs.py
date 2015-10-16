@@ -91,8 +91,8 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     line = 0
     for t1 in transcriptsTrue:
         line += 1
-        if line % 1000 == 0:
-            print "%d / %d transcripts done" % (line, len(transcriptsTrue))
+        #if line % 1000 == 0:
+        #    print "%d / %d transcripts done" % (line, len(transcriptsTrue))
 
         if t1.cov < .000001:
             continue
