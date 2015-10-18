@@ -2,7 +2,6 @@
 import sys
 import re
 import argparse
-from matplotlib import pyplot as plt
 
 def parseCigar(cigar, offset):
     ''' Parse the cigar string starting at the given index of the genome
@@ -165,6 +164,8 @@ def compareSAMs(file1, file2, plot):
     return fragment_lengths1, fragment_lengths2
 
 def plot_frag_lens(fragment_lengths1, fragment_lengths2):
+    from matplotlib import pyplot as plt
+
     x_range = 100
     a, = plt.plot(range(x_range), fragment_lengths1[:x_range])
     b, = plt.plot(range(x_range), fragment_lengths2[:x_range])
