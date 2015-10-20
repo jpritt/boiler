@@ -83,7 +83,7 @@ class Alignments:
             if reads:
                 count += len(reads)
                 for r in reads:
-                    self.updateGeneBoundsBinary([r.exons[0][0], r.exons[-1][1]])
+                    #self.updateGeneBoundsBinary([r.exons[0][0], r.exons[-1][1]])
 
                     if len(r.exons) == 1:
                         self.addUnspliced(r)
@@ -109,7 +109,7 @@ class Alignments:
                 if r.pairOffset <= end:
                     count += 1
 
-                    self.updateGeneBoundsBinary([r.exons[0][0], r.exons[-1][1]])
+                    #self.updateGeneBoundsBinary([r.exons[0][0], r.exons[-1][1]])
 
                     if len(r.exons) == 1:
                         self.addUnspliced(r)
@@ -133,6 +133,11 @@ class Alignments:
         ''' Convert the set of exon boundaries to a list
         '''
 
+        self.exons.add(self.gene_bounds[0])
+        self.exons.add(self.gene_bounds[1])
+        self.exons = sorted(list(self.exons))
+
+        '''
         if self.debug:
             print('Sorting spliced subexons')
         splice_exons = sorted(list(self.exons))
@@ -182,6 +187,7 @@ class Alignments:
 
         if combined_i < len(self.exons):
             self.exons = self.exons[:combined_i]
+        '''
 
     def finalizeReads(self):
         ''' Now that all exon boundaries are known, fix unspliced regions that cross exon boundaries
@@ -1942,13 +1948,20 @@ class Alignments:
                 self.exons.add(alignment[i][1])
                 self.exons.add(alignment[i+1][0])
 
+
         #self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
 
-        if paired:
-            read.pairOffset += offset
-
         if not paired:# or abs(read.pairOffset - read.exons[0][0]) > 100000:
-            self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
+            #self.updateGeneBoundsBackwards([read.exons[0][0], read.exons[-1][1]])
+            if not self.gene_bounds:
+                self.gene_bounds = [read.exons[0][0], read.exons[-1][1]]
+            else:
+                if read.exons[0][0] < self.gene_bounds[0]:
+                    print('Read beginning before first gene bound')
+                    self.gene_bounds[0] = read.exons[0][0]
+                if read.exons[-1][1] > self.gene_bounds[1]:
+                    self.gene_bounds[1] = read.exons[-1][1]
+
             gene_end = read.exons[-1][1]
 
             # unpaired read
@@ -1957,7 +1970,17 @@ class Alignments:
             else:
                 self.addSpliced(read)
         else:
+            read.pairOffset += offset
+
             gene_end = max(read.exons[-1][1], read.pairOffset)
+            if not self.gene_bounds:
+                self.gene_bounds = [read.exons[0][0], gene_end]
+            else:
+                if read.exons[0][0] < self.gene_bounds[0]:
+                    print('Read beginning before first gene bound')
+                    self.gene_bounds[0] = read.exons[0][0]
+                if gene_end > self.gene_bounds[1]:
+                    self.gene_bounds[1] = gene_end
 
             if name in self.unmatched:
                 foundMatch = False
@@ -1972,7 +1995,7 @@ class Alignments:
                         start = min(match.exons[0][0], read.exons[0][0])
                         end = max(match.exons[-1][1], read.exons[-1][1])
                         #if end-start < 100000:
-                        self.updateGeneBoundsBackwards([start, end])
+                        #self.updateGeneBoundsBackwards([start, end])
 
                         # Update NH values
                         if match.NH <= read.NH:
@@ -1991,8 +2014,6 @@ class Alignments:
                     self.unmatched[name].append(read)
             else:
                 self.unmatched[name] = [read]
-
-        return gene_end
 
     def conflicts(self, exonsA, exonsB):
         '''
