@@ -1562,19 +1562,6 @@ class Alignments:
             print(paired)
             print('')
 
-        '''
-        if boundaries:
-            start = boundaries[0]
-            end = boundaries[-1]
-            for r in unpaired:
-                if r[0] >= start or r[1] <= end:
-                    self.badUnpaired += 1
-                self.countUnpaired += 1
-            for p in paired:
-                if p[0][0] >= start or p[1][1] <= end:
-                    self.badPaired += 1
-                self.countPaired += 1
-        '''
 
         return unpaired, paired, t2-t1, t3-t2
     
@@ -1957,12 +1944,9 @@ class Alignments:
                 self.gene_bounds = [read.exons[0][0], read.exons[-1][1]]
             else:
                 if read.exons[0][0] < self.gene_bounds[0]:
-                    print('Read beginning before first gene bound')
                     self.gene_bounds[0] = read.exons[0][0]
                 if read.exons[-1][1] > self.gene_bounds[1]:
                     self.gene_bounds[1] = read.exons[-1][1]
-
-            gene_end = read.exons[-1][1]
 
             # unpaired read
             if len(read.exons) == 1:
@@ -1977,7 +1961,6 @@ class Alignments:
                 self.gene_bounds = [read.exons[0][0], gene_end]
             else:
                 if read.exons[0][0] < self.gene_bounds[0]:
-                    print('Read beginning before first gene bound')
                     self.gene_bounds[0] = read.exons[0][0]
                 if gene_end > self.gene_bounds[1]:
                     self.gene_bounds[1] = gene_end

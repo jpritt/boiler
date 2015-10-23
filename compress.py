@@ -51,88 +51,6 @@ class Compressor:
         self.aligned = alignments.Alignments(self.chromosomes, self.debug)
 
         self.compressByCluster(samFilename, compressedFilename, min_filename)
-        return
-
-        print('Parsing alignments')
-        if self.debug:
-            start = time.time()
-        self.parseAlignments(samFilename)
-        if self.debug:
-            end = time.time()
-            print('Parsing time: %0.3fs' % (end-start))
-
-        if min_filename:
-            print('Writing intermediate SAM')
-            with open(min_filename, 'w') as f:
-                self.aligned.writeSAM(f)
-
-        if self.debug:
-            print('Finalizing')
-            start = time.time()
-        self.aligned.finalizeReads()
-        if self.debug:
-            end = time.time()
-            print('Finalizing time: %0.3fs' % (end-start))
-
-        ''' TODO: No need for if/else? '''
-        if binary:
-            with open(compressedFilename, 'wb') as f:
-                s = binaryIO.writeChroms(self.aligned.chromosomes)
-                f.write(s)
-                s, self.exonBytes = binaryIO.writeExons(self.aligned.exons)
-                f.write(s)
-
-                if self.debug:
-                    start = time.time()
-                junctions, maxReadLen = self.computeJunctions()
-
-                if self.debug:
-                    end = time.time()
-                    print('Computing junctions time: %0.3fs'% (end-start))
-                    start = time.time()
-                self.compressUnspliced(f, binary)
-                if self.debug:
-                    end = time.time()
-                    print('Unspliced time: %0.3fs'% (end-start))
-                    start = time.time()
-                self.compressSpliced(junctions, maxReadLen, f, binary)
-                if self.debug:
-                    end = time.time()
-                    print('Spliced time: %0.3fs'% (end-start))
-            
-            # Write exons and index information
-            if self.debug:
-                start = time.time()
-            compressed = None
-            with open(compressedFilename, 'rb') as f:
-                compressed = f.read()
-            with open(compressedFilename, 'wb') as f:
-                self.writeIndexBinary(f)
-                f.write(compressed)
-            if self.debug:
-                end = time.time()
-                print('Writing index time: %0.3fs' % (end-start))
-
-        else:
-            with open(compressedFilename, 'w') as f:
-                if len(self.aligned.spliced) > 0:
-                    junctions, maxReadLen = self.computeJunctions()
-                    self.compressSpliced(junctions, maxReadLen, f, binary)
-                f.write('/\n')
-                if len(self.aligned.unspliced) > 0:
-                    self.compressUnspliced(f, binary)
-
-            with open(compressedFilename, 'r') as f:
-                compressed = f.read()
-            with open(compressedFilename, 'w') as f:
-                chroms = []
-                for k,v in self.aligned.chromosomes.items():
-                    chroms.append(str(k)+','+str(v))
-                f.write('\t'.join(chroms) + '\n')
-
-                f.write('\t'.join([str(e) for e in self.aligned.exons]) + '\n')
-
-                f.write(compressed)
 
     def add_to_partition(self, r, max_len, partitions, debug=False):
         '''
@@ -440,47 +358,6 @@ class Compressor:
 
             s += binaryIO.writeCov(cov)
 
-            '''
-            # Write coverage vector
-            offsets = [0] * len(breakpoints)
-
-            pos = 0
-            currBreakpoint = 0
-            start = filehandle.tell()
-            segmentRLE = []
-            for c in cov:
-                segmentEnd = pos+c[1]
-                while currBreakpoint < len(breakpoints)-1 and breakpoints[currBreakpoint+1] < segmentEnd:
-                    length = breakpoints[currBreakpoint+1] - pos
-                    if length > 0:
-                        segmentRLE.append([c[0], length])
-
-                    if len(segmentRLE) == 1 and segmentRLE[0][0] == 0:
-                        offsets[currBreakpoint] = 0
-                    else:
-                        s = binaryIO.writeCov(segmentRLE)
-                        filehandle.write(self.compressString(s))
-                        offsets[currBreakpoint] = filehandle.tell() - start
-                    currBreakpoint += 1
-                    segmentRLE = []
-
-                    c[1] -= length
-                    pos += length
-                    start = filehandle.tell()
-
-                if c[1] > 0:
-                    segmentRLE.append(c)
-                    pos += c[1]
-            if len(segmentRLE) > 0:
-                if len(segmentRLE) == 1 and segmentRLE[0][0] == 0:
-                    offsets[currBreakpoint] = 0
-                else:
-                    s = binaryIO.writeCov(segmentRLE)
-                    filehandle.write(self.compressString(s))
-                    offsets[currBreakpoint] = filehandle.tell() - start
-
-            self.unsplicedIndex[NH] = offsets
-            '''
 
             # Write read length distributions
             for i in range(len(reads)):
@@ -580,10 +457,6 @@ class Compressor:
 
         readLens = dict()
 
-        countUnspliced = 0
-        countSpliced = 0
-        countPaired = 0
-
         # If coverage is 0 for at least this many bases end of a potential gene
         overlapRadius = 50
 
@@ -594,8 +467,6 @@ class Compressor:
         spliced_index = []
         clusters = []
 
-        step = 0
-
         first = True
 
         with open(input_name, 'r') as filehandle:
@@ -603,15 +474,13 @@ class Compressor:
             for line in filehandle:
                 row = line.strip().split('\t')
 
-                #print(row)
-
                 # Check if header line
-                if len(row) < 5:
+                if len(row) < 6:
                     continue
 
                 if not row[2] in self.chromosomes.keys():
-                    print('Chromosome ' + str(row[2]) + ' not found!')
-                    continue
+                    print('Error! Chromosome ' + str(row[2]) + ' not found!')
+                    exit()
 
                 start = self.aligned.chromOffsets[row[2]] + int(row[3])
 
@@ -621,13 +490,11 @@ class Compressor:
                     # TODO: Find accuracy lost by tossing far away paired reads
                     #self.aligned.finalizeUnmatchedCluster(gene_end)
 
-                    st = time.time()
                     self.aligned.finalizeUnmatched()
                     self.aligned.finalizeExons()
 
                     clusters.append(self.aligned.exons)
 
-                    #print('Compressing (%d,%d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
 
                     if intermediate_name:
                         if first:
@@ -638,50 +505,16 @@ class Compressor:
                             with open(intermediate_name, 'a') as f1:
                                 self.aligned.writeSAM(f1, False)
 
-                    #print('  Finalizing reads')
                     self.aligned.finalizeReads()
-                    et = time.time()
 
-                    countUnspliced += len(self.aligned.unspliced)
-                    countSpliced += len(self.aligned.spliced)
-                    countPaired += len(self.aligned.paired)
-
-                    #print('Compressing cluster (%d, %d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
-                    #print('  %d unspliced' % len(self.aligned.unspliced))
-                    #print('  %d spliced' % len(self.aligned.spliced))
-
-                    debug = False
-                    if step == 0:
-                        step += 1
-                    elif step == 1:
-                        step += 1
-                        debug = True
-
-                    #countUnspliced += len(self.aligned.unspliced)
-                    #countSpliced += len(self.aligned.spliced)
-                    #countPaired += len(self.aligned.paired)
-
-                    #print('  Computing junctions')
-                    junctions, maxReadLen = self.computeJunctions(debug)
-
-                    debug = False
-                    #if self.aligned.exons[0] <= self.aligned.offset_i and self.aligned.exons[-1] > self.aligned.offset_i:
-                    #    debug=True
+                    junctions, maxReadLen = self.computeJunctions(debug=False)
 
                     with open('temp.bin', 'ab') as f:
-                        #print('  Compressing unspliced')
-                        l = self.compressUnspliced(f, binary=True, debug=debug)
-                        #if debug:
-                        #    exit()
+                        l = self.compressUnspliced(f, binary=True, debug=False)
                         unspliced_index.append(l)
 
-                        #print('  Compressing spliced')
-                        l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=debug)
+                        l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=False)
                         spliced_index.append(l)
-
-                    #break
-
-                    #print('  Done!')
 
                     # Start new cluster
                     self.aligned.resetCluster()
@@ -690,16 +523,7 @@ class Compressor:
 
                 exons = self.parseCigar(row[5], int(row[3]))
 
-
-                length = 0
-                for e in exons:
-                    length += e[1]-e[0]
-                if length in readLens:
-                    readLens[length] += 1
-                else:
-                    readLens[length] = 1
-
-                # find XS value:
+                # find XS and NH values
                 xs = None
                 NH = 1
                 for r in row[11 : len(row)]:
@@ -721,41 +545,29 @@ class Compressor:
             # TODO: Find accuracy lost by tossing far away paired reads
             #self.aligned.finalizeUnmatchedCluster(gene_end)
 
-            st = time.time()
             self.aligned.finalizeUnmatched()
             self.aligned.finalizeExons()
 
             clusters.append(self.aligned.exons)
 
             if intermediate_name:
-                with open(intermediate_name, 'a') as f1:
-                    self.aligned.writeSAM(f1, first)
+                if first:
+                    with open(intermediate_name, 'w') as f1:
+                        self.aligned.writeSAM(f1, True)
+                    first = False
+                else:
+                    with open(intermediate_name, 'a') as f1:
+                        self.aligned.writeSAM(f1, False)
 
             self.aligned.finalizeReads()
-            et = time.time()
 
-            debug = False
-            if step == 0:
-                step += 1
-            elif step == 1:
-                step += 1
-                debug = True
-
-            junctions, maxReadLen = self.computeJunctions(debug)
-
-            print('Read lengths:')
-            print(readLens)
-            print('')
-
-            countUnspliced += len(self.aligned.unspliced)
-            countSpliced += len(self.aligned.spliced)
-            countPaired += len(self.aligned.paired)
+            junctions, maxReadLen = self.computeJunctions(debug=False)
 
             with open('temp.bin', 'ab') as f:
-                l = self.compressUnspliced(f, binary=True)
+                l = self.compressUnspliced(f, binary=True, debug=False)
                 unspliced_index.append(l)
 
-                l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=debug)
+                l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=False)
                 spliced_index.append(l)
 
 
@@ -777,10 +589,6 @@ class Compressor:
             end_time = time.time()
             print('Compression time: %0.3fs' % (end_time - start_time))
 
-        print(countUnspliced)
-        print(countSpliced)
-        print(countPaired)
-        print('')
 
     def parseAlignments(self, filename):
         ''' Parse a file in SAM format
