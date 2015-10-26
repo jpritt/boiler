@@ -1515,6 +1515,12 @@ class Alignments:
         t1 = time.time()
         # If the number of potential start sites is equal to the number of reads, then we can solve it with high accuracy with v1. Otherwise use v3
         starts = 0
+
+        cov_orig = self.RLE(coverage)
+        lens_orig = dict()
+        for k,v in fragmentLens.items():
+            lens_orig[k] = v
+
         for i in range(len(coverage)-1):
             if coverage[i+1] > coverage[i]:
                 starts += coverage[i+1] - coverage[i]
@@ -1525,6 +1531,13 @@ class Alignments:
         t2 = time.time()
         #print(t2-t1)
         #print('')
+
+        for r in reads:
+            if r[1]-r[0] < 3:
+                print(cov_orig)
+                print(lens_orig)
+                print(reads)
+                exit()
 
         if debug:
             print('Reads:')
