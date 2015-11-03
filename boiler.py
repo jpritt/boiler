@@ -37,6 +37,7 @@ def go(args):
         endTime = time.time()
 
         print('Compression time: %0.3f s' % (endTime-startTime))
+        print('')
 
     if args.decompress:
         if args.expand_to is None:
@@ -65,6 +66,7 @@ def go(args):
 
         endTime = time.time()
         print('Decompression time: %0.3f s' % (endTime-startTime))
+        print('')
 
 if __name__ == '__main__':
 

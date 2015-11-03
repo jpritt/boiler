@@ -244,12 +244,20 @@ def writeJunctionsList(junctions, exonBytes):
     for j in junctions:
         j = j.split('\t')
 
-        # First value: Number of exons in junction
-        # Second value: 0 for negative XS, 1 for positive
+        # First byte: XS value, 0 = None, -1 = -, 1 = +
+        # Second byte: Number of exons in junction
+        # These could probably be combined into a single byte, but I'm keeping them separate just in case
+        #   A junction ever contains more than 64 subexons
+        xs = int(j[-2])
+        s += pack('b', xs)
+        s += pack('B', len(j)-2)
+
+        '''
         if j[-2] == '-':
             s += pack('b', 2-len(j))
         else:
             s += pack('b', len(j)-2)
+        '''
         
         for e in j[:-2]:
             s += valToBinary(exonBytes, int(e))
@@ -263,7 +271,20 @@ def readJunctionsList(s, start=0):
 
     junctions = [[]] * numJunctions
     for j in range(numJunctions):
+        # Read xs value
+        v = unpack_from('b', s[start:start+1])[0]
+        xs = None
+        if v == -1:
+            xs = '-'
+        elif v == 1:
+            xs = '+'
+
         # Read number of exons
+        num_exons = unpack_from('B', s[start+1:start+2])[0]
+
+        start += 2
+
+        '''
         v = unpack_from('b', s[start:start+1])[0]
 
         start += 1
@@ -275,10 +296,11 @@ def readJunctionsList(s, start=0):
         else:
             xs = '+'
             numExons = v
+        '''
 
         # Read exons
-        juncExons = [0] * numExons
-        for e in range(numExons):
+        juncExons = [0] * num_exons
+        for e in range(num_exons):
             juncExons[e], start = binaryToVal(s, exonBytes, start)
 
         # Read NH value
