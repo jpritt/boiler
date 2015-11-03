@@ -60,28 +60,6 @@ class Expander:
             print('Non-binary expanding not supported')
             exit()
 
-        '''
-        print('Average read time:')
-        for i in range(1,len(self.readCounts)):
-            if self.readCounts[i] > 0:
-                t = self.readTimes[i] / self.readCounts[i]
-                print('%d\t%f\t%f' % (i, t, t/i))
-        print('')
-
-        print('Average pairing time without boundaries:')
-        for i in range(1,len(self.pairCounts)):
-            if self.pairCounts[i] > 0:
-                t = self.pairTimes[i] / self.pairCounts[i]
-                print('%d\t%f\t%f' % (i, t, t/i))
-        print('')
-
-        print('Average pairing time with boundaries:')
-        for i in range(1,len(self.pairCountsB)):
-            if self.pairCountsB[i] > 0:
-                t = self.pairTimesB[i] / self.pairCountsB[i]
-                print('%d\t%f\t%f' % (i, t, t/i))
-        print('')
-        '''
 
     '''
     def expandSplicedBinary(self, f, exonBytes):
@@ -365,15 +343,7 @@ class Expander:
             junc.xs = key[-2]
             junc.NH = key[-1]
 
-            #print(self.aligned.exons)
-            #print(exons)
-            #print(junc.coverage)
-            #print(boundaries)
             junc.coverage = self.RLEtoVector(junc.coverage)
-
-            #print(junc.unpairedLens)
-            #print(junc.pairedLens)
-            #print('')
 
             unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, self.debug)
 
@@ -430,7 +400,7 @@ class Expander:
 
                     readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                self.aligned.spliced.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
+                self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
 
             for p in paired:
                 start = p[0][0]
@@ -450,10 +420,8 @@ class Expander:
                     readExonsA.append( [start+juncOffset, end+juncOffset] )
                 else:
                     readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-
                     for x in range(i+1,j):
                         readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-
                     readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
 
                 start = p[1][0]
@@ -473,10 +441,8 @@ class Expander:
                     readExonsB.append( [start+juncOffset, end+juncOffset] )
                 else:
                     readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-
                     for x in range(i+1,j):
                         readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-
                     readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
                 self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
@@ -485,7 +451,7 @@ class Expander:
 
     def expandByCluster(self, f, out_name):
         clusters = binaryIO.readClusters(f)
-        unspliced_index = binaryIO.readListFromFile(f)
+        #unspliced_index = binaryIO.readListFromFile(f)
         spliced_index = binaryIO.readListFromFile(f)
 
         print('%d clusters' % len(clusters))
@@ -497,14 +463,9 @@ class Expander:
             if l > maxLen:
                 maxLen = l
 
-            #self.debug = False
-            #if clusters[i] == [13977818, 13978281]:
-            #    self.debug = True
-            #print('Expanding (%d,%d)' % (self.aligned.exons[0], self.aligned.exons[-1]))
-
             #print('%d' % (self.aligned.exons[-1]-self.aligned.exons[0]))
             #t1 = time.time()
-            self.expandUnsplicedBinary(f, unspliced_index[i])
+            #self.expandUnsplicedBinary(f, unspliced_index[i])
             #t2 = time.time()
             #print('\t%f' % (t2-t1))
             self.expandSplicedBinary(f, spliced_index[i])
@@ -523,8 +484,7 @@ class Expander:
             #t4 = time.time()
             #print('\t%f' % (t4-t3))
 
-            self.aligned.unspliced = []
-            self.aligned.spliced = []
+            self.aligned.unpaired = []
             self.aligned.paired = []
         print('Max cluster size: %d' % maxLen)
 
@@ -850,10 +810,10 @@ class Expander:
             for i in range(start_i, end_i):
                 self.aligned.exons = clusters[i]
 
-                self.getUnsplicedReads(f, unspliced_index[i], start, end)
+                #self.getUnsplicedReads(f, unspliced_index[i], start, end)
                 self.getSplicedReads(f, spliced_index[i], start, end)
 
-        return self.aligned.unspliced, self.aligned.paired
+        return self.aligned.unpaired, self.aligned.paired
 
     def getSplicedReads(self, f, length, range_start, range_end):
         ''' Expand a file containing compressed spliced alignments
@@ -936,7 +896,7 @@ class Expander:
                     readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
                 if readExons[-1][1] > range_start and readExons[0][0] < range_end:
-                    self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
+                    self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
 
             for p in paired:
                 start = p[0][0]
@@ -1037,7 +997,7 @@ class Expander:
 
                     for r in unpaired:
                         if r[1] > start_offset and r[0] < end_offset:
-                            self.aligned.unspliced.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
+                            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(r[0]+exonStart), [[r[0]+exonStart, r[1]+exonStart]], None, NH))
                     for p in paired:
                         if p[1][1] > start_offset and p[0][0] < end_offset:
                             self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(p[0][0]+exonStart), [[p[0][0]+exonStart, p[0][1]+exonStart]],   \

@@ -12,7 +12,3 @@ class PairedRead:
         self.xs = xs
 
         self.NH = NH
-        #if self.NH > 1:
-        #    print 'NH: ' + str(self.NH)
-        #else:
-        #    print '>>NH: ' + str(self.NH)

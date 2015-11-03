@@ -470,7 +470,6 @@ class Compressor:
         first = True
 
         with open(input_name, 'r') as filehandle:
-
             for line in filehandle:
                 row = line.strip().split('\t')
 
@@ -486,10 +485,6 @@ class Compressor:
 
                 if self.aligned.gene_bounds and start > (self.aligned.gene_bounds[-1] + overlapRadius):
                     # Compress most recent cluster
-
-                    # TODO: Find accuracy lost by tossing far away paired reads
-                    #self.aligned.finalizeUnmatchedCluster(gene_end)
-
                     self.aligned.finalizeUnmatched()
                     self.aligned.finalizeExons()
 
@@ -505,13 +500,22 @@ class Compressor:
                             with open(intermediate_name, 'a') as f1:
                                 self.aligned.writeSAM(f1, False)
 
-                    self.aligned.finalizeReads()
+                    #self.aligned.finalizeReads()
 
-                    junctions, maxReadLen = self.computeJunctions(debug=False)
+                    #junctions, maxReadLen = self.computeJunctions(debug=False)
+                    junctions, maxReadLen = self.aligned.computeJunctions()
+                    self.sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
+
+                    #for j in junctions:
+                    #    print(j)
+                    #    print(junctions[j].pairedLens)
+                    #    print(junctions[j].unpairedLens)
+                    #    print('')
+                    #exit()
 
                     with open('temp.bin', 'ab') as f:
-                        l = self.compressUnspliced(f, binary=True, debug=False)
-                        unspliced_index.append(l)
+                        #l = self.compressUnspliced(f, binary=True, debug=False)
+                        #unspliced_index.append(l)
 
                         l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=False)
                         spliced_index.append(l)
@@ -542,9 +546,6 @@ class Compressor:
 
             # Compress final cluster
 
-            # TODO: Find accuracy lost by tossing far away paired reads
-            #self.aligned.finalizeUnmatchedCluster(gene_end)
-
             self.aligned.finalizeUnmatched()
             self.aligned.finalizeExons()
 
@@ -559,13 +560,15 @@ class Compressor:
                     with open(intermediate_name, 'a') as f1:
                         self.aligned.writeSAM(f1, False)
 
-            self.aligned.finalizeReads()
+            #self.aligned.finalizeReads()
 
-            junctions, maxReadLen = self.computeJunctions(debug=False)
+            #junctions, maxReadLen = self.computeJunctions(debug=False)
+            junctions, maxReadLen = self.aligned.computeJunctions()
+            self.sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
 
             with open('temp.bin', 'ab') as f:
-                l = self.compressUnspliced(f, binary=True, debug=False)
-                unspliced_index.append(l)
+                #l = self.compressUnspliced(f, binary=True, debug=False)
+                #unspliced_index.append(l)
 
                 l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=False)
                 spliced_index.append(l)
@@ -575,7 +578,7 @@ class Compressor:
         with open(compressed_name, 'wb') as f:
             s = binaryIO.writeChroms(self.aligned.chromosomes)
             s += binaryIO.writeClusters(clusters)
-            s += binaryIO.writeList(unspliced_index)
+            #s += binaryIO.writeList(unspliced_index)
             s += binaryIO.writeList(spliced_index)
             f.write(s)
 
