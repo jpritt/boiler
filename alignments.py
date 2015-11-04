@@ -1603,10 +1603,10 @@ class Alignments:
             if r[1] < stop:
                 return False
             elif (start - r[0]) >= (min_len * r[2]):
+                for j in range(start, r[1]):
+                    cov[j] += 1
                 r[1] = start
                 reads = self.preserve_sorted(reads, i)
-                for j in range(start, i):
-                    cov[j] += 1
                 return reads
         return False
 
