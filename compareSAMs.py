@@ -38,6 +38,17 @@ def parseCigar(cigar, offset):
 
     return exons
 
+def genCigar(exons):
+    cigar = [str(exons[0][1] - exons[0][0]) + 'M']
+    for i in range(1, len(exons)):
+        if exons[i][0] - exons[i-1][1] == 0:
+            prevLen = int(cigar[-1][:-1])
+            cigar[-1] = str(prevLen + exons[i][1] - exons[i][0]) + 'M'
+        else:
+            cigar += [str(exons[i][0] - exons[i-1][1]) + 'N']
+            cigar += [str(exons[i][1] - exons[i][0]) + 'M']
+    return ''.join(cigar)
+
 def bin(data, width):
     new_data = [0] * int(len(data) / width)
     for i in range(len(new_data)):
@@ -66,7 +77,7 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired):
                         fragment_lengths[l] += 1
 
 
-            reads.append((row[2], int(row[3]), row[5], row[6], int(row[7])))
+            reads.append((row[2], int(row[3]), genCigar(parseCigar(row[5],0)), row[6], int(row[7])))
 
     return reads, countUnpaired, countPaired
 

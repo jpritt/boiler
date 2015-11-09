@@ -15,35 +15,12 @@ def valToBinary(numBytes, val):
     '''
 
     return (val).to_bytes(numBytes, byteorder='big')
-    '''
-    s = b''
-    while numBytes > 0:
-        v = val % byteVal
-        s += pack('B', v)
-        val = val >> 8
-        numBytes -= 1
-
-    if val > 0:
-        print('Error! %d is too large to fit in %d bytes!' % (val, numBytes))
-        exit()
-
-    return s
-    '''
 
 def binaryToVal(s, numBytes, start=0):
     ''' Convert a byte string from a file to an integer value
     '''
 
     return int.from_bytes(s[start:start+numBytes], byteorder='big'), numBytes+start
-
-    '''
-    # Compute value for each character and add it to val
-    val = 0
-    #b = unpack('B'*numBytes, s[:numBytes])
-    for i in range(numBytes):
-        val += s[start+i] << (8*i)
-    return val, start+numBytes
-    '''
 
 def writeVal(f, numBytes, val):
     f.write(valToBinary(numBytes, val))

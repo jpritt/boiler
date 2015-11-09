@@ -81,11 +81,14 @@ class Alignments:
 
     def finalizeUnmatched(self):
         # Finalize unmatched (discordant) reads
+        print('Unmatched:')
         for name,reads in self.unmatched.items():
             if reads:
                 for r in reads:
+                    print(str(r.chrom) + '\t' + str(r.exons))
                     self.add_unpaired(r)
 
+        exit()
         self.unmatched = dict()
 
     def finalizeExons(self):
