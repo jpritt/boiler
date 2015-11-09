@@ -81,14 +81,10 @@ class Alignments:
 
     def finalizeUnmatched(self):
         # Finalize unmatched (discordant) reads
-        print('Unmatched:')
         for name,reads in self.unmatched.items():
             if reads:
                 for r in reads:
-                    print(str(r.chrom) + '\t' + str(r.exons))
                     self.add_unpaired(r)
-
-        exit()
         self.unmatched = dict()
 
     def finalizeExons(self):
@@ -1888,12 +1884,20 @@ class Alignments:
             chromB = pair.chromB
             offsetA = self.chromOffsets[chromA]
 
-            filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+
+            if chromB == chromA:
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+            else:
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+
             if pair.xs:
                 filehandle.write('\tXS:A:' + pair.xs)
             filehandle.write('\n')
 
-            filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+            if chromB == chromA:
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+            else:
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
             if pair.xs:
                 filehandle.write('\tXS:A:' + pair.xs)
             filehandle.write('\n')

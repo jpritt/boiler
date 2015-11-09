@@ -213,7 +213,6 @@ class Compressor:
         # Parse cigar string
         match = re.search("\D", cigar)
         while match:
-            print(cigar)
             index = match.start()
             length = int(''.join(cigar[:index]))
 
@@ -236,7 +235,6 @@ class Compressor:
             cigar = cigar[index+1:]
             match = re.search("\D", cigar)
 
-        print('')
         return exons
 
     def parseSAMHeader(self, header):
