@@ -15,8 +15,10 @@ class Compressor:
     aligned = None
 
     sectionLen = 100000
-    exonChunkSize = 100
+    #exonChunkSize = 100
     junctionChunkSize = 50
+
+    clusterSize = 20
 
     # 0 - zlib
     # 1 - lzma
@@ -52,7 +54,7 @@ class Compressor:
 
         self.compressByCluster(samFilename, compressedFilename, min_filename)
 
-    def compressSpliced(self, junctions, maxReadLen, filehandle, binary=False, debug=False):
+    def compressCluster(self, junctions, maxReadLen, filehandle):
         ''' Compress the spliced alignments to a single file
 
             filehandle: File to write to
@@ -60,25 +62,61 @@ class Compressor:
 
         # Determine the number of bytes for read lengths
         readLenBytes = binaryIO.findNumBytes(maxReadLen)
-        s = binaryIO.valToBinary(1, readLenBytes)
+        index = binaryIO.valToBinary(1, readLenBytes)
+        index += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
 
-        s += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
+        #print(len(self.sortedJuncs))
+        #print(self.aligned.exons)
 
-        for key in self.sortedJuncs:
-            junc = junctions[key]
+        chunkLens = []
+        i = 0
+        numJuncs = len(self.sortedJuncs)
+        maxChunkSize = int(self.junctionChunkSize * 1.5)
 
-            if binary:
-                s += binaryIO.writeJunction(readLenBytes, junc)
+        chunks = b''
+        lastLen = 0
+
+        while i < numJuncs:
+            if numJuncs - i < maxChunkSize:
+                chunkSize = numJuncs - i
             else:
-                print('Non-binary spliced encoding is not supported')
-                exit()
+                chunkSize = self.junctionChunkSize
+
+            chunk = b''
+
+            for j in range(i, i+chunkSize):
+                junc = junctions[self.sortedJuncs[j]]
+
+                chunk += binaryIO.writeJunction(readLenBytes, junc)
+
+            chunks += self.compressString(chunk)
+            newLen = len(chunks)
+            #print(len(self.compressString(chunk)))
+            chunkLens.append(newLen - lastLen)
+            lastLen = newLen
+
+            i += chunkSize
+
+        #exit()
+
+        #print(filehandle.tell())
+        index += binaryIO.writeList(chunkLens)
+
+        #print(chunkLens)
+        #print(len(index))
+        #print(len(self.compressString(index)))
+        #print(self.compressString(index))
+        #print('')
 
         # Write to file
         start = filehandle.tell()
-        filehandle.write(self.compressString(s))
+        filehandle.write(self.compressString(index))
+        indexLen = filehandle.tell() - start
+
+        filehandle.write(chunks)
 
         # return length of chunk in file
-        return filehandle.tell()-start
+        return indexLen
 
 
     def compressByCluster(self, input_name, compressed_name, intermediate_name=None):
@@ -100,6 +138,8 @@ class Compressor:
 
         first = True
 
+        #jid = 0
+
         with open(input_name, 'r') as filehandle:
             for line in filehandle:
                 row = line.strip().split('\t')
@@ -115,12 +155,15 @@ class Compressor:
                 start = self.aligned.chromOffsets[row[2]] + int(row[3])
 
                 if self.aligned.gene_bounds and start > (self.aligned.gene_bounds[-1] + overlapRadius):
+                    #if jid > 100:
+                    #    break
+                    #jid += 1
+
                     # Compress most recent cluster
                     self.aligned.finalizeUnmatched()
                     self.aligned.finalizeExons()
 
                     clusters.append(self.aligned.exons)
-
 
                     if intermediate_name:
                         if first:
@@ -132,16 +175,15 @@ class Compressor:
                                 self.aligned.writeSAM(f1, False)
 
                     junctions, maxReadLen = self.aligned.computeJunctions()
-                    self.sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
+                    self.sortedJuncs = sorted(junctions.keys())
 
                     with open('temp.bin', 'ab') as f:
-                        l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=False)
+                        l = self.compressCluster(junctions, maxReadLen, f)
                         spliced_index.append(l)
 
                     # Start new cluster
                     self.aligned.resetCluster()
                     self.aligned.exons.add(start)
-
 
                 exons = self.parseCigar(row[5], int(row[3]))
 
@@ -162,8 +204,8 @@ class Compressor:
                 else:
                     self.aligned.processRead(r, row[0], paired=False)
 
-            # Compress final cluster
 
+            # Compress final cluster
             self.aligned.finalizeUnmatched()
             self.aligned.finalizeExons()
 
@@ -179,10 +221,10 @@ class Compressor:
                         self.aligned.writeSAM(f1, False)
 
             junctions, maxReadLen = self.aligned.computeJunctions()
-            self.sortedJuncs = sorted(junctions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
+            self.sortedJuncs = sorted(junctions.keys())
 
             with open('temp.bin', 'ab') as f:
-                l = self.compressSpliced(junctions, maxReadLen, f, binary=True, debug=False)
+                l = self.compressCluster(junctions, maxReadLen, f)
                 spliced_index.append(l)
 
         # Write index information and append spliced and unspliced files

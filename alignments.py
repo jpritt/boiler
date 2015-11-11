@@ -96,7 +96,6 @@ class Alignments:
         self.exons = sorted(list(self.exons))
 
     def computeJunctions(self):
-
         # Compute coverage levels across every exon junction
         partitions = dict()
 
@@ -111,9 +110,6 @@ class Alignments:
             partitions = self.add_paired_to_partition(p, partitions)
             if p.length > max_len:
                 max_len = p.length
-
-        # Junction index: list of junctions and length of each chunk
-        self.sortedJuncs = sorted(partitions.keys(), key=lambda x: [int(n) for n in x.split('\t')[:-2]])
 
         return partitions, max_len
 

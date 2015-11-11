@@ -60,147 +60,6 @@ class Expander:
             print('Non-binary expanding not supported')
             exit()
 
-    def expandSplicedBinary(self, f, length):
-        ''' Expand a file containing compressed spliced alignments
-        '''
-
-        s = self.expandString(f.read(length))
-
-        startPos = 0
-        readLenBytes, startPos = binaryIO.binaryToVal(s, 1, startPos)
-
-        sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(s, startPos)
-
-        l = len(s)
-        for key in sorted_junctions:
-            exons = key[:-2]
-
-            length = 0
-            boundaries = []
-            for i in range(len(exons)):
-                e = exons[i]
-                subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
-
-                length += subexon_length
-                if i < len(exons)-1:
-                    if i == 0:
-                        boundaries.append(subexon_length)
-                    else:
-                        boundaries.append(boundaries[-1] + subexon_length)
-
-            if self.debug:
-                print(exons)
-
-            # Read the rest of the junction information
-            junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
-            junc.xs = key[-2]
-            junc.NH = key[-1]
-
-            junc.coverage = self.RLEtoVector(junc.coverage)
-
-            unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, self.debug)
-
-
-            numP = len(paired)
-            numR = len(unpaired) + 2 * numP
-            if numR >= len(self.readCounts):
-                self.readCounts += [0] * (numR - len(self.readCounts) + 1)
-                self.readTimes += [0] * (numR - len(self.readTimes) + 1)
-            if numP >= len(self.pairCountsB):
-                self.pairCountsB += [0] * (numP - len(self.pairCountsB) + 1)
-                self.pairTimesB += [0] * (numP - len(self.pairTimesB) + 1)
-            self.readCounts[numR] += 1
-            self.readTimes[numR] += t1
-            self.pairCountsB[numP] += 1
-            self.pairTimesB[numP] += t2
-
-            juncBounds = []
-            for j in junc.exons:
-                juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
-
-            # Offset of start of junction from beginning of chromosome
-            juncOffset = juncBounds[0][0]
-
-            # marks indices in junction coverage vector where exons are
-            mapping = [0]
-            # offsets of start of each exon in junction
-            offsets = [0]
-            for j in range(1,len(juncBounds)):
-                mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
-                offsets.append(juncBounds[j][0] - juncBounds[0][0])
-
-            for r in unpaired:
-                start = r[0]
-                i = 0
-                while i < (len(mapping)-1) and mapping[i+1] <= start:
-                    i += 1
-                start += offsets[i] - mapping[i]
-
-                end = r[1]
-                j = 0
-                while j < (len(mapping)-1) and mapping[j+1] < end:
-                    j += 1
-                end += offsets[j] - mapping[j]
-
-                readExons = []
-                if i == j:
-                    readExons.append( [start+juncOffset, end+juncOffset] )
-                else:
-                    readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-
-                    for x in range(i+1,j):
-                        readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-
-                    readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
-
-                self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
-
-            for p in paired:
-                start = p[0][0]
-                i = 0
-                while i < (len(mapping)-1) and mapping[i+1] <= start:
-                    i += 1
-                start += offsets[i] - mapping[i]
-
-                end = p[0][1]
-                j = 0
-                while j < (len(mapping)-1) and mapping[j+1] < end:
-                    j += 1
-                end += offsets[j] - mapping[j]
-
-                readExonsA = []
-                if i == j:
-                    readExonsA.append( [start+juncOffset, end+juncOffset] )
-                else:
-                    readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-                    for x in range(i+1,j):
-                        readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-                    readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
-
-                start = p[1][0]
-                i = 0
-                while i < (len(mapping)-1) and mapping[i+1] <= start:
-                    i += 1
-                start += offsets[i] - mapping[i]
-
-                end = p[1][1]
-                j = 0
-                while j < (len(mapping)-1) and mapping[j+1] < end:
-                    j += 1
-                end += offsets[j] - mapping[j]
-
-                readExonsB = []
-                if i == j:
-                    readExonsB.append( [start+juncOffset, end+juncOffset] )
-                else:
-                    readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
-                    for x in range(i+1,j):
-                        readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
-                    readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
-
-                self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                         self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
-
 
     def expandByCluster(self, f, out_name):
         clusters = binaryIO.readClusters(f)
@@ -215,7 +74,7 @@ class Expander:
             if l > maxLen:
                 maxLen = l
 
-            self.expandSplicedBinary(f, spliced_index[i])
+            self.expandCluster(f, spliced_index[i])
 
             if i == 0:
                 with open(out_name, 'w') as f2:
@@ -227,6 +86,168 @@ class Expander:
             self.aligned.unpaired = []
             self.aligned.paired = []
         #print('Max cluster size: %d' % maxLen)
+
+    def expandCluster(self, f, length):
+
+        #print('')
+        #print(f.tell())
+        #print(length)
+
+        x = f.read(length)
+        #print(x)
+
+        index = self.expandString(x)
+        #print(len(index))
+        readLenBytes, startPos = binaryIO.binaryToVal(index, 1, 0)
+        sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(index, startPos)
+        chunkLens, startPos = binaryIO.readList(index, startPos)
+
+        #print('%d, %d' % (startPos, len(index)))
+        #print(len(sorted_junctions))
+        #print(self.aligned.exons)
+        #print(chunkLens)
+
+        juncId = 0
+        for chunkLen in chunkLens:
+            chunk = self.expandString(f.read(chunkLen))
+            pos = 0
+            l = len(chunk)
+            while pos < l:
+                key = sorted_junctions[juncId]
+                exons = key[:-2]
+
+                length = 0
+                boundaries = []
+                for i in range(len(exons)):
+                    e = exons[i]
+                    subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
+
+                    length += subexon_length
+                    if i < len(exons)-1:
+                        if i == 0:
+                            boundaries.append(subexon_length)
+                        else:
+                            boundaries.append(boundaries[-1] + subexon_length)
+
+                # Read the rest of the junction information
+                junc, pos = binaryIO.readJunction(chunk, junction.Junction(exons, length, boundaries), readLenBytes, pos)
+                junc.xs = key[-2]
+                junc.NH = key[-1]
+
+                junc.coverage = self.RLEtoVector(junc.coverage)
+
+                self.expandJunc(junc)
+
+                juncId += 1
+
+        #print('Found %d junctions, looking for %d' % (juncId, len(sorted_junctions)))
+        if not juncId == len(sorted_junctions):
+            exit()
+
+    def expandJunc(self, junc):
+        unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, self.debug)
+
+
+        numP = len(paired)
+        numR = len(unpaired) + 2 * numP
+        if numR >= len(self.readCounts):
+            self.readCounts += [0] * (numR - len(self.readCounts) + 1)
+            self.readTimes += [0] * (numR - len(self.readTimes) + 1)
+        if numP >= len(self.pairCountsB):
+            self.pairCountsB += [0] * (numP - len(self.pairCountsB) + 1)
+            self.pairTimesB += [0] * (numP - len(self.pairTimesB) + 1)
+        self.readCounts[numR] += 1
+        self.readTimes[numR] += t1
+        self.pairCountsB[numP] += 1
+        self.pairTimesB[numP] += t2
+
+        juncBounds = []
+        for j in junc.exons:
+            juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
+
+        # Offset of start of junction from beginning of chromosome
+        juncOffset = juncBounds[0][0]
+
+        # marks indices in junction coverage vector where exons are
+        mapping = [0]
+        # offsets of start of each exon in junction
+        offsets = [0]
+        for j in range(1,len(juncBounds)):
+            mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
+            offsets.append(juncBounds[j][0] - juncBounds[0][0])
+
+        for r in unpaired:
+            start = r[0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
+
+            end = r[1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
+
+            readExons = []
+            if i == j:
+                readExons.append( [start+juncOffset, end+juncOffset] )
+            else:
+                readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+
+                for x in range(i+1,j):
+                    readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+
+                readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
+
+        for p in paired:
+            start = p[0][0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
+
+            end = p[0][1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
+
+            readExonsA = []
+            if i == j:
+                readExonsA.append( [start+juncOffset, end+juncOffset] )
+            else:
+                readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+                for x in range(i+1,j):
+                    readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+                readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+            start = p[1][0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
+
+            end = p[1][1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
+
+            readExonsB = []
+            if i == j:
+                readExonsB.append( [start+juncOffset, end+juncOffset] )
+            else:
+                readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+                for x in range(i+1,j):
+                    readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+                readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
+
+            self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
+                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
+
 
     def RLEtoVector(self, rle):
         ''' Convert a run length encoded vector to the original coverage vector '''
