@@ -65,9 +65,6 @@ class Compressor:
         index = binaryIO.valToBinary(1, readLenBytes)
         index += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
 
-        #print(len(self.sortedJuncs))
-        #print(self.aligned.exons)
-
         chunkLens = []
         i = 0
         numJuncs = len(self.sortedJuncs)
@@ -91,22 +88,13 @@ class Compressor:
 
             chunks += self.compressString(chunk)
             newLen = len(chunks)
-            #print(len(self.compressString(chunk)))
             chunkLens.append(newLen - lastLen)
             lastLen = newLen
 
             i += chunkSize
 
-        #exit()
-
         #print(filehandle.tell())
         index += binaryIO.writeList(chunkLens)
-
-        #print(chunkLens)
-        #print(len(index))
-        #print(len(self.compressString(index)))
-        #print(self.compressString(index))
-        #print('')
 
         # Write to file
         start = filehandle.tell()
@@ -162,6 +150,10 @@ class Compressor:
                     # Compress most recent cluster
                     self.aligned.finalizeUnmatched()
                     self.aligned.finalizeExons()
+
+                    #if self.aligned.exons[0] - self.aligned.chromOffsets['chr14'] < 106206531 and self.aligned.exons[-1] - self.aligned.chromOffsets['chr14'] > 106134607:
+                    print(','.join([str(e - self.aligned.chromOffsets['2L']) for e in self.aligned.exons]))
+                    #    exit()
 
                     clusters.append(self.aligned.exons)
 

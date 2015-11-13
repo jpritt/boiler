@@ -302,7 +302,7 @@ class Expander:
 
             for i in range(start_i, end_i):
                 self.aligned.exons = clusters[i]
-                coverage = self.getSplicedCoverage(f, spliced_index[i], coverage, start, end)
+                coverage = self.getClusterCoverage(f, spliced_index[i], coverage, start, end)
 
         return coverage
 
