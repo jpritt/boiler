@@ -74,9 +74,22 @@ def go(args):
     expander = expand.Expander()
     pro = readPRO.ReadPRO(args['pro'])
 
-    print('Coverage:')
-    print(expander.getCoverage(args['compressed'], '2R'))
+    '''
+    trueCov = sam.getCoverage('3R', 24150663, 24151663)
+    predCov = expander.getCoverage(args['compressed'], '3R', 24150663, 24151663)
+    print(trueCov[548])
+    print(predCov[548])
+
+    for x in range(len(trueCov)):
+        if abs(trueCov[x] - predCov[x]) > 0.0001:
+            print('Error!')
+            print('%s (%d, %d)' % (chrom, start, start+l))
+            print(x)
+            for n in range(x-5,x+5):
+                print(str(trueCov[n]) + '\t' + str(predCov[n]))
+            exit()
     exit()
+    '''
 
     #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
     #intervals = [['2R', 100000, 200000]]

@@ -18,7 +18,7 @@ class Expander:
     # 2 - bz2
     compressMethod = 0
 
-    def __init__(self, force_xs):
+    def __init__(self, force_xs=False):
         self.debug = False
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
@@ -324,15 +324,20 @@ class Expander:
 
             clusters = binaryIO.readClusters(f)
             start_i, end_i = self.getRelevantClusters(clusters, start, end)
+
+            for i in range(start_i, end_i):
+                print(clusters[i])
+
             if start_i == end_i:
                 return coverage
 
             spliced_index = binaryIO.readListFromFile(f)
+            self.junctionChunkSize = binaryIO.readVal(f, 2)
 
             for i in range(start_i):
-                index = self.expandString(spliced_index[i])
+                index = self.expandString(f.read(spliced_index[i]))
                 chunkLens, startPos = binaryIO.readList(index, 0)
-                f.seek(sum(chunkLens, 1))
+                f.seek(sum(chunkLens),1)
             for i in range(start_i, end_i):
                 self.aligned.exons = clusters[i]
                 coverage = self.getClusterCoverage(f, spliced_index[i], coverage, start, end)
@@ -353,22 +358,31 @@ class Expander:
             if i == len(chunkLens)-1:
                 c_len = len(sorted_junctions) - i * self.junctionChunkSize
 
-            relevant = [0] * c_len
+            # Only expand this chunk if one of the junctions overlaps the target region
+            chunk = None
+
+            startPos = 0
+
             for j in range(c_len):
-                for e in sorted_junctions[juncId][:-2]:
+                relevant = False
+                for e in sorted_junctions[juncId+j][:-2]:
                     if e >= start_i and e < end_i:
-                        relevant[j] = 1
+                        relevant = True
                         break
 
-            juncId += c_len
+                if not relevant:
+                    if chunk:
+                        startPos = binaryIO.skipJunction(chunk, readLenBytes, startPos)
+                    continue
 
-        juncId = 0
-        for chunkLen in chunkLens:
-            chunk = self.expandString(f.read(chunkLen))
-            pos = 0
-            l = len(chunk)
-            while pos < l:
-                key = sorted_junctions[juncId]
+                if not chunk:
+                    chunk = self.expandString(f.read(chunkLens[i]))
+                    startPos = 0
+
+                    for _ in range(j):
+                        startPos = binaryIO.skipJunction(chunk, readLenBytes, startPos)
+
+                key = sorted_junctions[juncId + j]
                 exons = key[:-2]
 
                 length = 0
@@ -385,7 +399,7 @@ class Expander:
                             boundaries.append(boundaries[-1] + subexon_length)
 
                 # Read the rest of the junction information
-                junc, pos = binaryIO.readJunction(chunk, junction.Junction(exons, length, boundaries), readLenBytes, pos)
+                junc, startPos = binaryIO.readJunction(chunk, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
                 junc.xs = key[-2]
                 junc.NH = key[-1]
 
@@ -418,7 +432,7 @@ class Expander:
 
                     genome_pos += 1
 
-                juncId += 1
+            juncId += c_len
 
         return coverage
 
