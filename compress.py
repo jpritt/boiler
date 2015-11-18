@@ -25,13 +25,15 @@ class Compressor:
     # 2 - bz2
     compressMethod = 0
 
-    def __init__(self):   
+    def __init__(self, force_xs):
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
         elif self.compressMethod == 1:
             self.lzma = __import__('lzma')
         elif self.compressMethod == 2:
             self.bz2 = __import__('bz2')
+
+        self.force_xs = force_xs
 
     def compress(self, samFilename, compressedFilename, min_filename=None, binary=False, debug=False):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
@@ -54,30 +56,54 @@ class Compressor:
 
         self.compressByCluster(samFilename, compressedFilename, min_filename)
 
+    '''
     def compressCluster(self, junctions, maxReadLen, filehandle):
-        ''' Compress the spliced alignments to a single file
+        # Determine the number of bytes for read lengths
+        readLenBytes = binaryIO.findNumBytes(maxReadLen)
+        cluster = binaryIO.valToBinary(1, readLenBytes)
+        cluster += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
+
+        junc_lens = []
+        junc_string = b''
+        for j in self.sortedJuncs:
+            s = binaryIO.writeJunction(readLenBytes, junctions[j])
+            junc_lens.append(s)
+            junc_string += s
+
+        cluster += binaryIO.writeList(junc_lens)
+        cluster += junc_string
+
+        # Write to file
+        start = filehandle.tell()
+        filehandle.write(self.compressString(cluster))
+
+        # return length of cluster in file
+        return filehandle.tell() - start
+    '''
+
+    def compressCluster(self, junctions, maxReadLen, filehandle):
+        ''' Compress the cluster in chunks
 
             filehandle: File to write to
         '''
 
         # Determine the number of bytes for read lengths
         readLenBytes = binaryIO.findNumBytes(maxReadLen)
-        index = binaryIO.valToBinary(1, readLenBytes)
-        index += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
 
         chunkLens = []
         i = 0
         numJuncs = len(self.sortedJuncs)
-        maxChunkSize = int(self.junctionChunkSize * 1.5)
+        #maxChunkSize = int(self.junctionChunkSize * 1.5)
 
         chunks = b''
         lastLen = 0
 
         while i < numJuncs:
-            if numJuncs - i < maxChunkSize:
-                chunkSize = numJuncs - i
-            else:
-                chunkSize = self.junctionChunkSize
+            chunkSize = min(self.junctionChunkSize, numJuncs-i)
+            #if numJuncs - i < chunkSize:
+            #    chunkSize = numJuncs - i
+            #else:
+            #    chunkSize = self.junctionChunkSize
 
             chunk = b''
 
@@ -93,8 +119,9 @@ class Compressor:
 
             i += chunkSize
 
-        #print(filehandle.tell())
-        index += binaryIO.writeList(chunkLens)
+        index = binaryIO.writeList(chunkLens)
+        index += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
+        index += binaryIO.valToBinary(1, readLenBytes)
 
         # Write to file
         start = filehandle.tell()
@@ -105,7 +132,6 @@ class Compressor:
 
         # return length of chunk in file
         return indexLen
-
 
     def compressByCluster(self, input_name, compressed_name, intermediate_name=None):
         '''
@@ -152,7 +178,7 @@ class Compressor:
                     self.aligned.finalizeExons()
 
                     #if self.aligned.exons[0] - self.aligned.chromOffsets['chr14'] < 106206531 and self.aligned.exons[-1] - self.aligned.chromOffsets['chr14'] > 106134607:
-                    print(','.join([str(e - self.aligned.chromOffsets['2L']) for e in self.aligned.exons]))
+                    #print(','.join([str(e - self.aligned.chromOffsets['2L']) for e in self.aligned.exons]))
                     #    exit()
 
                     clusters.append(self.aligned.exons)
@@ -160,11 +186,11 @@ class Compressor:
                     if intermediate_name:
                         if first:
                             with open(intermediate_name, 'w') as f1:
-                                self.aligned.writeSAM(f1, True)
+                                self.aligned.writeSAM(f1, True, self.force_xs)
                             first = False
                         else:
                             with open(intermediate_name, 'a') as f1:
-                                self.aligned.writeSAM(f1, False)
+                                self.aligned.writeSAM(f1, False, self.force_xs)
 
                     junctions, maxReadLen = self.aligned.computeJunctions()
                     self.sortedJuncs = sorted(junctions.keys())
@@ -206,11 +232,11 @@ class Compressor:
             if intermediate_name:
                 if first:
                     with open(intermediate_name, 'w') as f1:
-                        self.aligned.writeSAM(f1, True)
+                        self.aligned.writeSAM(f1, True, self.force_xs)
                     first = False
                 else:
                     with open(intermediate_name, 'a') as f1:
-                        self.aligned.writeSAM(f1, False)
+                        self.aligned.writeSAM(f1, False, self.force_xs)
 
             junctions, maxReadLen = self.aligned.computeJunctions()
             self.sortedJuncs = sorted(junctions.keys())
@@ -224,6 +250,7 @@ class Compressor:
             s = binaryIO.writeChroms(self.aligned.chromosomes)
             s += binaryIO.writeClusters(clusters)
             s += binaryIO.writeList(spliced_index)
+            s += binaryIO.valToBinary(2, self.junctionChunkSize)
             f.write(s)
 
             with open('temp.bin', 'rb') as f2:

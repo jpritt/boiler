@@ -8,6 +8,7 @@ import os.path
 import sys
 import copy
 import math
+import random
 
 from random import shuffle
 
@@ -1580,10 +1581,10 @@ class Alignments:
             r = reads[i]
             if r[1] < start:
                 return False
-            elif r[1] == start and (stop - r[0]) <= (max_len * r[2]):
-                r[1] = stop
+            elif r[1] == start and (r[1] - r[0]) < (max_len * r[2]):
+                r[1] = min(max_len*r[2] + r[0], stop)
                 reads = self.preserve_sorted(reads, i)
-                for i in range(start, stop):
+                for i in range(start, r[1]):
                     cov[i] -= 1
                 return reads
         return False
@@ -1687,10 +1688,14 @@ class Alignments:
             if not r:
                 if gap[0] >= min_len:
                     readEnd = start+gap[0]
+                    reads = self.add_read(reads, [start, readEnd])
+                elif gap[0] < min_len/2:
+                    # Skip bases
+                    readEnd = start+gap[0]
                 else:
                     readEnd = min(start+mode_len, end)
+                    reads = self.add_read(reads, [start, readEnd])
 
-                reads = self.add_read(reads, [start, readEnd])
                 for i in range(start, readEnd):
                     cov[i] -= 1
 
@@ -1808,7 +1813,7 @@ class Alignments:
 
         return 0
 
-    def writeSAM(self, filehandle, header=True):
+    def writeSAM(self, filehandle, header=True, force_xs=False):
         ''' Write all alignments to a SAM file
         '''
 
@@ -1822,11 +1827,13 @@ class Alignments:
         for read in self.unpaired:
             exons = read.exons
             cigar = [str(exons[0][1] - exons[0][0]) + 'M']
+            spliced = False
             for i in range(1, len(exons)):
-                if exons[i][0] - exons[i-1][1] == 0:
+                if exons[i][0] == exons[i-1][1]:
                     prevLen = int(cigar[-1][:-1])
                     cigar[-1] = str(prevLen + exons[i][1] - exons[i][0]) + 'M'
                 else:
+                    spliced = True
                     cigar += [str(exons[i][0] - exons[i-1][1]) + 'N']
                     cigar += [str(exons[i][1] - exons[i][0]) + 'M']
             cigar = ''.join(cigar)
@@ -1834,7 +1841,13 @@ class Alignments:
             chrom = read.chrom
             offset = self.chromOffsets[chrom]
 
-            #filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\tXS:A:' + read.xs + '\n')
+            if force_xs and spliced and not read.xs:
+                print('Assigning random XS value to spliced unpaired read')
+                if random.randint(0,1) == 0:
+                    read.xs = '+'
+                else:
+                    read.xs = '-'
+
             if read.xs:
                 filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\tNH:i:' + str(read.NH) + '\n')
             else:
@@ -1844,15 +1857,13 @@ class Alignments:
         for pair in self.paired:
             exonsA = pair.exonsA
             cigarA = [str(exonsA[0][1] - exonsA[0][0]) + 'M']
+            spliced = False
             for i in range(1, len(exonsA)):
-                if exonsA[i][0] - exonsA[i-1][1] == 0:
+                if exonsA[i][0] == exonsA[i-1][1]:
                     prevLen = int(cigarA[-1][:-1])
                     cigarA[-1] = str(prevLen + exonsA[i][1] - exonsA[i][0]) + 'M'
                 else:
-                    if exonsA[i][1] == exonsA[i][0]:
-                        print(exonsA)
-                        exit()
-
+                    spliced = True
                     cigarA += [str(exonsA[i][0] - exonsA[i-1][1]) + 'N']
                     cigarA += [str(exonsA[i][1] - exonsA[i][0]) + 'M']
             cigarA = ''.join(cigarA)
@@ -1860,15 +1871,11 @@ class Alignments:
             exonsB = pair.exonsB
             cigarB = [str(exonsB[0][1] - exonsB[0][0]) + 'M']
             for i in range(1, len(exonsB)):
-                if exonsB[i][0] - exonsB[i-1][1] == 0:
+                if exonsB[i][0] == exonsB[i-1][1]:
                     prevLen = int(cigarB[-1][:-1])
                     cigarB[-1] = str(prevLen + exonsB[i][1] - exonsB[i][0]) + 'M'
                 else:
-                    ####
-                    if exonsB[i][1] == exonsB[i][0]:
-                        print(exonsB)
-                        exit()
-
+                    spliced = True
                     cigarB += [str(exonsB[i][0] - exonsB[i-1][1]) + 'N']
                     cigarB += [str(exonsB[i][1] - exonsB[i][0]) + 'M']
             cigarB = ''.join(cigarB)
@@ -1879,6 +1886,13 @@ class Alignments:
             chromA = pair.chromA
             chromB = pair.chromB
             offsetA = self.chromOffsets[chromA]
+
+            if force_xs and spliced and not pair.xs:
+                print('Assigning random XS value to spliced paired read')
+                if random.randint(0,1) == 0:
+                    pair.xs = '+'
+                else:
+                    pair.xs = '-'
 
 
             if chromB == chromA:

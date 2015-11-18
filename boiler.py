@@ -20,8 +20,8 @@ def go(args):
     if args.debug:
         debug = True
 
-    compressedName = 'compressed/compressed_binary.txt'
-    if args.output is not None:
+    compressedName = 'compressed.bin'
+    if args.output:
         compressedName = args.output
 
     if args.compress:
@@ -31,7 +31,7 @@ def go(args):
 
         print('Compressing to %s' % compressedName)
 
-        compressor = compress.Compressor()
+        compressor = compress.Compressor(args.force_xs)
         startTime = time.time()
         compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
         endTime = time.time()
@@ -46,7 +46,7 @@ def go(args):
 
         print('Decompressing from %s' % compressedName)
 
-        expander = expand.Expander()
+        expander = expand.Expander(args.force_xs)
         startTime = time.time()
 
         #import cProfile
@@ -85,6 +85,7 @@ if __name__ == '__main__':
     parser.add_argument("--output", type=str, help="Compressed filename")
     parser.add_argument("--intermediate", type=str, help="Name of SAM file to write to after processing but before compressing")
     parser.add_argument("--debug", help="Print debug information", action="store_true")
+    parser.add_argument("--force-xs", help="If we decompress a spliced read with no XS value, assign it a random one (so Cufflinks can run)", action="store_false")
 
     args = parser.parse_args(sys.argv[1:])
 

@@ -18,7 +18,7 @@ class Expander:
     # 2 - bz2
     compressMethod = 0
 
-    def __init__(self):
+    def __init__(self, force_xs):
         self.debug = False
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
@@ -33,6 +33,8 @@ class Expander:
         self.pairTimes = []
         self.pairCountsB = []
         self.pairTimesB = []
+
+        self.force_xs = force_xs
 
 
     def expand(self, compressedFilename, uncompressedFilename, binary=False, debug=False):
@@ -64,8 +66,8 @@ class Expander:
     def expandByCluster(self, f, out_name):
         clusters = binaryIO.readClusters(f)
         spliced_index = binaryIO.readListFromFile(f)
+        self.junctionChunkSize = binaryIO.readVal(f, 2)
 
-        #print('%d clusters' % len(clusters))
         maxLen = 0
 
         for i in range(len(clusters)):
@@ -78,20 +80,51 @@ class Expander:
 
             if i == 0:
                 with open(out_name, 'w') as f2:
-                    self.aligned.writeSAM(f2, header=True)
+                    self.aligned.writeSAM(f2, True, self.force_xs)
             else:
                 with open(out_name, 'a') as f2:
-                    self.aligned.writeSAM(f2, header=False)
+                    self.aligned.writeSAM(f2, False, self.force_xs)
 
             self.aligned.unpaired = []
             self.aligned.paired = []
-        #print('Max cluster size: %d' % maxLen)
+
+    '''
+    def expandCluster(self, f, length):
+        cluster = self.expandString(f.read(length))
+        readLenBytes, startPos = binaryIO.binaryToVal(cluster, 1, 0)
+        sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(cluster, startPos)
+
+        for key in sorted_junctions:
+            exons = key[:-2]
+
+            length = 0
+            boundaries = []
+            for i in range(len(exons)):
+                e = exons[i]
+                subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
+
+                length += subexon_length
+                if i < len(exons)-1:
+                    if i == 0:
+                        boundaries.append(subexon_length)
+                    else:
+                        boundaries.append(boundaries[-1] + subexon_length)
+
+            # Read the rest of the junction information
+            junc, startPos = binaryIO.readJunction(cluster, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
+            junc.xs = key[-2]
+            junc.NH = key[-1]
+
+            junc.coverage = self.RLEtoVector(junc.coverage)
+
+            self.expandJunc(junc)
+    '''
 
     def expandCluster(self, f, length):
         index = self.expandString(f.read(length))
-        readLenBytes, startPos = binaryIO.binaryToVal(index, 1, 0)
+        chunkLens, startPos = binaryIO.readList(index, 0)
         sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(index, startPos)
-        chunkLens, startPos = binaryIO.readList(index, startPos)
+        readLenBytes, startPos = binaryIO.binaryToVal(index, 1, startPos)
 
         juncId = 0
         for chunkLen in chunkLens:
@@ -274,14 +307,13 @@ class Expander:
 
     def getCoverage(self, compressedFilename, chrom, start=None, end=None):
         with open(compressedFilename, 'rb') as f:
-            coverage = [0.0] * (end-start)
             chromosomes = binaryIO.readChroms(f)
             self.aligned = alignments.Alignments(chromosomes)
             if start == None or end == None:
                 start = 0
                 end = chromosomes[chrom]
 
-            print('(%d,%d)' % (start, end))
+            coverage = [0.0] * (end-start)
 
             for k in sorted(chromosomes.keys()):
                 if not k == chrom:
@@ -297,9 +329,10 @@ class Expander:
 
             spliced_index = binaryIO.readListFromFile(f)
 
-            skip = sum(spliced_index[:start_i])
-            f.seek(skip, 1)
-
+            for i in range(start_i):
+                index = self.expandString(spliced_index[i])
+                chunkLens, startPos = binaryIO.readList(index, 0)
+                f.seek(sum(chunkLens, 1))
             for i in range(start_i, end_i):
                 self.aligned.exons = clusters[i]
                 coverage = self.getClusterCoverage(f, spliced_index[i], coverage, start, end)
@@ -308,9 +341,26 @@ class Expander:
 
     def getClusterCoverage(self, f, length, coverage, range_start, range_end):
         index = self.expandString(f.read(length))
-        readLenBytes, startPos = binaryIO.binaryToVal(index, 1, 0)
+        chunkLens, startPos = binaryIO.readList(index, 0)
         sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(index, startPos)
-        chunkLens, startPos = binaryIO.readList(index, startPos)
+        readLenBytes, startPos = binaryIO.binaryToVal(index, 1, startPos)
+
+        start_i, end_i = self.getRelevantExons(self.aligned.exons, range_start, range_end)
+
+        juncId = 0
+        for i in range(len(chunkLens)):
+            c_len = min(self.junctionChunkSize, len(sorted_junctions)-juncId)
+            if i == len(chunkLens)-1:
+                c_len = len(sorted_junctions) - i * self.junctionChunkSize
+
+            relevant = [0] * c_len
+            for j in range(c_len):
+                for e in sorted_junctions[juncId][:-2]:
+                    if e >= start_i and e < end_i:
+                        relevant[j] = 1
+                        break
+
+            juncId += c_len
 
         juncId = 0
         for chunkLen in chunkLens:
@@ -339,73 +389,36 @@ class Expander:
                 junc.xs = key[-2]
                 junc.NH = key[-1]
 
-                junc.coverage = self.RLEtoVector(junc.coverage)
+                junc_coverage = self.RLEtoVector(junc.coverage)
+                for i in range(len(junc_coverage)):
+                    junc_coverage[i] /= float(junc.NH)
 
-                self.expandJunc(junc)
+                juncBounds = []
+                for j in junc.exons:
+                    juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
+
+                # marks indices in junction coverage vector where exons begin
+                mapping = [0]
+                for j in juncBounds:
+                    mapping.append(mapping[-1] + j[1] - j[0])
+
+                genome_pos = self.aligned.exons[exons[0]] - range_start
+                length = range_end - range_start
+                map_id = 1
+                for i in range(len(junc_coverage)):
+                    if i == mapping[map_id]:
+                        genome_pos += juncBounds[map_id][0] - juncBounds[map_id-1][1]
+                        map_id += 1
+
+                    if genome_pos >= 0:
+                        if genome_pos >= length:
+                            break
+                        else:
+                            coverage[genome_pos] += junc_coverage[i]
+
+                    genome_pos += 1
 
                 juncId += 1
-
-        #print('Found %d junctions, looking for %d' % (juncId, len(sorted_junctions)))
-        if not juncId == len(sorted_junctions):
-            exit()
-
-    def getSplicedCoverage(self, f, length, coverage, range_start, range_end):
-        s = self.expandString(f.read(length))
-
-        startPos = 0
-        readLenBytes, startPos = binaryIO.binaryToVal(s, 1, startPos)
-
-        sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(s, startPos)
-
-        for key in sorted_junctions:
-            exons = key[:-2]
-
-            length = 0
-            boundaries = []
-            for i in range(len(exons)):
-                e = exons[i]
-                subexon_length = self.aligned.exons[e+1] - self.aligned.exons[e]
-
-                length += subexon_length
-                if i < len(exons)-1:
-                    if i == 0:
-                        boundaries.append(subexon_length)
-                    else:
-                        boundaries.append(boundaries[-1] + subexon_length)
-
-            # Read the rest of the junction information
-            junc, startPos = binaryIO.readJunction(s, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
-            junc.xs = key[-2]
-            junc.NH = key[-1]
-
-            junc_coverage = self.RLEtoVector(junc.coverage)
-            for i in range(len(junc_coverage)):
-                junc_coverage[i] /= float(junc.NH)
-
-            juncBounds = []
-            for j in junc.exons:
-                juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
-
-            # marks indices in junction coverage vector where exons begin
-            mapping = [0]
-            for j in juncBounds:
-                mapping.append(mapping[-1] + j[1] - j[0])
-
-            genome_pos = self.aligned.exons[exons[0]] - range_start
-            length = range_end - range_start
-            map_id = 1
-            for i in range(len(junc_coverage)):
-                if i == mapping[map_id]:
-                    genome_pos += juncBounds[map_id][0] - juncBounds[map_id-1][1]
-                    map_id += 1
-
-                if genome_pos >= 0:
-                    if genome_pos >= length:
-                        break
-                    else:
-                        coverage[genome_pos] += junc_coverage[i]
-
-                genome_pos += 1
 
         return coverage
 
@@ -436,6 +449,10 @@ class Expander:
 
         return start_i, end_i
 
+    def getRelevantExons(self, exons, start, end):
+        start_i = bisect.bisect_right(exons, start) - 1
+        end_i = bisect.bisect_left(exons, end)
+        return start_i, end_i
 
     def getReads(self, compressedFile, chrom, start=None, end=None):
         '''

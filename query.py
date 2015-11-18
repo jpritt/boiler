@@ -74,33 +74,20 @@ def go(args):
     expander = expand.Expander()
     pro = readPRO.ReadPRO(args['pro'])
 
+    print('Coverage:')
+    print(expander.getCoverage(args['compressed'], '2R'))
+    exit()
+
     #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
     #intervals = [['2R', 100000, 200000]]
 
-    #lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
-    lens = [10000000]
+    lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
+    #lens = [10000000]
     chroms = ['2R', '2L', '3R', '3L', 'X']
     chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
 
 
     print('Querying coverage')
-
-    '''
-    trueCov = sam.getCoverage('3L', 24317666, 24417666)
-    predCov = expander.getCoverage(args['compressed'], '3L', 24317666, 24417666)
-    print(predCov[380:386])
-    print(sum(trueCov))
-    print(sum(predCov))
-    for x in range(len(trueCov)):
-        if abs(trueCov[x] - predCov[x]) > 0.0001:
-            print('Error!')
-            print(x)
-            for n in range(x-5,x+5):
-                print(str(trueCov[n]) + '\t' + str(predCov[n]))
-            exit()
-    exit()
-    '''
-
 
     for l in lens:
         timeTrue = 0.0
