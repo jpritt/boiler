@@ -123,18 +123,18 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
 
     transcriptsPredictedCount = len(transcriptsPredicted)
 
-    print "%d transcripts in file 1" % transcriptsTrueCount
-    print "%d transcripts in file 2" % transcriptsPredictedCount
+    #print "%d transcripts in file 1" % transcriptsTrueCount
+    #print "%d transcripts in file 2" % transcriptsPredictedCount
 
     recall = float(totalScore) / float(transcriptsTrueCount)
-    print 'TP = ' + str(totalScore)
-    print 'T  = ' + str(transcriptsTrueCount)
+    #print 'TP = ' + str(totalScore)
+    #print 'T  = ' + str(transcriptsTrueCount)
     print 'Recall    = TP/T = ' + str(recall)
 
 
     precision = float(totalScore) / float(transcriptsPredictedCount)
-    print 'TP = ' + str(totalScore)
-    print 'P  = ' + str(transcriptsPredictedCount)
+    #print 'TP = ' + str(totalScore)
+    #print 'P  = ' + str(transcriptsPredictedCount)
     print 'Precision    = TP/P = ' + str(precision)
 
     '''

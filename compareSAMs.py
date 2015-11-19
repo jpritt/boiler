@@ -150,25 +150,25 @@ def compareSAMs(file1, file2, plot):
         FP_pairs += len(reads2) - tp
 
     print('No pairing:')
-    print('TP: %d' % TP_no_pairs)
-    print('FN: %d' % FN_no_pairs)
-    print('FP: %d' % FP_no_pairs)
+    #print('TP: %d' % TP_no_pairs)
+    #print('FN: %d' % FN_no_pairs)
+    #print('FP: %d' % FP_no_pairs)
     print('Recall    = TP / TP+FN = %f' % (float(TP_no_pairs) / (TP_no_pairs+FN_no_pairs)))
     print('Precision = TP / TP+FP = %f' % (float(TP_no_pairs) / (TP_no_pairs+FP_no_pairs)))
     print('')
 
     print('Pairing:')
-    print('TP: %d' % TP_pairs)
-    print('FN: %d' % FN_pairs)
-    print('FP: %d' % FP_pairs)
+    #print('TP: %d' % TP_pairs)
+    #print('FN: %d' % FN_pairs)
+    #print('FP: %d' % FP_pairs)
     print('Recall    = TP / TP+FN = %f' % (float(TP_pairs) / (TP_pairs+FN_pairs)))
     print('Precision = TP / TP+FP = %f' % (float(TP_pairs) / (TP_pairs+FP_pairs)))
     print('')
 
 
-    print('File 1: %d unpaired, %d paired' % (countUnpaired1, countPaired1))
-    print('File 2: %d unpaired, %d paired' % (countUnpaired2, countPaired2))
-    print('')
+    #print('File 1: %d unpaired, %d paired' % (countUnpaired1, countPaired1))
+    #print('File 2: %d unpaired, %d paired' % (countUnpaired2, countPaired2))
+    #print('')
 
     fragment_lengths1 = bin(fragment_lengths1, 1000)
     fragment_lengths2 = bin(fragment_lengths2, 1000)

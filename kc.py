@@ -51,8 +51,6 @@ def computeWKRandICR(assembly, sequence, transcripts, dataLength, k):
         dataLength: Length in nucleotides of input data
     '''
     with open(assembly, 'r') as f:
-        print 'Computing KC'
-
         # WKR denominator is the same for all kmers
         denom = 0.0
         for t in transcripts:
@@ -313,4 +311,4 @@ if __name__ == '__main__':
 
     assembly = args.assembly
     WKR, ICR = computeWKRandICR(assembly, sequence, transcripts, dataLength, k)
-    print 'KC = %f - %f = %f' % (WKR, ICR, WKR-ICR)
+    print('WKR = %f' % WKR)

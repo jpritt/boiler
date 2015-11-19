@@ -145,21 +145,21 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
         transcriptsPredictedCount += t1.cov
         #transcriptsPredictedCount += 1
 
-    print(sorted(transcriptCovs, reverse=True)[:10])
+    #print(sorted(transcriptCovs, reverse=True)[:10])
 
     #print "%d transcripts in file 1" % transcriptsTrueCount
     #print "%d transcripts in file 2" % transcriptsPredictedCount
 
     recall = float(totalScore1) / float(transcriptsTrueCount)
-    print('TP = ' + str(totalScore1))
-    print('T  = ' + str(transcriptsTrueCount))
-    print('Recall    = TP/T = ' + str(recall))
+    #print('TP = ' + str(totalScore1))
+    #print('T  = ' + str(transcriptsTrueCount))
+    print('Recall    = ' + str(recall))
 
 
     precision = float(totalScore2) / float(transcriptsPredictedCount)
-    print('TP = ' + str(totalScore2))
-    print('P  = ' + str(transcriptsPredictedCount))
-    print('Precision = TP/P = ' + str(precision))
+    #print('TP = ' + str(totalScore2))
+    #print('P  = ' + str(transcriptsPredictedCount))
+    print('Precision = ' + str(precision))
 
     '''
     scatterX = []
