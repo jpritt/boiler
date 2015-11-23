@@ -3,6 +3,37 @@ import sys
 import re
 import argparse
 
+def conflicts(exonsA, exonsB):
+    '''
+        Returns true if any of the exons from A or B overlaps one of the introns from the other set of exons
+    '''
+    
+    for e in exonsB:
+        if e[0] > exonsA[-1][0]:
+            break
+
+        for i in range(len(exonsA)-1):
+            if e[0] >= exonsA[-i-1][0]:
+                break
+            elif e[1] > exonsA[-i-2][1]:
+                # Exon in B overlaps an intron in A
+                return 1
+
+    countA = len(exonsA)
+    for i in range(countA):
+        e = exonsA[countA-i-1]
+        if e[1] < exonsB[0][1]:
+            break
+
+        for i in range(len(exonsB)-1):
+            if e[1] <= exonsB[i][1]:
+                break
+            elif e[1] > exonsB[i][1] and e[0] < exonsB[i+1][0]:
+                # Exon in A overlaps an intron in B
+                return 2
+
+    return 0
+
 def parseCigar(cigar, offset):
     ''' Parse the cigar string starting at the given index of the genome
         Returns a list of offsets for each exonic region of the read [(start1, end1), (start2, end2), ...]
@@ -57,31 +88,46 @@ def bin(data, width):
 
 def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired):
     reads = []
+    unmatched = dict()
     for line in f:
         row = line.rstrip().split('\t')
         if len(row) < 6:
             continue
 
         if row[2] == chr:
+            exons = parseCigar(row[5],0)
             if row[6] == '*':
                 countUnpaired += 1
             else:
                 countPaired += 1
 
                 if row[6] == '=':
-                    l = int(row[8])
+                    name = row[0]
 
-                    if l > 0:
-                        if l >= len(fragment_lengths):
-                            fragment_lengths += [0] * (l + 1 - len(fragment_lengths))
-                        fragment_lengths[l] += 1
+                    if name in unmatched:
+                        foundMatch = False
+                        for i in range(len(unmatched[name])):
+                            match = unmatched[name][i]
+                            if int(row[3]) == match[2] and int(row[7]) == match[0] and not conflicts(exons, match[1]):
+                                l = abs(int(row[8]))
+                                if l > 0:
+                                    if l >= len(fragment_lengths):
+                                        fragment_lengths += [0] * (l + 1 - len(fragment_lengths))
+                                    fragment_lengths[l] += 1
 
+                                foundMatch = True
+                                break
 
-            reads.append((row[2], int(row[3]), genCigar(parseCigar(row[5],0)), row[6], int(row[7])))
+                        if not foundMatch:
+                            unmatched[name].append((int(row[3]), exons, int(row[7])))
+                    else:
+                        unmatched[name] = [(int(row[3]), exons, int(row[7]))]
+
+            reads.append((row[2], int(row[3]), genCigar(exons), row[6], int(row[7])))
 
     return reads, countUnpaired, countPaired
 
-def compareSAMs(file1, file2, plot):
+def compareSAMs(file1, file2):
     fragment_lengths1 = [0] * 100000
     fragment_lengths2 = [0] * 100000
     countUnpaired1 = 0
@@ -221,7 +267,7 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     if args.sam1 and args.sam2:
-        frags1, frags2 = compareSAMs(args.sam1, args.sam2, args.plot)
+        frags1, frags2 = compareSAMs(args.sam1, args.sam2)
 
         if args.out_frags:
             write_frag_lens(args.out_frags, frags1, frags2)
