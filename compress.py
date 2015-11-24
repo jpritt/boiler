@@ -220,6 +220,9 @@ class Compressor:
                     r.pairOffset = int(row[7])
                     self.aligned.processRead(r, row[0], paired=True)
                 else:
+                    if not row[6] == '*' and not row[6] == row[2]:
+                        print(row[0])
+                        exit()
                     self.aligned.processRead(r, row[0], paired=False)
 
 

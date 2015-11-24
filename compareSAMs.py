@@ -111,7 +111,7 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
                             if int(row[3]) == match[2] and int(row[7]) == match[0] and not conflicts(exons, match[1]):
                                 #l = abs(int(row[8]))
                                 l = max(exons[-1][1], match[1][-1][1]) - min(exons[0][0], match[1][0][0])
-                                print('%d, %d, %d' % (int(row[8]), match[3], l)
+                                print('%d, %d, %d' % (int(row[8]), match[3], l))
 
                                 if l > 0:
                                     if l >= len(fragment_lengths):
@@ -123,9 +123,9 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
                                 break
 
                         if not foundMatch:
-                            unmatched[name].append((int(row[3]), exons, int(row[7])))
+                            unmatched[name].append((int(row[3]), exons, int(row[7]), int(row[8])))
                     else:
-                        unmatched[name] = [(int(row[3]), exons, int(row[7]), int(row[8])]
+                        unmatched[name] = [(int(row[3]), exons, int(row[7]), int(row[8]))]
 
             reads.append((row[2], int(row[3]), genCigar(exons), row[6], int(row[7]), int(row[8])))
 

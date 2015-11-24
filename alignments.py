@@ -1762,7 +1762,6 @@ class Alignments:
                 for i in range(len(self.unmatched[name])):
                     match = self.unmatched[name][i]
                     if read.pairOffset == match.exons[0][0] and match.pairOffset == read.exons[0][0] and not self.conflicts(read.exons, match.exons):
-                        #self.paired.append(pairedread.PairedRead(match.chrom, match.exons, read.chrom, read.exons, xs, NH))
                         self.add_paired(match, read)
 
                         # Update NH values

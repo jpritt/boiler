@@ -315,4 +315,14 @@ def findReadLeft(cov, start, end, reads, min_len, max_len, mode_len):
 
     return reads, start, end
 
-findReads(unpairedLens, pairedLens, lensLeft, lensRight, cov, boundaries)
+with open('alignments.sam', 'r') as f:
+    for line in f:
+        row = line.rstrip().split('\t')
+        if len(row) < 5:
+            continue
+
+        if not row[6] == '=' and not row[6] == '*' and not row[6] == row[2]:
+            print(row[0])
+            exit()
+
+#findReads(unpairedLens, pairedLens, lensLeft, lensRight, cov, boundaries)
