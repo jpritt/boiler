@@ -86,7 +86,7 @@ def bin(data, width):
         new_data[i] = sum(data[i*width:(i+1)*width])
     return new_data
 
-def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired):
+def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDiscordant):
     reads = []
     unmatched = dict()
     for line in f:
@@ -109,23 +109,29 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired):
                         for i in range(len(unmatched[name])):
                             match = unmatched[name][i]
                             if int(row[3]) == match[2] and int(row[7]) == match[0] and not conflicts(exons, match[1]):
-                                l = abs(int(row[8]))
+                                #l = abs(int(row[8]))
+                                l = max(exons[-1][1], match[1][-1][1]) - min(exons[0][0], match[1][0][0])
+                                print('%d, %d, %d' % (int(row[8]), match[3], l)
+
                                 if l > 0:
                                     if l >= len(fragment_lengths):
                                         fragment_lengths += [0] * (l + 1 - len(fragment_lengths))
                                     fragment_lengths[l] += 1
 
+                                del unmatched[name][i]
                                 foundMatch = True
                                 break
 
                         if not foundMatch:
                             unmatched[name].append((int(row[3]), exons, int(row[7])))
                     else:
-                        unmatched[name] = [(int(row[3]), exons, int(row[7]))]
+                        unmatched[name] = [(int(row[3]), exons, int(row[7]), int(row[8])]
 
-            reads.append((row[2], int(row[3]), genCigar(exons), row[6], int(row[7])))
+            reads.append((row[2], int(row[3]), genCigar(exons), row[6], int(row[7]), int(row[8])))
 
-    return reads, countUnpaired, countPaired
+    for k,v in unmatched.items():
+        countDiscordant += len(v)
+    return reads, countUnpaired, countPaired, countDiscordant
 
 def compareSAMs(file1, file2):
     fragment_lengths1 = [0] * 100000
@@ -134,6 +140,8 @@ def compareSAMs(file1, file2):
     countPaired1 = 0
     countUnpaired2 = 0
     countPaired2 = 0
+    countDiscordant1 = 0
+    countDiscordant2 = 0
 
     chroms = []
 
@@ -154,9 +162,9 @@ def compareSAMs(file1, file2):
     FP_pairs = 0
     for c in chroms:
         with open(file1, 'r') as f:
-            reads1, countUnpaired1, countPaired1 = getChromReads(f, c, fragment_lengths1, countUnpaired1, countPaired1)
+            reads1, countUnpaired1, countPaired1, countDiscordant1 = getChromReads(f, c, fragment_lengths1, countUnpaired1, countPaired1, countDiscordant1)
         with open(file2, 'r') as f:
-            reads2, countUnpaired2, countPaired2 = getChromReads(f, c, fragment_lengths2, countUnpaired2, countPaired2)
+            reads2, countUnpaired2, countPaired2, countDiscordant2 = getChromReads(f, c, fragment_lengths2, countUnpaired2, countPaired2, countDiscordant2)
 
         reads1.sort()
         reads2.sort()
@@ -212,9 +220,9 @@ def compareSAMs(file1, file2):
     print('')
 
 
-    #print('File 1: %d unpaired, %d paired' % (countUnpaired1, countPaired1))
-    #print('File 2: %d unpaired, %d paired' % (countUnpaired2, countPaired2))
-    #print('')
+    print('File 1: %d unpaired, %d paired, %d discordant' % (countUnpaired1, countPaired1, countDiscordant1))
+    print('File 2: %d unpaired, %d paired, %d discordant' % (countUnpaired2, countPaired2, countDiscordant2))
+    print('')
 
     fragment_lengths1 = bin(fragment_lengths1, 1000)
     fragment_lengths2 = bin(fragment_lengths2, 1000)

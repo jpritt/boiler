@@ -5,5 +5,7 @@ paper/paper.out
 paper/paper.synctex.gz
 paper/paper.aux
 scripts/qsub/*/*.pbs.*
+scripts/tech_reps/*.pbs.*
+scripts/tech_reps/*/*.pbs.*
 *.pyc
 __pycache__/
