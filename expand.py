@@ -306,6 +306,7 @@ class Expander:
             return [(c[0], c[-1]) for c in clusters[start_i:end_i]]
 
     def getCoverage(self, compressedFilename, chrom, start=None, end=None):
+        print('Getting coverage in %s: %d - %d' % (chrom, start, end))
         with open(compressedFilename, 'rb') as f:
             chromosomes = binaryIO.readChroms(f)
             self.aligned = alignments.Alignments(chromosomes)
@@ -322,11 +323,12 @@ class Expander:
                 else:
                     break
 
-            clusters = binaryIO.readClusters(f)
-            start_i, end_i = self.getRelevantClusters(clusters, start, end)
+            bundles = binaryIO.readClusters(f)
+            start_i, end_i = self.getRelevantClusters(bundles, start, end)
 
-            for i in range(start_i, end_i):
-                print(clusters[i])
+            #print('%d -- %d' % (start_i, end_i))
+            #for i in range(start_i, end_i):
+            #    print(clusters[i])
 
             if start_i == end_i:
                 return coverage
@@ -339,12 +341,12 @@ class Expander:
                 chunkLens, startPos = binaryIO.readList(index, 0)
                 f.seek(sum(chunkLens),1)
             for i in range(start_i, end_i):
-                self.aligned.exons = clusters[i]
-                coverage = self.getClusterCoverage(f, spliced_index[i], coverage, start, end)
+                self.aligned.exons = bundles[i]
+                coverage = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
 
         return coverage
 
-    def getClusterCoverage(self, f, length, coverage, range_start, range_end):
+    def getBundleCoverage(self, f, length, coverage, range_start, range_end):
         index = self.expandString(f.read(length))
         chunkLens, startPos = binaryIO.readList(index, 0)
         sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(index, startPos)
@@ -352,8 +354,10 @@ class Expander:
 
         start_i, end_i = self.getRelevantExons(self.aligned.exons, range_start, range_end)
 
+        skip = 0
         juncId = 0
         for i in range(len(chunkLens)):
+            # Get the number of junctions in this chunk
             c_len = min(self.junctionChunkSize, len(sorted_junctions)-juncId)
             if i == len(chunkLens)-1:
                 c_len = len(sorted_junctions) - i * self.junctionChunkSize
@@ -364,18 +368,24 @@ class Expander:
             startPos = 0
 
             for j in range(c_len):
+                # Check if any of the subexons in this junction overlap the target region
                 relevant = False
                 for e in sorted_junctions[juncId+j][:-2]:
                     if e >= start_i and e < end_i:
                         relevant = True
                         break
 
+                # If the junction does not overlap the target region and we have already expanded this chunk, skip it
                 if not relevant:
                     if chunk:
                         startPos = binaryIO.skipJunction(chunk, readLenBytes, startPos)
                     continue
 
+                # If the junction overlaps the target region and we have not expanded this chunk yet, expand it
                 if not chunk:
+                    if skip > 0:
+                        f.seek(skip, 1)
+                        skip = 0
                     chunk = self.expandString(f.read(chunkLens[i]))
                     startPos = 0
 
@@ -385,6 +395,7 @@ class Expander:
                 key = sorted_junctions[juncId + j]
                 exons = key[:-2]
 
+                # Boundaries contains the positions in the junction coverage vector where each new subexon begins
                 length = 0
                 boundaries = []
                 for i in range(len(exons)):
@@ -400,7 +411,6 @@ class Expander:
 
                 # Read the rest of the junction information
                 junc, startPos = binaryIO.readJunction(chunk, junction.Junction(exons, length, boundaries), readLenBytes, startPos)
-                junc.xs = key[-2]
                 junc.NH = key[-1]
 
                 junc_coverage = self.RLEtoVector(junc.coverage)
@@ -415,6 +425,15 @@ class Expander:
                 mapping = [0]
                 for j in juncBounds:
                     mapping.append(mapping[-1] + j[1] - j[0])
+                if len(boundaries) == 0:
+                    mapping = [0, juncBounds[-1][1] - juncBounds[-1][0]]
+                else:
+                    mapping = [0] + boundaries + [boundaries[-1] + juncBounds[-1][1] - juncBounds[-1][0]]
+
+                #print(boundaries)
+                #print(mapping)
+                #print('')
+
 
                 genome_pos = self.aligned.exons[exons[0]] - range_start
                 length = range_end - range_start
@@ -432,8 +451,30 @@ class Expander:
 
                     genome_pos += 1
 
+                '''
+                genome_pos = self.aligned.exons[exons[0]] - range_start
+                length = range_end - range_start
+
+                start = 0
+                for b in range(len(boundaries)):
+                    for i in range(start, boundaries[b]):
+                        j = genome_pos+i
+                        if j >= 0:
+                            if j >= length:
+                                break
+                            else:
+                                coverage[j] += junc_coverage[i]
+                    genome_pos += juncBounds[b][0] - juncBounds[b-1][1]
+                    start += boundaries[b]
+                '''
+
             juncId += c_len
 
+            if not chunk:
+                skip += chunkLens[i]
+
+        if skip > 0:
+            f.seek(skip, 1)
         return coverage
 
     def getRelevantClusters(self, clusters, start, end):

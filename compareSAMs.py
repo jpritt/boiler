@@ -256,6 +256,15 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     plt.savefig('frag_len_diff.png')
     plt.clf()
 
+    ratio = [0] * x_range
+    for i in range(x_range):
+        ratio[i] = float(fragment_lengths2[i]) / float(fragment_lengths1[i])
+    plt.plot(range(x_range), ratio)
+    plt.xlabel('Fragment Length (kb)')
+    plt.ylabel('Compressed / Original Frequency')
+    plt.savefig('frag_len_ratio.png')
+    plt.clf()
+
 def write_frag_lens(filename, fragment_lengths1, fragment_lengths2):
     with open(filename, 'w') as f:
         f.write(','.join([str(l) for l in fragment_lengths1]) + '\n')
