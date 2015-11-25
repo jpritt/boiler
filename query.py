@@ -91,8 +91,11 @@ def go(args):
     exit()
     '''
 
-    #intervals = [['2R', None, None],['2L', None, None],['3R', None, None],['3L', None, None],['4', None, None],['M', None, None],['X', None, None]]
-    #intervals = [['2R', 100000, 200000]]
+    #s = time.time()
+    #cov = expander.getCoverage(args['compressed'], '2R', 374386, 20374386)
+    #e = time.time()
+    #print('%f s' % (e-s))
+    #exit()
 
     lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
     #lens = [10000000]
