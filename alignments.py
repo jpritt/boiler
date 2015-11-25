@@ -264,7 +264,7 @@ class Alignments:
     def updateRLE(self, RLE, start, length, value):
         i = 0
 
-        while start > 0 and start >= RLE[i][1]:
+        while start >= RLE[i][1]:
             start -= RLE[i][1]
             i += 1
 
@@ -272,7 +272,10 @@ class Alignments:
             RLE = RLE[:i] + [ [RLE[i][0], start], [RLE[i][0], RLE[i][1]-start] ] + RLE[i+1:]
             i += 1
 
-        while length > 0 and length >= RLE[i][1]:
+        rle_len = len(RLE)
+
+        #while length > 0 and length >= RLE[i][1]:
+        while i < rle_len and length >= RLE[i][1]:
             RLE[i][0] += value
             if RLE[i][0] < 0:
                 RLE[i][0] = 0
@@ -280,7 +283,7 @@ class Alignments:
             length -= RLE[i][1]
             i += 1
 
-        if length > 0:
+        if i < rle_len and length > 0:
             RLE = RLE[:i] + [ [max(RLE[i][0]+value,0), length], [RLE[i][0], RLE[i][1]-length] ] + RLE[i+1:]
 
         return RLE
