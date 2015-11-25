@@ -60,14 +60,14 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
                 nexons += 1
 
 
-    #for transcriptId, xscript in transcriptsTruth.items():
-    #    assert len(xscript.exons) > 0
-    #transcriptsTruth = [v for v in transcriptsTruth.values()]
+    for transcriptId, xscript in transcriptsTruth.items():
+        assert len(xscript.exons) > 0
+    transcriptsTruth = [v for v in transcriptsTruth.values()]
 
-    transcriptsTruth = []
-    for v in transcriptsTruth.values():
-        if len(v.exons) > 0:
-            transcriptsTruth.append(v)
+    #transcriptsTruth = []
+    #for v in transcriptsTruth.values():
+    #    if len(v.exons) > 0:
+    #        transcriptsTruth.append(v)
 
     logging.info('Parsed %d protein-coding exons from simulation .gtf file' % nexons)
 
