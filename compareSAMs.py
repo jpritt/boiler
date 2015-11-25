@@ -95,7 +95,7 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
             continue
 
         if row[2] == chr:
-            exons = parseCigar(row[5],0)
+            exons = parseCigar(row[5],int(row[3]))
             if row[6] == '*':
                 countUnpaired += 1
             else:
@@ -110,8 +110,13 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
                             match = unmatched[name][i]
                             if int(row[3]) == match[2] and int(row[7]) == match[0] and not conflicts(exons, match[1]):
                                 #l = abs(int(row[8]))
+                                #print(chr)
+                                #print(name)
+                                #print(exons)
+                                #print(match[1])
                                 l = max(exons[-1][1], match[1][-1][1]) - min(exons[0][0], match[1][0][0])
-                                print('%d, %d, %d' % (int(row[8]), match[3], l))
+                                #print('%d, %d, %d' % (int(row[8]), match[3], l))
+                                #exit()
 
                                 if l > 0:
                                     if l >= len(fragment_lengths):
