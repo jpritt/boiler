@@ -54,7 +54,8 @@ def compareTripartite(proFile, truthGTF, compGTF1, compGTF2, strict):
             #if row[2] == 'transcript':
             #    transcriptsTruth[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), transcriptCovs[transcriptId])
 
-            if row[1] == 'protein_coding' and row[2] == 'exon' and transcriptId in transcriptsTruth:
+            #if row[1] == 'protein_coding' and row[2] == 'exon' and transcriptId in transcriptsTruth:
+            if row[2] == 'exon' and transcriptId in transcriptsTruth:
                 transcriptsTruth[transcriptId].exons.append( (int(row[3]), int(row[4])) )
                 nexons += 1
 
