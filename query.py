@@ -118,7 +118,7 @@ def go(args):
         timeTrue = 0.0
         timePred = 0.0
 
-        numIters = 3
+        numIters = 5
         for c in range(len(chroms)):
             chrom = chroms[c]
 
