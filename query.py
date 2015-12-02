@@ -76,7 +76,10 @@ def go(args):
 
     '''
     trueCov = sam.getCoverage('3R', 24150663, 24151663)
-    predCov = expander.getCoverage(args['compressed'], '3R', 24150663, 24151663)
+    '''
+    predCov = expander.getCoverage(args['compressed'], '2R', 1035348, 11035348)
+
+    '''
     print(trueCov[548])
     print(predCov[548])
 
@@ -106,8 +109,8 @@ def go(args):
     #print('%f s' % (e-s))
     #exit()
 
-    lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
-    #lens = [10000000]
+    #lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
+    lens = [10000000]
     chroms = ['2R', '2L', '3R', '3L', 'X']
     chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
 

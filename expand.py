@@ -440,6 +440,8 @@ class Expander:
     def getCoverage(self, compressedFilename, chrom, start=None, end=None):
         print('Getting coverage in %s: %d - %d' % (chrom, start, end))
         with open(compressedFilename, 'rb') as f:
+            t1 = time.time()
+
             chromosomes = binaryIO.readChroms(f)
             self.aligned = alignments.Alignments(chromosomes)
             if start == None or end == None:
@@ -458,10 +460,6 @@ class Expander:
             bundles = binaryIO.readClusters(f)
             start_i, end_i = self.getRelevantClusters(bundles, start, end)
 
-            #print('%d -- %d' % (start_i, end_i))
-            #for i in range(start_i, end_i):
-            #    print(clusters[i])
-
             if start_i == end_i:
                 return coverage
 
@@ -469,13 +467,15 @@ class Expander:
 
             buckets = self.readCrossBundleBuckets(len(bundles), f)
 
+            t2 = time.time()
+            print('Time to read index:   %f s' % (t2-t1))
+
             # Expand the bundle-spanning buckets
             for b in buckets:
                 # Check if this bucket overlaps the target region
                 i = b.bundleA
                 j = b.bundleB
                 if (i >= start_i and i < end_i) or (j >= start_i and j < end_i):
-                    #print('Bucket %d, %d' % (i,j))
                     exonsA = bundles[i]
                     exonsB = bundles[j]
 
@@ -490,10 +490,17 @@ class Expander:
 
                     coverage = self.getCrossBucketCoverage(b, coverage, start, end)
 
+            t3 = time.time()
+            print('Time to parse bundle-spanning buckets:   %f s' % (t3-t2))
+
             f.seek(sum(spliced_index[:start_i]), 1)
             for i in range(start_i, end_i):
                 self.aligned.exons = bundles[i]
+                #print('Bundle %d - %d (%d)' % (bundles[i][0], bundles[i][-1], bundles[i][-1]-bundles[i][0]))
                 coverage = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
+
+            t4 = time.time()
+            print('Time to parse normal buckets:   %f s' % (t4-t3))
 
         return coverage
 
@@ -565,20 +572,17 @@ class Expander:
 
             # Read the rest of the junction information
             junc, startPos = binaryIO.readJunction(bundle, bucket.Bucket(exons, length, boundaries), readLenBytes, startPos)
-            junc.NH = key[-1]
+            junc.NH = float(key[-1])
 
             junc_coverage = self.RLEtoVector(junc.coverage)
-            for i in range(len(junc_coverage)):
-                junc_coverage[i] /= float(junc.NH)
+            #for i in range(len(junc_coverage)):
+            #    junc_coverage[i] /= float(junc.NH)
 
             juncBounds = []
             for j in junc.exons:
                 juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
 
             # marks indices in junction coverage vector where exons begin
-            mapping = [0]
-            for j in juncBounds:
-                mapping.append(mapping[-1] + j[1] - j[0])
             if len(boundaries) == 0:
                 mapping = [0, juncBounds[-1][1] - juncBounds[-1][0]]
             else:
@@ -596,26 +600,9 @@ class Expander:
                     if genome_pos >= length:
                         break
                     else:
-                        coverage[genome_pos] += junc_coverage[i]
+                        coverage[genome_pos] += junc_coverage[i] / junc.NH
 
                 genome_pos += 1
-
-            '''
-            genome_pos = self.aligned.exons[exons[0]] - range_start
-            length = range_end - range_start
-
-            start = 0
-            for b in range(len(boundaries)):
-                for i in range(start, boundaries[b]):
-                    j = genome_pos+i
-                    if j >= 0:
-                        if j >= length:
-                            break
-                        else:
-                            coverage[j] += junc_coverage[i]
-                genome_pos += juncBounds[b][0] - juncBounds[b-1][1]
-                start += boundaries[b]
-            '''
 
         return coverage
 
