@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 import bisect
-import junction
+import bucket
 import read
 import pairedread
 import os.path
@@ -76,7 +76,7 @@ class Chromosome:
                     covLength = 0
                     for e in exonIds:
                         covLength += self.exons[e+1] - self.exons[e]
-                    junctions[key] = junction.Junction(exonIds, covLength)
+                    junctions[key] = bucket.Junction(exonIds, covLength)
                 j = junctions[key]
             else:
                 # XS not defined for this read, so see which one (+/-) is in the dict already or add + by default
@@ -93,7 +93,7 @@ class Chromosome:
                     covLength = 0
                     for e in exonIds:
                         covLength += self.exons[e+1] - self.exons[e]
-                    junctions[key1] = junction.Junction(exonIds, covLength)
+                    junctions[key1] = bucket.Junction(exonIds, covLength)
                     j = junctions[key1]
 
             # update junction coverage vector in dictionary
@@ -416,7 +416,7 @@ class Chromosome:
                         for e in junctionExons:
                             length += self.exons[e+1] - self.exons[e]
 
-                        junc = junction.Junction(junctionExons, length)
+                        junc = bucket.Junction(junctionExons, length)
                         junc.readLens = None
                         junc.lensLeft = None
                         junc.lensRight = None

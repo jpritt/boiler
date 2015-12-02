@@ -229,6 +229,25 @@ def compareSAMs(file1, file2):
     print('File 2: %d unpaired, %d paired, %d discordant' % (countUnpaired2, countPaired2, countDiscordant2))
     print('')
 
+    total_fragments = sum(fragment_lengths1)
+    goal = total_fragments / 100
+    i = len(fragment_lengths1)
+    cum = 0
+    while cum < goal:
+        i -= 1
+        cum += fragment_lengths1[i]
+
+    print('Lengths %d - %d: %f %% of fragments' % (i, len(fragment_lengths1), 100.0*float(cum)/float(total_fragments)))
+    j = i-1
+    while fragment_lengths1[j] == 0:
+        j -= 1
+    print(fragment_lengths1[i-100:i+1])
+    #print('Last index with >0 fragments: %d' % j)
+
+    exit()
+
+
+
     fragment_lengths1 = bin(fragment_lengths1, 1000)
     fragment_lengths2 = bin(fragment_lengths2, 1000)
     return fragment_lengths1, fragment_lengths2

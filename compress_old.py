@@ -3,7 +3,7 @@ import alignments
 import re
 import read
 import pairedread
-import junction
+import bucket
 import bisect
 
 class Compressor:
@@ -98,7 +98,7 @@ class Compressor:
                     covLength = 0
                     for e in exonIds:
                         covLength += self.aligned.exons[e+1] - self.aligned.exons[e]
-                    junctions[key] = junction.Junction(exonIds, covLength)
+                    junctions[key] = bucket.Junction(exonIds, covLength)
                 j = junctions[key]
             else:
                 # XS not defined for this read, so see which one (+/-) is in the dict already or add + by default
@@ -119,7 +119,7 @@ class Compressor:
                     covLength = 0
                     for e in exonIds:
                         covLength += self.aligned.exons[e+1] - self.aligned.exons[e]
-                    junctions[key1] = junction.Junction(exonIds, covLength)
+                    junctions[key1] = bucket.Junction(exonIds, covLength)
                     j = junctions[key1]
 
                     key = key1

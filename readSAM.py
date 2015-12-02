@@ -46,8 +46,6 @@ class ReadSAM:
                             for e in exons:
                                 if e[0] < end and e[1] >= start:
                                     for i in range(max(start,e[0]), min(end,e[1])):
-                                        #if i-start == 123828:
-                                        #    print(line)
                                         coverage[i-start] += NH
                     else:
                         return coverage

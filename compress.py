@@ -3,7 +3,7 @@ import alignments
 import re
 import read
 import pairedread
-import junction
+import bucket
 import bisect
 import binaryIO
 import math
@@ -25,7 +25,7 @@ class Compressor:
     # 2 - bz2
     compressMethod = 0
 
-    def __init__(self, force_xs):
+    def __init__(self, force_xs, frag_len_cutoff):
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
         elif self.compressMethod == 1:
@@ -34,6 +34,7 @@ class Compressor:
             self.bz2 = __import__('bz2')
 
         self.force_xs = force_xs
+        self.frag_len_cutoff = frag_len_cutoff
 
     def compress(self, samFilename, compressedFilename, min_filename=None, binary=False, debug=False):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
@@ -52,11 +53,10 @@ class Compressor:
                 else:
                     break
         self.chromosomes = self.parseSAMHeader(header)
-        self.aligned = alignments.Alignments(self.chromosomes, self.debug)
+        self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff, self.debug)
 
         self.compressByCluster(samFilename, compressedFilename, min_filename)
 
-    '''
     def compressCluster(self, junctions, maxReadLen, filehandle):
         # Determine the number of bytes for read lengths
         readLenBytes = binaryIO.findNumBytes(maxReadLen)
@@ -67,10 +67,10 @@ class Compressor:
         junc_string = b''
         for j in self.sortedJuncs:
             s = binaryIO.writeJunction(readLenBytes, junctions[j])
-            junc_lens.append(s)
+            junc_lens.append(len(s))
             junc_string += s
 
-        cluster += binaryIO.writeList(junc_lens)
+        #cluster += binaryIO.writeList(junc_lens)
         cluster += junc_string
 
         # Write to file
@@ -79,14 +79,34 @@ class Compressor:
 
         # return length of cluster in file
         return filehandle.tell() - start
-    '''
 
-    def compressCluster(self, junctions, maxReadLen, filehandle):
-        ''' Compress the cluster in chunks
-
-            filehandle: File to write to
+    def compressCrossBundle(self, cross_bundle_buckets, maxReadLen, num_bundles, filehandle):
+        '''
+        Compress the bundle-spanning buckets
         '''
 
+        readLenBytes = binaryIO.findNumBytes(maxReadLen)
+
+        bundleIdBytes = binaryIO.findNumBytes(num_bundles)
+
+        buckets_sorted = sorted(cross_bundle_buckets.keys())
+
+        s = b''
+        print('%d cross-bundle buckets' % len(buckets_sorted))
+        for b in buckets_sorted:
+            s += binaryIO.writeCrossBundleBucket(bundleIdBytes, readLenBytes, cross_bundle_buckets[b])
+
+        s = self.compressString(s)
+        length = len(s)
+        numBytes = binaryIO.findNumBytes(length)
+        binaryIO.writeVal(filehandle, 1, readLenBytes)
+        binaryIO.writeVal(filehandle, 1, numBytes)
+        binaryIO.writeVal(filehandle, numBytes, length)
+        filehandle.write(s)
+
+
+    '''
+    def compressCluster(self, junctions, maxReadLen, filehandle):
         # Determine the number of bytes for read lengths
         readLenBytes = binaryIO.findNumBytes(maxReadLen)
 
@@ -132,6 +152,7 @@ class Compressor:
 
         # return length of chunk in file
         return indexLen
+    '''
 
     def compressByCluster(self, input_name, compressed_name, intermediate_name=None):
         '''
@@ -152,7 +173,7 @@ class Compressor:
 
         first = True
 
-        #jid = 0
+        bundle_id = 0
 
         with open(input_name, 'r') as filehandle:
             for line in filehandle:
@@ -169,17 +190,11 @@ class Compressor:
                 start = self.aligned.chromOffsets[row[2]] + int(row[3])
 
                 if self.aligned.gene_bounds and start > (self.aligned.gene_bounds[-1] + overlapRadius):
-                    #if jid > 100:
-                    #    break
-                    #jid += 1
-
                     # Compress most recent cluster
                     self.aligned.finalizeUnmatched()
                     self.aligned.finalizeExons()
-
-                    #if self.aligned.exons[0] - self.aligned.chromOffsets['chr14'] < 106206531 and self.aligned.exons[-1] - self.aligned.chromOffsets['chr14'] > 106134607:
-                    #print(','.join([str(e - self.aligned.chromOffsets['2L']) for e in self.aligned.exons]))
-                    #    exit()
+                    self.aligned.finalize_cross_bundle_reads(bundle_id)
+                    bundle_id += 1
 
                     clusters.append(self.aligned.exons)
 
@@ -216,16 +231,22 @@ class Compressor:
 
 
                 r = read.Read(row[2], exons, xs, NH)
-                if row[6] == '=':
-                    r.pairOffset = int(row[7])
-                    self.aligned.processRead(r, row[0], paired=True)
+                if row[6] == '*' or row[6] == row[2]:
+                    self.aligned.processRead(r, row[0], paired=False, bundle_id=bundle_id)
                 else:
-                    self.aligned.processRead(r, row[0], paired=False)
+                    if row[6] == '=':
+                        r.pairChrom = row[2]
+                    else:
+                        r.pairChrom = row[6]
+                    r.pairOffset = int(row[7])
+                    self.aligned.processRead(r, row[0], paired=True, bundle_id=bundle_id)
 
 
             # Compress final cluster
             self.aligned.finalizeUnmatched()
             self.aligned.finalizeExons()
+            self.aligned.finalize_cross_bundle_reads(bundle_id)
+            bundle_id += 1
 
             clusters.append(self.aligned.exons)
 
@@ -245,13 +266,19 @@ class Compressor:
                 l = self.compressCluster(junctions, maxReadLen, f)
                 spliced_index.append(l)
 
+        leftovers = 0
+        for k,v in self.aligned.cross_bundle_reads.items():
+            leftovers += len(v)
+        print('%d cross-bundle reads unmatched' % leftovers)
+
         # Write index information and append spliced and unspliced files
         with open(compressed_name, 'wb') as f:
             s = binaryIO.writeChroms(self.aligned.chromosomes)
             s += binaryIO.writeClusters(clusters)
             s += binaryIO.writeList(spliced_index)
-            s += binaryIO.valToBinary(2, self.junctionChunkSize)
             f.write(s)
+
+            self.compressCrossBundle(self.aligned.cross_bundle_buckets, self.aligned.max_cross_bundle_read_len, bundle_id, f)
 
             with open('temp.bin', 'rb') as f2:
                 f.write(f2.read())

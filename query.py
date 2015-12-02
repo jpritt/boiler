@@ -92,7 +92,16 @@ def go(args):
     '''
 
     #s = time.time()
-    #cov = expander.getCoverage(args['compressed'], '2R', 374386, 20374386)
+    #trueCov = sam.getCoverage('2L', 15609942, 16609942)
+    #predCov = expander.getCoverage(args['compressed'], '2L', 15609942, 16609942)
+
+    #for x in range(len(trueCov)):
+    #    if abs(trueCov[x] - predCov[x]) > 0.0001:
+    #        print('Error!')
+    #        print(x)
+    #        for n in range(x-5,x+5):
+    #            print(str(trueCov[n]) + '\t' + str(predCov[n]))
+    #        exit()
     #e = time.time()
     #print('%f s' % (e-s))
     #exit()

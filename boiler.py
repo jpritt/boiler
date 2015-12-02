@@ -31,7 +31,7 @@ def go(args):
 
         print('Compressing to %s' % compressedName)
 
-        compressor = compress.Compressor(args.force_xs)
+        compressor = compress.Compressor(args.force_xs, args.frag_len_cutoff)
         startTime = time.time()
         compressor.compress(args.alignments, compressedName, args.intermediate, binary, debug)
         endTime = time.time()
@@ -86,6 +86,7 @@ if __name__ == '__main__':
     parser.add_argument("--intermediate", type=str, help="Name of SAM file to write to after processing but before compressing")
     parser.add_argument("--debug", help="Print debug information", action="store_true")
     parser.add_argument("--force-xs", help="If we decompress a spliced read with no XS value, assign it a random one (so Cufflinks can run)", action="store_false")
+    parser.add_argument("--frag-len-cutoff", type=int, help='Store any fragments longer than this in a bundle-spanning bucket', required="true")
 
     args = parser.parse_args(sys.argv[1:])
 

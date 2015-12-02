@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 import bisect
-import junction
+import bucket
 import read
 import pairedread
 import os.path
@@ -91,7 +91,7 @@ class Alignments:
                     covLength = 0
                     for e in exonIds:
                         covLength += self.exons[e+1] - self.exons[e]
-                    junctions[key] = junction.Junction(exonIds, covLength)
+                    junctions[key] = bucket.Junction(exonIds, covLength)
                 j = junctions[key]
                 j.pairedLens = dict()
             else:
@@ -113,7 +113,7 @@ class Alignments:
                     covLength = 0
                     for e in exonIds:
                         covLength += self.exons[e+1] - self.exons[e]
-                    junctions[key1] = junction.Junction(exonIds, covLength)
+                    junctions[key1] = bucket.Junction(exonIds, covLength)
                     j = junctions[key1]
                     j.pairedLens = dict()
 
@@ -461,7 +461,7 @@ class Alignments:
                         for e in junctionExons:
                             length += self.exons[e+1] - self.exons[e]
 
-                        junc = junction.Junction(junctionExons, length)
+                        junc = bucket.Junction(junctionExons, length)
                         junc.readLens = None
                         junc.pairedLens = None
 

@@ -1,7 +1,8 @@
 #! /usr/bin/env python
 
 import bisect
-import junction
+import bucket
+import cross_bundle_bucket
 import read
 import pairedread
 import os.path
@@ -17,13 +18,15 @@ import time
 class Alignments:
     ''' A set of reads aligned to a genome '''
 
-    def __init__(self, chromosomes, debug=False):
+    def __init__(self, chromosomes, frag_len_cutoff=None, debug=False):
         ''' Initialize a genome for alignments
 
             chromosomes: A dictionary with keys corresponding to chromosome names and values corresponding to lengths
         '''
 
         self.debug = debug
+
+        self.frag_len_cutoff = frag_len_cutoff
 
         self.origPairedDepth = 0
         self.calcPairedDepth = 0
@@ -60,6 +63,20 @@ class Alignments:
         # paired reads for which the mate still needs to be found
         self.unmatched = dict()
 
+        # Unmatched reads that span multiple bundles
+        self.cross_bundle_reads = dict()
+
+        # Unmatched reads *in the current bundle* that span multiple bundles
+        self.curr_cross_bundle_reads = dict()
+
+        # Matched mates spanning multiple bundles
+        self.cross_bundle_pairs = []
+
+        self.cross_bundle_buckets = dict()
+
+        self.max_cross_bundle_read_len = 0
+
+
         self.unpaired = []
         self.paired = []
 
@@ -67,14 +84,6 @@ class Alignments:
         self.unpaired.append(read)
 
     def add_paired(self, read1, read2):
-        #if read1.xs and read2.xs and not read1.xs == read2.xs:
-        #    print('Non-matching xs values %s and %s' % (read1.xs, read2.xs))
-        #    print(read1.chrom)
-        #    print(read1.exons)
-        #    print(read2.chrom)
-        #    print(read2.exons)
-        #    print('')
-
         xs = read1.xs or read2.xs
         NH = min(read1.NH, read2.NH)
         p = pairedread.PairedRead(read1.chrom, read1.exons, read2.chrom, read2.exons, xs, NH)
@@ -95,6 +104,59 @@ class Alignments:
         self.exons.add(self.gene_bounds[0])
         self.exons.add(self.gene_bounds[1])
         self.exons = sorted(list(self.exons))
+
+    def finalize_cross_bundle_reads(self, bundle_id):
+        for name,reads in self.curr_cross_bundle_reads.items():
+            for read in reads:
+                read.bundle = bundle_id
+                read.exonIds, read.length = self.getExonIds(read.exons)
+                read.bucket_length = sum([self.exons[e+1]-self.exons[e] for e in read.exonIds])
+                read.startOffset = read.exons[0][0] - self.exons[read.exonIds[0]]
+                read.endOffset = self.exons[read.exonIds[-1]+1] - read.exons[-1][1]
+
+            if name in self.cross_bundle_reads:
+                self.cross_bundle_reads[name] += reads
+            else:
+                self.cross_bundle_reads[name] = reads
+
+        # Finalize cross-bundle pairs that were finalized in this bundle
+        for p in self.cross_bundle_pairs:
+            if not hasattr(p[0],'bundle'):
+                p[0].bundle = bundle_id
+                p[0].exonIds, p[0].length = self.getExonIds(p[0].exons)
+                p[0].bucket_length = sum([self.exons[e+1]-self.exons[e] for e in p[0].exonIds])
+                p[0].startOffset = p[0].exons[0][0] - self.exons[p[0].exonIds[0]]
+                p[0].endOffset = self.exons[p[0].exonIds[-1]+1] - p[0].exons[-1][1]
+            if not hasattr(p[1],'bundle'):
+                p[1].bundle = bundle_id
+                p[1].exonIds, p[1].length = self.getExonIds(p[1].exons)
+                p[1].bucket_length = sum([self.exons[e+1]-self.exons[e] for e in p[1].exonIds])
+                p[1].startOffset = p[1].exons[0][0] - self.exons[p[1].exonIds[0]]
+                p[1].endOffset = self.exons[p[1].exonIds[-1]+1] - p[1].exons[-1][1]
+
+            if p[0].length > self.max_cross_bundle_read_len:
+                self.max_cross_bundle_read_len = p[0].length
+            if p[1].length > self.max_cross_bundle_read_len:
+                self.max_cross_bundle_read_len = p[1].length
+
+            NH = min(p[0].NH, p[1].NH)
+            XS = p[0].NH or p[1].NH
+            if XS == '-':
+                XS = -1
+            elif XS == '+':
+                XS = 1
+            else:
+                XS = 0
+            key = str(p[0].bundle) + ' ' + ' '.join([str(e) for e in p[0].exonIds]) + ',' + str(p[1].bundle) + ' ' + ' '.join([str(e) for e in p[1].exonIds]) + ' ' + str(NH) + ' ' + str(XS)
+            if key in self.cross_bundle_buckets:
+                self.cross_bundle_buckets[key].add_pair(p[0], p[1])
+            else:
+                b = cross_bundle_bucket.CrossBundleBucket(p[0].bundle, p[0].exonIds, p[1].bundle, p[1].exonIds)
+                b.set_length(p[0].bucket_length + p[1].bucket_length)
+                b.NH = NH
+                b.XS = XS
+                b.add_pair(p[0], p[1])
+                self.cross_bundle_buckets[key] = b
 
     def computeJunctions(self):
         # Compute coverage levels across every exon junction
@@ -139,7 +201,7 @@ class Alignments:
 
                 covLength += subexon_length
 
-            partitions[key] = junction.Junction(exonIds, covLength)
+            partitions[key] = bucket.Bucket(exonIds, covLength)
             partitions[key].xs = r.xs
             partitions[key].NH = r.NH
 
@@ -155,7 +217,6 @@ class Alignments:
         id = start_id
         p.startOffset = p.exonsA[0][0] - self.exons[id]
         p.lenLeft = 0
-
         exonIdsA = []
         for exon in p.exonsA:
             p.lenLeft += exon[1] - exon[0]
@@ -186,8 +247,11 @@ class Alignments:
 
     def finalize_unpaired_read(self, r):
         # Exon ids spanned by read
-        r.exonIds = []
+        r.exonIds, r.length = self.getExonIds(r.exons)
+        r.startOffset = r.exons[0][0] - self.exons[r.exonIds[0]]
+        r.endOffset = self.exons[r.exonIds[-1]+1] - r.exons[-1][1]
 
+        '''
         id = bisect.bisect_right(self.exons, r.exons[0][0]) - 1
         r.startOffset = r.exons[0][0] - self.exons[id]
         r.length = 0
@@ -201,6 +265,23 @@ class Alignments:
                 id += 1
 
         r.endOffset = self.exons[id] - r.exons[-1][1]
+        '''
+
+    def getExonIds(self, exons):
+        exonIds = []
+
+        id = bisect.bisect_right(self.exons, exons[0][0]) - 1
+        length = 0
+
+        for exon in exons:
+            length += exon[1] - exon[0]
+            while self.exons[id+1] <= exon[0]:
+                id += 1
+            while self.exons[id] < exon[1]:
+                exonIds.append(id)
+                id += 1
+
+        return exonIds, length
 
     def add_paired_to_partition(self, p, partitions):
         '''
@@ -212,29 +293,8 @@ class Alignments:
 
         self.finalize_paired_read(p)
 
-        j = self.find_key(p, partitions)
-
-        p.length = j.length - p.startOffset - p.endOffset
-
-        # update junction coverage vector in dictionary
-        j.coverage = self.updateRLE(j.coverage, p.startOffset, p.lenLeft, 1)
-        j.coverage = self.updateRLE(j.coverage, j.length-p.endOffset-p.lenRight, p.lenRight, 1)
-
-        # update lengths
-        if p.lenLeft in j.lensLeft:
-            j.lensLeft[p.lenLeft] += 1
-        else:
-            j.lensLeft[p.lenLeft] = 1
-
-        if p.lenRight in j.lensRight:
-            j.lensRight[p.lenRight] += 1
-        else:
-            j.lensRight[p.lenRight] = 1
-
-        if p.length in j.pairedLens:
-            j.pairedLens[p.length] += 1
-        else:
-            j.pairedLens[p.length] = 1
+        b = self.find_key(p, partitions)
+        b.add_paired(p)
 
         return partitions
 
@@ -247,46 +307,10 @@ class Alignments:
 
         self.finalize_unpaired_read(r)
 
-        j = self.find_key(r, partitions)
-
-
-        # update junction coverage vector in dictionary
-        j.coverage = self.updateRLE(j.coverage, r.startOffset, r.length, 1)
-
-        # update unpairedLens
-        if r.length in j.unpairedLens:
-            j.unpairedLens[r.length] += 1
-        else:
-            j.unpairedLens[r.length] = 1
+        b = self.find_key(r, partitions)
+        b.add_unpaired(r)
 
         return partitions
-
-    def updateRLE(self, RLE, start, length, value):
-        i = 0
-
-        while start >= RLE[i][1]:
-            start -= RLE[i][1]
-            i += 1
-
-        if start > 0:
-            RLE = RLE[:i] + [ [RLE[i][0], start], [RLE[i][0], RLE[i][1]-start] ] + RLE[i+1:]
-            i += 1
-
-        rle_len = len(RLE)
-
-        #while length > 0 and length >= RLE[i][1]:
-        while i < rle_len and length >= RLE[i][1]:
-            RLE[i][0] += value
-            if RLE[i][0] < 0:
-                RLE[i][0] = 0
-
-            length -= RLE[i][1]
-            i += 1
-
-        if i < rle_len and length > 0:
-            RLE = RLE[:i] + [ [max(RLE[i][0]+value,0), length], [RLE[i][0], RLE[i][1]-length] ] + RLE[i+1:]
-
-        return RLE
 
     def RLE(self, vector):
         rle = []
@@ -310,6 +334,8 @@ class Alignments:
         self.gene_bounds = []
         self.unpaired = []
         self.paired = []
+        self.cross_bundle_pairs = []
+        self.curr_cross_bundle_reads = dict()
 
 
     def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage, boundaries=None, debug=False):
@@ -1720,7 +1746,7 @@ class Alignments:
             else:
                 index -= self.chromosomes[c]
 
-    def processRead(self, read, name, paired=False):
+    def processRead(self, read, name, paired, bundle_id):
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
         '''
@@ -1737,53 +1763,76 @@ class Alignments:
                 self.exons.add(alignment[i][1])
                 self.exons.add(alignment[i+1][0])
 
+
         if not paired:
-            if not self.gene_bounds:
-                self.gene_bounds = [read.exons[0][0], read.exons[-1][1]]
-            else:
-                if read.exons[0][0] < self.gene_bounds[0]:
-                    self.gene_bounds[0] = read.exons[0][0]
-                if read.exons[-1][1] > self.gene_bounds[1]:
-                    self.gene_bounds[1] = read.exons[-1][1]
+            self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
             # unpaired read
             self.add_unpaired(read)
         else:
-            read.pairOffset += offset
+            read.pairOffset += self.chromOffsets[read.pairChrom]
 
-            gene_end = max(read.exons[-1][1], read.pairOffset)
-            if not self.gene_bounds:
-                self.gene_bounds = [read.exons[0][0], gene_end]
+            fragment_len = abs(read.pairOffset - read.exons[0][0])
+            if fragment_len > self.frag_len_cutoff:
+                self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
+
+
+                found_match = False
+                if name in self.cross_bundle_reads:
+                    i = self.find_mate(read, name, self.cross_bundle_reads)
+                    if i >= 0:
+                        found_match = True
+                        match = self.cross_bundle_reads[name][i]
+                        self.cross_bundle_pairs.append([match, read])
+                        del self.cross_bundle_reads[name][i]
+
+                if not found_match and name in self.curr_cross_bundle_reads:
+                    i = self.find_mate(read, name, self.curr_cross_bundle_reads)
+                    if i >= 0:
+                        found_match = True
+                        match = self.curr_cross_bundle_reads[name][i]
+                        self.curr_cross_bundle_pairs.append([match, read])
+                        del self.curr_cross_bundle_reads[name][i]
+
+                if not found_match:
+                    if name in self.curr_cross_bundle_reads:
+                        self.curr_cross_bundle_reads[name].append(read)
+                    else:
+                        self.curr_cross_bundle_reads[name] = [read]
             else:
-                if read.exons[0][0] < self.gene_bounds[0]:
-                    self.gene_bounds[0] = read.exons[0][0]
-                if gene_end > self.gene_bounds[1]:
-                    self.gene_bounds[1] = gene_end
+                self.update_gene_bounds(read.exons[0][0], max(read.exons[-1][1], read.pairOffset))
 
-            if name in self.unmatched:
-                foundMatch = False
-                for i in range(len(self.unmatched[name])):
-                    match = self.unmatched[name][i]
-                    if read.pairOffset == match.exons[0][0] and match.pairOffset == read.exons[0][0] and not self.conflicts(read.exons, match.exons):
+                if name in self.unmatched:
+                    i = self.find_mate(read, name, self.unmatched)
+                    if i == -1:
+                        self.unmatched[name].append(read)
+                    else:
+                        match = self.unmatched[name][i]
                         self.add_paired(match, read)
 
-                        # Update NH values
-                        if match.NH <= read.NH:
-                            del self.unmatched[name][i]
+                        del self.unmatched[name][i]
+                else:
+                    self.unmatched[name] = [read]
 
-                            if match.NH < read.NH:
-                                read.NH -= match.NH
-                                self.unmatched[name].append(read)
-                        else:
-                            match.NH -= read.NH
+    def find_mate(self, read, name, unmatched):
+        for i in range(len(unmatched[name])):
+            match = unmatched[name][i]
+            if read.pairOffset == match.exons[0][0] and match.pairOffset == read.exons[0][0] and not self.conflicts(read.exons, match.exons):
+                # Return index in unmatched dictionary of match
+                return i
 
-                        foundMatch = True
-                        break
+        # If no match found, return -1
+        return -1
 
-                if not foundMatch:
-                    self.unmatched[name].append(read)
-            else:
-                self.unmatched[name] = [read]
+
+    def update_gene_bounds(self, start, end):
+        if not self.gene_bounds:
+            self.gene_bounds = [start, end]
+        else:
+            if start < self.gene_bounds[0]:
+                self.gene_bounds[0] = start
+            if end > self.gene_bounds[1]:
+                self.gene_bounds[1] = end
 
     def conflicts(self, exonsA, exonsB):
         '''

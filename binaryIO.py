@@ -1,7 +1,8 @@
 #! /usr/bin/env python3
 import sys
 import math
-import junction
+import bucket
+import cross_bundle_bucket
 import huffman
 import time
 from struct import *
@@ -319,6 +320,71 @@ def readJunction(s, junc, readLenBytes, start=0):
             junc.lensRight, start = readLens(s, readLenBytes, start)
 
     return junc, start
+
+def writeCrossBundleBucket(bundleIdBytes, readLenBytes, bucket):
+    s = valToBinary(bundleIdBytes, bucket.bundleA)
+    s += writeList(bucket.exonIdsA)
+    s += valToBinary(bundleIdBytes, bucket.bundleB)
+    s += writeList(bucket.exonIdsB)
+    s += pack('b', bucket.XS)
+    s += valToBinary(1, bucket.NH)
+
+    s += writeCov(bucket.coverage)
+
+    # Find max number of bytes needed to encode fragment lengths
+    if len(bucket.pairedLens) == 0:
+        fragLenBytes = 1
+    else:
+        fragLenBytes = findNumBytes(max(bucket.pairedLens))
+    s += valToBinary(1, fragLenBytes)
+    s += writeLens(fragLenBytes, bucket.pairedLens)
+    if len(bucket.pairedLens) > 0:
+        s += writeLens(readLenBytes, bucket.lensLeft)
+        if len(bucket.lensLeft) > 0:
+            s += writeLens(readLenBytes, bucket.lensRight)
+
+    return s
+
+def readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start=0):
+    # Read bucket exon information
+    bundleA, start = binaryToVal(s, bundleIdBytes, start)
+    exonIdsA, start = readList(s, start)
+    bundleB, start = binaryToVal(s, bundleIdBytes, start)
+    exonIdsB, start = readList(s, start)
+
+    v = unpack_from('b', s[start:start+1])[0]
+    XS = None
+    if v == -1:
+        XS = '-'
+    elif v == 1:
+        XS = '+'
+    start += 1
+
+    NH, start = binaryToVal(s, 1, start)
+
+    bucket = cross_bundle_bucket.CrossBundleBucket(bundleA, exonIdsA, bundleB, exonIdsB)
+    bucket.XS = XS
+    bucket.NH = NH
+
+    coverage, start = readCov(s, start)
+    length = 0
+    for c in coverage:
+        length += c[1]
+    bucket.set_length(length)
+    bucket.coverage = coverage
+
+    fragLenBytes, start = binaryToVal(s, 1, start)
+    bucket.pairedLens, start = readLens(s, fragLenBytes, start)
+
+    if len(bucket.pairedLens) > 0:
+        bucket.lensLeft, start = readLens(s, readLenBytes, start)
+        if len(bucket.lensLeft) > 0:
+            bucket.lensRight, start = readLens(s, readLenBytes, start)
+
+    #print(bucket.pairedLens)
+    #print('')
+
+    return bucket, start
 
 def skipJunction(s, readLenBytes, start=0):
     _, start = readCov(s, start)
