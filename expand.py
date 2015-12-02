@@ -134,13 +134,14 @@ class Expander:
         numBytes = binaryIO.readVal(filehandle, 1)
         length = binaryIO.readVal(filehandle, numBytes)
 
-        s = self.expandString(filehandle.read(length))
-        start = 0
         buckets = []
-        while start < len(s):
-            b, start = binaryIO.readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start)
-            b.coverage = self.RLEtoVector(b.coverage)
-            buckets.append(b)
+        if length > 0:
+            s = self.expandString(filehandle.read(length))
+            start = 0
+            while start < len(s):
+                b, start = binaryIO.readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start)
+                b.coverage = self.RLEtoVector(b.coverage)
+                buckets.append(b)
 
         return buckets
 

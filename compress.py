@@ -91,18 +91,23 @@ class Compressor:
 
         buckets_sorted = sorted(cross_bundle_buckets.keys())
 
-        s = b''
-        print('%d cross-bundle buckets' % len(buckets_sorted))
-        for b in buckets_sorted:
-            s += binaryIO.writeCrossBundleBucket(bundleIdBytes, readLenBytes, cross_bundle_buckets[b])
+        if len(buckets_sorted) > 0:
+            s = b''
+            print('%d cross-bundle buckets' % len(buckets_sorted))
+            for b in buckets_sorted:
+                s += binaryIO.writeCrossBundleBucket(bundleIdBytes, readLenBytes, cross_bundle_buckets[b])
 
-        s = self.compressString(s)
-        length = len(s)
-        numBytes = binaryIO.findNumBytes(length)
-        binaryIO.writeVal(filehandle, 1, readLenBytes)
-        binaryIO.writeVal(filehandle, 1, numBytes)
-        binaryIO.writeVal(filehandle, numBytes, length)
-        filehandle.write(s)
+            s = self.compressString(s)
+            length = len(s)
+            numBytes = binaryIO.findNumBytes(length)
+            binaryIO.writeVal(filehandle, 1, readLenBytes)
+            binaryIO.writeVal(filehandle, 1, numBytes)
+            binaryIO.writeVal(filehandle, numBytes, length)
+            filehandle.write(s)
+        else:
+            binaryIO.writeVal(filehandle, 1, readLenBytes)
+            binaryIO.writeVal(filehandle, 1, 1)
+            binaryIO.writeVal(filehandle, 1, 0)
 
 
     '''
