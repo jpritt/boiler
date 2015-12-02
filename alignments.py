@@ -1791,7 +1791,7 @@ class Alignments:
                     if i >= 0:
                         found_match = True
                         match = self.curr_cross_bundle_reads[name][i]
-                        self.curr_cross_bundle_pairs.append([match, read])
+                        self.cross_bundle_pairs.append([match, read])
                         del self.curr_cross_bundle_reads[name][i]
 
                 if not found_match:
