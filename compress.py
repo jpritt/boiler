@@ -42,6 +42,9 @@ class Compressor:
             file_prefix: Prefix for all output file names
         '''
 
+        self.firstPass(samFilename)
+        exit()
+
         self.debug = debug
 
         # Read header
@@ -56,6 +59,73 @@ class Compressor:
         self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff, self.debug)
 
         self.compressByCluster(samFilename, compressedFilename, min_filename)
+
+    def firstPass(self, samFilename):
+        '''
+        Make a first pass over the file to determine the fragment length distribution and establish a cutoff for long fragments
+        '''
+
+        t1 = time.time()
+
+        lens = dict()
+        len_sum = 0
+        N = 0
+        with open(samFilename, 'r') as f:
+            for line in f:
+                row = line.rstrip().split('\t')
+                if len(row) < 6:
+                    continue
+
+                if row[6] == '=':
+                    frag_len = int(row[7]) - int(row[3])
+                    if frag_len >= 0:
+                        len_sum += frag_len
+                        N += 1
+
+                        if frag_len in lens:
+                            lens[frag_len] += 1
+                        else:
+                            lens[frag_len] = 1
+
+        t2 = time.time()
+
+        avg = float(len_sum) / float(N)
+
+        stdev = 0.0
+        for length,freq in lens.items():
+            stdev += ((length - avg) ** 2) * freq
+        stdev = math.sqrt(stdev / N)
+
+        t3 = time.time()
+
+        print('%d fragments' % N)
+        print('Average fragment length: %f' % avg)
+        print('Standard deviation: %f' % stdev)
+        print('')
+
+        # Try a z-score of 3
+        zs = [2, 2.5, 3, 3.5, 4, 5, 6, 7, 8]
+        cutoffs = [avg + c * stdev for c in zs]
+        num_c = len(cutoffs)
+        counts = [0] *  num_c
+
+        for length,freq in lens.items():
+            for i in range(num_c):
+                if length > cutoffs[i]:
+                    counts[i] += freq
+                else:
+                    break
+
+        t4 = time.time()
+
+        for i in range(num_c):
+            print('z-score %0.1f (%d): %d / %d = %0.3f %%' % (zs[i], cutoffs[i], counts[i], N, 100.0*float(counts[i])/float(N)))
+        print('')
+
+        print('First pass time: %f s' % (t2-t1))
+        print('Standard deviation time: %f s' % (t3-t2))
+        print('z-score time: %f s' % (t4-t3))
+
 
     def compressCluster(self, junctions, maxReadLen, filehandle):
         # Determine the number of bytes for read lengths

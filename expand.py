@@ -493,15 +493,19 @@ class Expander:
             t3 = time.time()
             print('Time to parse bundle-spanning buckets:   %f s' % (t3-t2))
 
+            processT = 0.0
+
             f.seek(sum(spliced_index[:start_i]), 1)
             for i in range(start_i, end_i):
                 self.aligned.exons = bundles[i]
                 #print('Bundle %d - %d (%d)' % (bundles[i][0], bundles[i][-1], bundles[i][-1]-bundles[i][0]))
-                coverage = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
+                coverage, t = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
+                processT += t
 
             t4 = time.time()
             print('Time to parse normal buckets:   %f s' % (t4-t3))
 
+            print('Time to process cov:   %f s' % processT)
         return coverage
 
     def getCrossBucketCoverage(self, bucket, coverage, range_start, range_end):
@@ -541,6 +545,8 @@ class Expander:
 
         start_i, end_i = self.getRelevantExons(self.aligned.exons, range_start, range_end)
 
+        t = 0.0
+
         for key in sorted_buckets:
             exons = key[:-2]
 
@@ -572,11 +578,13 @@ class Expander:
 
             # Read the rest of the junction information
             junc, startPos = binaryIO.readJunction(bundle, bucket.Bucket(exons, length, boundaries), readLenBytes, startPos)
-            junc.NH = float(key[-1])
+            NH = float(key[-1])
 
             junc_coverage = self.RLEtoVector(junc.coverage)
             #for i in range(len(junc_coverage)):
             #    junc_coverage[i] /= float(junc.NH)
+
+            t1 = time.time()
 
             juncBounds = []
             for j in junc.exons:
@@ -599,12 +607,15 @@ class Expander:
                 if genome_pos >= 0:
                     if genome_pos >= length:
                         break
-                    else:
-                        coverage[genome_pos] += junc_coverage[i] / junc.NH
+                    elif junc_coverage[i] > 0:
+                        coverage[genome_pos] += junc_coverage[i] / NH
 
                 genome_pos += 1
 
-        return coverage
+            t2 = time.time()
+            t += t2 - t1
+
+        return coverage, t
 
     def getRelevantClusters(self, clusters, start, end):
         '''
