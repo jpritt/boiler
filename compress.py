@@ -34,6 +34,7 @@ class Compressor:
             self.bz2 = __import__('bz2')
 
         self.force_xs = force_xs
+
         self.frag_len_cutoff = frag_len_cutoff
 
     def compress(self, samFilename, compressedFilename, min_filename=None, binary=False, debug=False):
@@ -42,8 +43,9 @@ class Compressor:
             file_prefix: Prefix for all output file names
         '''
 
-        self.firstPass(samFilename)
-        exit()
+        if not self.frag_len_cutoff:
+            self.firstPass(samFilename)
+            print('Set fragment length cutoff to %d based on length distribution' % self.frag_len_cutoff)
 
         self.debug = debug
 
@@ -65,8 +67,6 @@ class Compressor:
         Make a first pass over the file to determine the fragment length distribution and establish a cutoff for long fragments
         '''
 
-        t1 = time.time()
-
         lens = dict()
         len_sum = 0
         N = 0
@@ -87,44 +87,38 @@ class Compressor:
                         else:
                             lens[frag_len] = 1
 
-        t2 = time.time()
-
+        # Calculate average and standard deviation
         avg = float(len_sum) / float(N)
-
         stdev = 0.0
         for length,freq in lens.items():
             stdev += ((length - avg) ** 2) * freq
         stdev = math.sqrt(stdev / N)
 
-        t3 = time.time()
+        #print('%d fragments' % N)
+        #print('Average fragment length: %f' % avg)
+        #print('Standard deviation: %f' % stdev)
+        #print('')
 
-        print('%d fragments' % N)
-        print('Average fragment length: %f' % avg)
-        print('Standard deviation: %f' % stdev)
-        print('')
 
-        # Try a z-score of 3
-        zs = [2, 2.5, 3, 3.5, 4, 5, 6, 7, 8]
-        cutoffs = [avg + c * stdev for c in zs]
-        num_c = len(cutoffs)
-        counts = [0] *  num_c
+        cutoff_z = 8
+        self.frag_len_cutoff = int(avg + cutoff_z * stdev)
 
-        for length,freq in lens.items():
-            for i in range(num_c):
-                if length > cutoffs[i]:
-                    counts[i] += freq
-                else:
-                    break
+        # Test different z scores
+        #zs = [2, 2.5, 3, 3.5, 4, 5, 6, 7, 8]
+        #cutoffs = [avg + c * stdev for c in zs]
+        #num_c = len(cutoffs)
+        #counts = [0] *  num_c
 
-        t4 = time.time()
+        #for length,freq in lens.items():
+        #    for i in range(num_c):
+        #        if length > cutoffs[i]:
+        #            counts[i] += freq
+        #        else:
+        #            break
 
-        for i in range(num_c):
-            print('z-score %0.1f (%d): %d / %d = %0.3f %%' % (zs[i], cutoffs[i], counts[i], N, 100.0*float(counts[i])/float(N)))
-        print('')
-
-        print('First pass time: %f s' % (t2-t1))
-        print('Standard deviation time: %f s' % (t3-t2))
-        print('z-score time: %f s' % (t4-t3))
+        #for i in range(num_c):
+        #    print('z-score %0.1f (%d): %d / %d = %0.3f %%' % (zs[i], cutoffs[i], counts[i], N, 100.0*float(counts[i])/float(N)))
+        #print('')
 
 
     def compressCluster(self, junctions, maxReadLen, filehandle):
@@ -162,8 +156,10 @@ class Compressor:
         buckets_sorted = sorted(cross_bundle_buckets.keys())
 
         if len(buckets_sorted) > 0:
-            s = b''
             print('%d cross-bundle buckets' % len(buckets_sorted))
+            pos = filehandle.tell()
+
+            s = b''
             for b in buckets_sorted:
                 s += binaryIO.writeCrossBundleBucket(bundleIdBytes, readLenBytes, cross_bundle_buckets[b])
 
@@ -174,6 +170,8 @@ class Compressor:
             binaryIO.writeVal(filehandle, 1, numBytes)
             binaryIO.writeVal(filehandle, numBytes, length)
             filehandle.write(s)
+
+            print('Compressed size: %d' % (filehandle.tell() - pos))
         else:
             binaryIO.writeVal(filehandle, 1, readLenBytes)
             binaryIO.writeVal(filehandle, 1, 1)
