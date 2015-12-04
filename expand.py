@@ -532,7 +532,7 @@ class Expander:
 
         return coverage
 
-
+    @profile
     def getBundleCoverage(self, f, length, coverage, range_start, range_end):
         bundle = self.expandString(f.read(length))
         startPos = 0

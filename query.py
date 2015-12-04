@@ -78,7 +78,8 @@ def go(args):
     trueCov = sam.getCoverage('3R', 24150663, 24151663)
     '''
     predCov = expander.getCoverage(args['compressed'], '2R', 1035348, 11035348)
-
+    return
+ 
     '''
     print(trueCov[548])
     print(predCov[548])
