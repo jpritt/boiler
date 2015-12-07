@@ -45,7 +45,6 @@ class Compressor:
 
         if not self.frag_len_cutoff:
             self.firstPass(samFilename)
-            print('Set fragment length cutoff to %d based on length distribution' % self.frag_len_cutoff)
 
         self.debug = debug
 
@@ -102,6 +101,13 @@ class Compressor:
 
         cutoff_z = 8
         self.frag_len_cutoff = int(avg + cutoff_z * stdev)
+
+        print('Set fragment length cutoff to %d based on length distribution' % self.frag_len_cutoff)
+        count_longer = 0
+        for l,f in lens.items():
+            if l > self.frag_len_cutoff:
+                count_longer += f
+        print('%0.2f %% of pairs are longer than the cutoff' % (100.0 * float(count_longer) / float(N)))
 
         # Test different z scores
         #zs = [2, 2.5, 3, 3.5, 4, 5, 6, 7, 8]
@@ -160,8 +166,12 @@ class Compressor:
             pos = filehandle.tell()
 
             s = b''
+            bucket_lens = []
             for b in buckets_sorted:
+                start_len = len(s)
                 s += binaryIO.writeCrossBundleBucket(bundleIdBytes, readLenBytes, cross_bundle_buckets[b])
+                bucket_lens.append(len(s)-start_len)
+            print('Bucket lengths: ' + str(bucket_lens))
 
             s = self.compressString(s)
             length = len(s)
@@ -242,7 +252,7 @@ class Compressor:
             start_time = time.time()
 
         spliced_index = []
-        clusters = []
+        bundles = []
 
         first = True
 
@@ -269,7 +279,7 @@ class Compressor:
                     self.aligned.finalize_cross_bundle_reads(bundle_id)
                     bundle_id += 1
 
-                    clusters.append(self.aligned.exons)
+                    bundles.append(self.aligned.exons)
 
                     if intermediate_name:
                         if first:
@@ -321,7 +331,7 @@ class Compressor:
             self.aligned.finalize_cross_bundle_reads(bundle_id)
             bundle_id += 1
 
-            clusters.append(self.aligned.exons)
+            bundles.append(self.aligned.exons)
 
             if intermediate_name:
                 if first:
@@ -344,10 +354,15 @@ class Compressor:
             leftovers += len(v)
         print('%d cross-bundle reads unmatched' % leftovers)
 
+        bundle_lens = [c[-1]-c[0] for c in bundles]
+        print('Minimum bundle length: %d' % min(bundle_lens))
+        print('Maximum bundle length: %d' % max(bundle_lens))
+        print('Average bundle length: %d'% (sum(bundle_lens) / len(bundle_lens)))
+
         # Write index information and append spliced and unspliced files
         with open(compressed_name, 'wb') as f:
             s = binaryIO.writeChroms(self.aligned.chromosomes)
-            s += binaryIO.writeClusters(clusters)
+            s += binaryIO.writeClusters(bundles)
             s += binaryIO.writeList(spliced_index)
             f.write(s)
 

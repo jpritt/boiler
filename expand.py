@@ -468,7 +468,7 @@ class Expander:
             buckets = self.readCrossBundleBuckets(len(bundles), f)
 
             t2 = time.time()
-            print('Time to read index:   %f s' % (t2-t1))
+            #print('Time to read index:   %f s' % (t2-t1))
 
             # Expand the bundle-spanning buckets
             for b in buckets:
@@ -491,7 +491,7 @@ class Expander:
                     coverage = self.getCrossBucketCoverage(b, coverage, start, end)
 
             t3 = time.time()
-            print('Time to parse bundle-spanning buckets:   %f s' % (t3-t2))
+            #print('Time to parse bundle-spanning buckets:   %f s' % (t3-t2))
 
             processT = 0.0
 
@@ -503,9 +503,9 @@ class Expander:
                 processT += t
 
             t4 = time.time()
-            print('Time to parse normal buckets:   %f s' % (t4-t3))
+            #print('Time to parse normal buckets:   %f s' % (t4-t3))
 
-            print('Time to process cov:   %f s' % processT)
+            #print('Time to process cov:   %f s' % processT)
         return coverage
 
     def getCrossBucketCoverage(self, bucket, coverage, range_start, range_end):
@@ -580,8 +580,7 @@ class Expander:
             NH = float(key[-1])
 
             junc_coverage = self.RLEtoVector(junc.coverage)
-            #for i in range(len(junc_coverage)):
-            #    junc_coverage[i] /= float(junc.NH)
+
 
             t1 = time.time()
 
@@ -595,6 +594,36 @@ class Expander:
             else:
                 mapping = [0] + boundaries + [boundaries[-1] + juncBounds[-1][1] - juncBounds[-1][0]]
 
+            for i in range(len(mapping)-1):
+                if juncBounds[i][1] < range_start:
+                    continue
+                elif juncBounds[i][0] >= range_end:
+                    break
+
+                if juncBounds[i][0] <= range_start:
+                    subexon_start_id = range_start - juncBounds[i][0]
+                    range_start_id = 0
+                else:
+                    subexon_start_id = 0
+                    range_start_id = juncBounds[i][0] - range_start
+
+                if juncBounds[i][1] <= range_end:
+                    subexon_end_id = juncBounds[i][1] - juncBounds[i][0]
+                    range_end_id = juncBounds[i][1] - range_start
+                else:
+                    subexon_end_id = range_end - juncBounds[i][0]
+                    range_end_id = range_end - range_start
+
+                # Add junc_coverage[subexon_start_id:subexon_end_id] to coverage[range_start_id:range_end_id]
+                range_id = range_start_id
+                for j in range(mapping[i]+subexon_start_id, mapping[i]+subexon_end_id):
+                    c = junc_coverage[j]
+                    if c > 0:
+                        coverage[range_id] += c / NH
+                    range_id += 1
+
+
+            '''
             genome_pos = self.aligned.exons[exons[0]] - range_start
             length = range_end - range_start
             map_id = 1
@@ -610,6 +639,7 @@ class Expander:
                         coverage[genome_pos] += junc_coverage[i] / NH
 
                 genome_pos += 1
+            '''
 
             t2 = time.time()
             t += t2 - t1
