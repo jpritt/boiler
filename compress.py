@@ -66,6 +66,10 @@ class Compressor:
         Make a first pass over the file to determine the fragment length distribution and establish a cutoff for long fragments
         '''
 
+        print('No fragment length cutoff')
+        self.frag_len_cutoff = 30000000
+        return
+
         lens = dict()
         len_sum = 0
         N = 0
@@ -99,10 +103,10 @@ class Compressor:
         #print('')
 
 
-        cutoff_z = 8
+        cutoff_z = 2
         self.frag_len_cutoff = int(avg + cutoff_z * stdev)
 
-        print('Set fragment length cutoff to %d based on length distribution' % self.frag_len_cutoff)
+        print('Set fragment length cutoff to z=%d (%d) based on length distribution' % (cutoff_z, self.frag_len_cutoff))
         count_longer = 0
         for l,f in lens.items():
             if l > self.frag_len_cutoff:

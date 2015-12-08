@@ -1893,7 +1893,7 @@ class Alignments:
             offset = self.chromOffsets[chrom]
 
             if force_xs and spliced and not read.xs:
-                print('Assigning random XS value to spliced unpaired read')
+                #print('Assigning random XS value to spliced unpaired read')
                 if random.randint(0,1) == 0:
                     read.xs = '+'
                 else:
