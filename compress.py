@@ -14,12 +14,6 @@ import os
 class Compressor:
     aligned = None
 
-    sectionLen = 100000
-    #exonChunkSize = 100
-    junctionChunkSize = 50
-
-    clusterSize = 20
-
     # 0 - zlib
     # 1 - lzma
     # 2 - bz2
@@ -35,16 +29,20 @@ class Compressor:
 
         self.force_xs = force_xs
 
+        if frag_len_cutoff:
+            print('Set fragment length cutoff to %d' % frag_len_cutoff)
         self.frag_len_cutoff = frag_len_cutoff
 
-    def compress(self, samFilename, compressedFilename, min_filename=None, binary=False, debug=False):
+    def compress(self, samFilename, compressedFilename, min_filename=None, frag_len_z_cutoff=None, binary=False, debug=False):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
 
             file_prefix: Prefix for all output file names
         '''
 
-        if not self.frag_len_cutoff:
-            self.firstPass(samFilename)
+        if not(frag_len_z_cutoff == None) and not self.frag_len_cutoff:
+            self.firstPass(samFilename, frag_len_z_cutoff)
+        elif not self.frag_len_cutoff:
+            print('No fragment length cutoff')
 
         self.debug = debug
 
@@ -61,14 +59,11 @@ class Compressor:
 
         self.compressByCluster(samFilename, compressedFilename, min_filename)
 
-    def firstPass(self, samFilename):
+    def firstPass(self, samFilename, cutoff_z):
         '''
         Make a first pass over the file to determine the fragment length distribution and establish a cutoff for long fragments
         '''
 
-        print('No fragment length cutoff')
-        self.frag_len_cutoff = 30000000
-        return
 
         lens = dict()
         len_sum = 0
@@ -102,8 +97,6 @@ class Compressor:
         #print('Standard deviation: %f' % stdev)
         #print('')
 
-
-        cutoff_z = 2
         self.frag_len_cutoff = int(avg + cutoff_z * stdev)
 
         print('Set fragment length cutoff to z=%d (%d) based on length distribution' % (cutoff_z, self.frag_len_cutoff))
@@ -170,12 +163,12 @@ class Compressor:
             pos = filehandle.tell()
 
             s = b''
-            bucket_lens = []
+            #bucket_lens = []
             for b in buckets_sorted:
                 start_len = len(s)
                 s += binaryIO.writeCrossBundleBucket(bundleIdBytes, readLenBytes, cross_bundle_buckets[b])
-                bucket_lens.append(len(s)-start_len)
-            print('Bucket lengths: ' + str(bucket_lens))
+                #bucket_lens.append(len(s)-start_len)
+            #print('Bucket lengths: ' + str(bucket_lens))
 
             s = self.compressString(s)
             length = len(s)
@@ -191,55 +184,6 @@ class Compressor:
             binaryIO.writeVal(filehandle, 1, 1)
             binaryIO.writeVal(filehandle, 1, 0)
 
-
-    '''
-    def compressCluster(self, junctions, maxReadLen, filehandle):
-        # Determine the number of bytes for read lengths
-        readLenBytes = binaryIO.findNumBytes(maxReadLen)
-
-        chunkLens = []
-        i = 0
-        numJuncs = len(self.sortedJuncs)
-        #maxChunkSize = int(self.junctionChunkSize * 1.5)
-
-        chunks = b''
-        lastLen = 0
-
-        while i < numJuncs:
-            chunkSize = min(self.junctionChunkSize, numJuncs-i)
-            #if numJuncs - i < chunkSize:
-            #    chunkSize = numJuncs - i
-            #else:
-            #    chunkSize = self.junctionChunkSize
-
-            chunk = b''
-
-            for j in range(i, i+chunkSize):
-                junc = junctions[self.sortedJuncs[j]]
-
-                chunk += binaryIO.writeJunction(readLenBytes, junc)
-
-            chunks += self.compressString(chunk)
-            newLen = len(chunks)
-            chunkLens.append(newLen - lastLen)
-            lastLen = newLen
-
-            i += chunkSize
-
-        index = binaryIO.writeList(chunkLens)
-        index += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
-        index += binaryIO.valToBinary(1, readLenBytes)
-
-        # Write to file
-        start = filehandle.tell()
-        filehandle.write(self.compressString(index))
-        indexLen = filehandle.tell() - start
-
-        filehandle.write(chunks)
-
-        # return length of chunk in file
-        return indexLen
-    '''
 
     def compressByCluster(self, input_name, compressed_name, intermediate_name=None):
         '''
@@ -319,14 +263,14 @@ class Compressor:
 
                 r = read.Read(row[2], exons, xs, NH)
                 if row[6] == '*' or row[6] == row[2]:
-                    self.aligned.processRead(r, row[0], paired=False, bundle_id=bundle_id)
+                    self.aligned.processRead(r, row[0], paired=False)
                 else:
                     if row[6] == '=':
                         r.pairChrom = row[2]
                     else:
                         r.pairChrom = row[6]
                     r.pairOffset = int(row[7])
-                    self.aligned.processRead(r, row[0], paired=True, bundle_id=bundle_id)
+                    self.aligned.processRead(r, row[0], paired=True)
 
 
             # Compress final cluster

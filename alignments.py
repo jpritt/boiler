@@ -1746,7 +1746,7 @@ class Alignments:
             else:
                 index -= self.chromosomes[c]
 
-    def processRead(self, read, name, paired, bundle_id):
+    def processRead(self, read, name, paired):
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
         '''
@@ -1773,7 +1773,7 @@ class Alignments:
             read.pairOffset += self.chromOffsets[read.pairChrom]
 
             fragment_len = abs(read.pairOffset - read.exons[0][0])
-            if fragment_len > self.frag_len_cutoff:
+            if not (read.chrom == read.pairChrom) or (self.frag_len_cutoff and fragment_len > self.frag_len_cutoff):
                 self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
 
@@ -1939,7 +1939,7 @@ class Alignments:
             offsetA = self.chromOffsets[chromA]
 
             if force_xs and spliced and not pair.xs:
-                print('Assigning random XS value to spliced paired read')
+                #print('Assigning random XS value to spliced paired read')
                 if random.randint(0,1) == 0:
                     pair.xs = '+'
                 else:
