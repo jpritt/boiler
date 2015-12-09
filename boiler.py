@@ -87,7 +87,7 @@ if __name__ == '__main__':
     parser.add_argument("--debug", help="Print debug information", action="store_true")
     parser.add_argument("--force-xs", help="If we decompress a spliced read with no XS value, assign it a random one (so Cufflinks can run)", action="store_false")
     parser.add_argument("--frag-len-cutoff", type=int, help='Store any fragments longer than this in a bundle-spanning bucket')
-    parser.add_argument("--frag-len-z-cutoff", type=int, help='Store any fragments above this z-score in a bundle-spanning bucket')
+    parser.add_argument("--frag-len-z-cutoff", type=float, help='Store any fragments above this z-score in a bundle-spanning bucket')
 
     args = parser.parse_args(sys.argv[1:])
 

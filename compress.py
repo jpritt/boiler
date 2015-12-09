@@ -99,7 +99,7 @@ class Compressor:
 
         self.frag_len_cutoff = int(avg + cutoff_z * stdev)
 
-        print('Set fragment length cutoff to z=%d (%d) based on length distribution' % (cutoff_z, self.frag_len_cutoff))
+        print('Set fragment length cutoff to z=%f (%d) based on length distribution' % (cutoff_z, self.frag_len_cutoff))
         count_longer = 0
         for l,f in lens.items():
             if l > self.frag_len_cutoff:
