@@ -107,12 +107,20 @@ class Alignments:
 
     def finalize_cross_bundle_reads(self, bundle_id):
         for name,reads in self.curr_cross_bundle_reads.items():
-            for read in reads:
-                read.bundle = bundle_id
-                read.exonIds, read.length = self.getExonIds(read.exons)
-                read.bucket_length = sum([self.exons[e+1]-self.exons[e] for e in read.exonIds])
-                read.startOffset = read.exons[0][0] - self.exons[read.exonIds[0]]
-                read.endOffset = self.exons[read.exonIds[-1]+1] - read.exons[-1][1]
+            i = 0
+            while i < len(reads):
+                read = reads[i]
+                if read.pairOffset >= self.gene_bounds[0] and read.pairOffset < self.gene_bounds[1]:
+                    # Read's mate should lie in the current bundle -- the only explanation is that the pair is discordant
+                    self.add_unpaired(read)
+                    del reads[i]
+                else:
+                    read.bundle = bundle_id
+                    read.exonIds, read.length = self.getExonIds(read.exons)
+                    read.bucket_length = sum([self.exons[e+1]-self.exons[e] for e in read.exonIds])
+                    read.startOffset = read.exons[0][0] - self.exons[read.exonIds[0]]
+                    read.endOffset = self.exons[read.exonIds[-1]+1] - read.exons[-1][1]
+                    i += 1
 
             if name in self.cross_bundle_reads:
                 self.cross_bundle_reads[name] += reads
@@ -1764,9 +1772,8 @@ class Alignments:
                 self.exons.add(alignment[i+1][0])
 
 
+        self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
         if not paired:
-            self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
-
             # unpaired read
             self.add_unpaired(read)
         else:
@@ -1775,7 +1782,6 @@ class Alignments:
             fragment_len = abs(read.pairOffset - read.exons[0][0])
             if not (read.chrom == read.pairChrom) or (self.frag_len_cutoff and fragment_len > self.frag_len_cutoff):
                 self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
-
 
                 found_match = False
                 if name in self.cross_bundle_reads:
@@ -1791,7 +1797,8 @@ class Alignments:
                     if i >= 0:
                         found_match = True
                         match = self.curr_cross_bundle_reads[name][i]
-                        self.cross_bundle_pairs.append([match, read])
+                        #self.cross_bundle_pairs.append([match, read])
+                        self.add_paired(match, read)
                         del self.curr_cross_bundle_reads[name][i]
 
                 if not found_match:
@@ -1800,7 +1807,7 @@ class Alignments:
                     else:
                         self.curr_cross_bundle_reads[name] = [read]
             else:
-                self.update_gene_bounds(read.exons[0][0], max(read.exons[-1][1], read.pairOffset))
+                self.update_gene_bounds(read.exons[0][0], read.pairOffset)
 
                 if name in self.unmatched:
                     i = self.find_mate(read, name, self.unmatched)

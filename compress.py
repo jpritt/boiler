@@ -211,7 +211,7 @@ class Compressor:
                 row = line.strip().split('\t')
 
                 # Check if header line
-                if len(row) < 6 or row[5] == '*':
+                if len(row) < 6:
                     continue
 
                 if not row[2] in self.chromosomes.keys():
@@ -262,7 +262,7 @@ class Compressor:
 
 
                 r = read.Read(row[2], exons, xs, NH)
-                if row[6] == '*' or row[6] == row[2]:
+                if row[6] == '*':
                     self.aligned.processRead(r, row[0], paired=False)
                 else:
                     if row[6] == '=':
@@ -299,6 +299,10 @@ class Compressor:
 
         leftovers = 0
         for k,v in self.aligned.cross_bundle_reads.items():
+            if len(v) > 0:
+                print(k)
+                print(v)
+                exit()
             leftovers += len(v)
         print('%d cross-bundle reads unmatched' % leftovers)
 
