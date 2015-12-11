@@ -9,7 +9,8 @@ import time
 import re
 import math
 import random
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import os
 
 def parseCigar(cigar, offset):
     ''' Parse the cigar string starting at the given index of the genome
@@ -46,77 +47,10 @@ def parseCigar(cigar, offset):
 
     return exons
 
-def go(args):
-    alignmentsFile = args['alignments']
-    with open(alignmentsFile) as f:
-        form = args['alignments'][-3:len(alignmentsFile)]
-        if (form != 'sam'):
-            print('Only .sam files are supported')
-
-        header = ''
-        while True:
-            line = f.readline()
-            if line[0] == '@':
-                header += line + '\n'
-            else:
-                break
-                
-
-        chromosomes = dict()
-        for line in header.split('\n'):
-            if line[0:3] == '@SQ':
-                row = line.strip().split('\t')
-                chromosomes[row[1][3:]] = int(row[2][3:])
-
-    expander = expand.Expander()
-
-    sam = readSAM.ReadSAM(alignmentsFile, chromosomes)
-    expander = expand.Expander()
-    pro = readPRO.ReadPRO(args['pro'])
-
-    '''
-    trueCov = sam.getCoverage('3R', 24150663, 24151663)
-    '''
-    predCov = expander.getCoverage(args['compressed'], '2R', 1035348, 11035348)
-    #return
- 
-    '''
-    print(trueCov[548])
-    print(predCov[548])
-
-    for x in range(len(trueCov)):
-        if abs(trueCov[x] - predCov[x]) > 0.0001:
-            print('Error!')
-            print('%s (%d, %d)' % (chrom, start, start+l))
-            print(x)
-            for n in range(x-5,x+5):
-                print(str(trueCov[n]) + '\t' + str(predCov[n]))
-            exit()
-    exit()
-    '''
-
-    #s = time.time()
-    #trueCov = sam.getCoverage('2L', 15609942, 16609942)
-    #predCov = expander.getCoverage(args['compressed'], '2L', 15609942, 16609942)
-
-    #for x in range(len(trueCov)):
-    #    if abs(trueCov[x] - predCov[x]) > 0.0001:
-    #        print('Error!')
-    #        print(x)
-    #        for n in range(x-5,x+5):
-    #            print(str(trueCov[n]) + '\t' + str(predCov[n]))
-    #        exit()
-    #e = time.time()
-    #print('%f s' % (e-s))
-    #exit()
-
-    #lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
-    lens = [10000000]
+def queryCoverageRanges(filename, sam, expander):
+    lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
     chroms = ['2R', '2L', '3R', '3L', 'X']
     chromLens = [21146708, 23011544, 27905053, 24543557, 22422827]
-
-
-    print('Querying coverage')
 
     for l in lens:
         timeTrue = 0.0
@@ -135,7 +69,7 @@ def go(args):
                 timeTrue += float(endTime - startTime)
 
                 startTime = time.time()
-                predCov = expander.getCoverage(args['compressed'], chrom, start, start+l)
+                predCov = expander.getCoverage(filename, chrom, start, start+l)
                 endTime = time.time()
                 timePred += float(endTime - startTime)
 
@@ -158,182 +92,133 @@ def go(args):
         print('  SAM:        %0.3f s' % timeTrueAvg)
         print('  Compressed: %0.3f s' % timePredAvg)
 
+def queryCoverageInBundles(filename, sam, expander, bamFile, chromsFile):
+    chroms = expander.getChromosomes(filename)
+    #chroms = ['2R']
 
-    print('Querying reads')
+    lens = []
+    timesTrue = []
+    timesPred = []
+    for c in chroms:
+        print('Getting bundle coverages for chromsome %s' % c)
+        bundles = expander.getGeneBounds(filename, c)
 
+        for b in bundles:
+            lens.append(b[1]-b[0])
 
-    # Index i in these lists corresponds to the range of lengths [10^i, 10^(i+1))
-    true_times = []
-    pred_times = []
-    counts = []
+            startTime = time.time()
+            #trueCov = sam.getCoverage(c, b[0], b[1])
+            os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | ~/bin/bedtools2/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
+            endTime = time.time()
+            timesTrue.append(endTime - startTime)
 
-    pro = readPRO.ReadPRO(args['pro'])
+            startTime = time.time()
+            predCov = expander.getCoverage(filename, c, b[0], b[1])
+            endTime = time.time()
+            timesPred.append(endTime - startTime)
 
-    num_genes = 0
-    for c in range(len(chroms)):
-        chrom = chroms[c]
+            break
 
-        genes = pro.getGenes(chrom)
-        num_genes += len(genes)
-        print('%d genes in chromosome %s' % (len(genes), chrom))
+            # Uncomment this with the sam.getCoverage() call above to test that Boiler's coverage is correct (it should be)
+            #if not len(trueCov) == len(predCov):
+            #    print('Error! Coverages not the same length!')
+            #    exit()
 
-        offset = 0
-        for k in sorted(chromosomes.keys()):
-            if not k == chrom:
-                offset += chromosomes[k]
+            #for x in range(len(trueCov)):
+            #    if abs(trueCov[x] - predCov[x]) > 0.0001:
+            #        print('Error!')
+            #        print('%s (%d, %d)' % (c, b[0], b[1]))
+            #        print(x)
+            #        for n in range(x-5,x+5):
+            #            print(str(trueCov[n]) + '\t' + str(predCov[n]))
+            #        exit()
+
+    print('Average SAM query time:    %fs' % (sum(timesTrue) / len(timesTrue)))
+    print('Average Boiler query time: %fs' % (sum(timesPred) / len(timesPred)))
+
+    return lens, timesTrue, timesPred
+
+def go(args):
+    form = args['alignments'][-3:len(args['alignments'])]
+    if form == 'sam':
+        samFile = args['alignments']
+        bamFile = args['alignments'][:-3] + 'bam'
+    elif form == 'bam':
+        bamFile = args['alignments']
+        samFile = args['alignments'][:-3] + 'sam'
+    else:
+        print('Only .sam and .bam files are supported')
+        exit()
+
+    with open(samFile) as f:
+        header = ''
+        while True:
+            line = f.readline()
+            if line[0] == '@':
+                header += line + '\n'
             else:
                 break
+                
 
-        for g in genes:
-            start = g[0]
-            end = g[1]
+        chromosomes = dict()
+        for line in header.split('\n'):
+            if line[0:3] == '@SQ':
+                row = line.strip().split('\t')
+                chromosomes[row[1][3:]] = int(row[2][3:])
 
-            bin = int(math.log(end - start,10))
-            if bin > len(true_times)-1:
-                add = bin - len(true_times) + 1
-                true_times += [0] * add
-                pred_times += [0] * add
-                counts += [0] * add
+    with open(args['chroms'], 'w') as f:
+        for k,v in chromosomes.items():
+            f.write(k + '\t' + str(v) + '\n')
 
-            startTime = time.time()
-            trueUnpaired, truePaired = sam.getReads(chrom, start, end)
-            endTime = time.time()
+    sam = readSAM.ReadSAM(samFile, chromosomes)
+    expander = expand.Expander()
+    pro = readPRO.ReadPRO(args['pro'])
 
-            true_times[bin] += float(endTime - startTime)
-
-            startTime = time.time()
-            predUnpaired, predPaired = expander.getReads(args['compressed'], chrom, start, end)
-            endTime = time.time()
-
-
-            pred_times[bin] += float(endTime - startTime)
-            counts[bin] += 1
-
-            pred = predUnpaired[:]
-            correctUnpaired = 0
-            for r in trueUnpaired:
-                for i in range(len(pred)):
-                    if r == pred[i]:
-                        correctUnpaired += 1
-                        del pred[i]
-                        break
-
-            pred = predPaired[:]
-            correctPaired = 0
-            for r in truePaired:
-                for i in range(len(pred)):
-                    if r == pred[i]:
-                        correctPaired += 1
-                        del pred[i]
-                        break
-
-            #print('Unpaired:')
-            #print('%d true reads, %d predicted, %d correct' % (len(trueUnpaired), len(predUnpaired), correctUnpaired))
-            #print('Paired:')
-            #print('%d true reads, %d predicted, %d correct' % (len(truePaired), len(predPaired), correctPaired))
-
-            '''
-            if (len(trueUnpaired) + len(truePaired) + len(predUnpaired) + len(predPaired)) > 0:
-                cov_true_total = 0
-                for r in trueUnpaired:
-                    for e in r:
-                        cov_true_total += e[1] - e[0]
-                for p in truePaired:
-                    for r in p:
-                        for e in r:
-                            cov_true_total += e[1] - e[0]
-
-                cov_pred_total = 0
-                for r in predUnpaired:
-                    for e in r:
-                        cov_pred_total += e[1] - e[0]
-                for p in predPaired:
-                    for r in p:
-                        for e in r:
-                            cov_pred_total += e[1] - e[0]
-
-                print('Total Coverage:  %d, %d' % (cov_true_total, cov_pred_total))
-
-                start += offset
-                end += offset
-                cov_true_region = 0
-                for r in trueUnpaired:
-                    for e in r:
-                        if e[1] > start and e[0] < end:
-                            cov_true_region += min(end, e[1]) - max(start, e[0])
-                for p in truePaired:
-                    for r in p:
-                        for e in r:
-                            if e[1] > start and e[0] < end:
-                                cov_true_region += min(end, e[1]) - max(start, e[0])
-
-                cov_pred_region = 0
-                for r in predUnpaired:
-                    for e in r:
-                        if e[1] > start and e[0] < end:
-                            cov_pred_region += min(end, e[1]) - max(start, e[0])
-                for p in predPaired:
-                    for r in p:
-                        for e in r:
-                            if e[1] > start and e[0] < end:
-                                cov_pred_region += min(end, e[1]) - max(start, e[0])
-
-                print('Region Coverage: %d, %d' % (cov_true_region, cov_pred_region))
-
-                true_avg_len = 0
-                for r in trueUnpaired:
-                    true_avg_len += r[-1][1] - r[0][0]
-                for p in truePaired:
-                    true_avg_len += p[1][-1][1] - p[0][0][0]
-                true_avg_len /= float(len(trueUnpaired) + len(truePaired))
-
-                pred_avg_len = 0
-                for r in predUnpaired:
-                    pred_avg_len += r[-1][1] - r[0][0]
-                for p in predPaired:
-                    pred_avg_len += p[1][-1][1] - p[0][0][0]
-                pred_avg_len /= float(len(predUnpaired) + len(predPaired))
-
-                print('Average Length:  %d, %d' % (true_avg_len, pred_avg_len))
-
-            print('')
-            '''
-
-    for i in range(len(true_times)):
-        if counts[i] > 0:
-            true_times[i] /= float(counts[i])
-            pred_times[i] /= float(counts[i])
 
     '''
-    w = 0.33
-    xs = [0] * len(true_times)
-    for i in range(len(true_times)):
-        xs[i] = i - w
+    trueCov = sam.getCoverage('2R', 23136532, 23136773)
+    predCov = expander.getCoverage(args['compressed'], '2R', 23136532, 23136773)
 
-    # plot times
-    #a, = plt.plot(xs, true_times)
-    #b, = plt.plot(xs, pred_times)
-
-    a = plt.bar(xs, true_times, width=w, color='b')
-    for i in range(len(xs)):
-        xs[i] = i
-    b = plt.bar(xs, pred_times, width=w, color='r')
-    plt.xlabel('Region Length')
-    plt.ylabel('Avg Time (s)')
-    plt.xlim([-w, xs[-1]+w])
-    plt.legend([a,b], ['True', 'Compressed'], loc=2)
-    plt.title('Average Read Query Time')
-    plt.savefig('read_query_time.png')
-    plt.clf()
+    for x in range(len(trueCov)):
+        if abs(trueCov[x] - predCov[x]) > 0.0001:
+            print('Error!')
+            print(x)
+            for n in range(x-5,x+5):
+                print(str(trueCov[n]) + '\t' + str(predCov[n]))
+            exit()
+    exit()
     '''
 
-    with open('times.txt', 'w') as f:
-        f.write('\t'.join([str(t) for t in true_times]))
-        f.write('\n')
-        f.write('\t'.join([str(t) for t in pred_times]))
-        f.write('\n')
-        f.write('\t'.join([str(t) for t in counts]))
-        f.write('\n')
+    print('Querying coverage')
+
+    lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], sam, expander, bamFile, args['chroms'])
+
+    if args['output']:
+        with open(args['output'], 'w') as f:
+            for i in range(len(lens)):
+                f.write(str(lens[i]) + '\t' + str(timesTrue[i]) + '\t' + str(timesPred[i]) + '\n')
+
+    if args['plot']:
+        plt.scatter(lens, timesTrue)
+        plt.xlabel('Bundle Length')
+        plt.ylabel('SAM Query Time (s)')
+        plt.savefig('sam_query_time.png')
+        plt.clf()
+
+        plt.scatter(lens, timesPred)
+        plt.xlabel('Bundle Length')
+        plt.ylabel('Boiler Query Time (s)')
+        plt.savefig('boiler_query_time.png')
+        plt.clf()
+
+        plt.scatter(timesTrue, timesPred)
+        plt.xlabel('SAM Query Time (s)')
+        plt.ylabel('Boiler Query Time (s)')
+        plt.savefig('boiler_sam_query_time.png')
+        plt.clf()
+
+
+    os.remove(args['chroms'])
         
 def go_profile(args):
    pr = None
@@ -356,14 +241,20 @@ if __name__ == '__main__':
     # Print file's docstring if -h is invokedc
     parser = argparse.ArgumentParser(description=__doc__, 
             formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--alignments', type=str, required=True, 
-        help='Full path of SAM file containing aligned reads')
+    parser.add_argument('--alignments', type=str, required=True,
+        help='Full path of SAM or BAM file containing aligned reads')
     parser.add_argument('--compressed', type=str, required=True, 
         help='Full path of directory containing compressed reads')
     parser.add_argument('--pro', type=str, required=True, 
         help='Full path of flux .pro output file')
+    parser.add_argument('--chroms', type=str, help="Temporary file to write chromosomes to. Default = chroms.genome")
     parser.add_argument("--profile", help="Run speed profiling",
         action="store_true")
+    parser.add_argument("--output", type=str, help="File to store timing results")
+    parser.add_argument("--plot", help="Plot timing comparison graphs", action="store_true")
     
     args = parser.parse_args(sys.argv[1:])
+
+    if not args.chroms:
+        args.chroms = 'chroms.genome'
     go_profile(vars(args))

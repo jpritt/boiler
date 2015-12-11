@@ -64,26 +64,13 @@ class Expander:
 
 
     def expandByCluster(self, f, out_name):
-        bundles = binaryIO.readClusters(f)
+        self.bundles = binaryIO.readClusters(f)
         spliced_index = binaryIO.readListFromFile(f)
 
-        buckets = self.readCrossBundleBuckets(len(bundles), f)
+        self.expandCrossBundleBuckets(f)
 
-        # Expand the bundle-spanning buckets
-        for b in buckets:
-            exonsA = bundles[b.bundleA]
-            exonsB = bundles[b.bundleB]
-            exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
-            b.exon_bounds = exon_bounds
-
-            boundaries = [exon_bounds[0][1]-exon_bounds[0][0]]
-            for n in range(1, len(exon_bounds)):
-                boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
-            b.boundaries = boundaries
-            self.expandCrossBundleBucket(b)
-
-        for i in range(len(bundles)):
-            self.aligned.exons = bundles[i]
+        for i in range(len(self.bundles)):
+            self.aligned.exons = self.bundles[i]
 
             #print('Expanding cluster')
             self.expandCluster(f, spliced_index[i])
@@ -128,22 +115,31 @@ class Expander:
 
             self.expandJunc(junc)
 
-    def readCrossBundleBuckets(self, num_bundles, filehandle):
+    def expandCrossBundleBuckets(self, filehandle):
+        num_bundles = len(self.bundles)
         bundleIdBytes = binaryIO.findNumBytes(num_bundles)
         readLenBytes = binaryIO.readVal(filehandle, 1)
         numBytes = binaryIO.readVal(filehandle, 1)
         length = binaryIO.readVal(filehandle, numBytes)
 
-        buckets = []
         if length > 0:
             s = self.expandString(filehandle.read(length))
             start = 0
             while start < len(s):
                 b, start = binaryIO.readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start)
                 b.coverage = self.RLEtoVector(b.coverage)
-                buckets.append(b)
 
-        return buckets
+                exonsA = self.bundles[b.bundleA]
+                exonsB = self.bundles[b.bundleB]
+                exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
+                b.exon_bounds = exon_bounds
+
+                boundaries = [exon_bounds[0][1]-exon_bounds[0][0]]
+                for n in range(1, len(exon_bounds)):
+                    boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
+                b.boundaries = boundaries
+                self.expandCrossBundleBucket(b)
+
 
     '''
     def expandCluster(self, f, length):
@@ -419,6 +415,10 @@ class Expander:
         elif self.compressMethod == 2:
             return self.bz2.decompress(s)
 
+    def getChromosomes(self, compressedFilename):
+        with open(compressedFilename, 'rb') as f:
+            return binaryIO.readChroms(f)
+
     def getGeneBounds(self, compressedFilename, chrom, start=None, end=None):
         with open(compressedFilename, 'rb') as f:
             chromosomes = binaryIO.readChroms(f)
@@ -426,113 +426,125 @@ class Expander:
                 start = 0
                 end = chromosomes[chrom]
 
+            offset = 0
             for k in sorted(chromosomes.keys()):
                 if not k == chrom:
-                    start += chromosomes[k]
-                    end += chromosomes[k]
+                    offset += chromosomes[k]
                 else:
                     break
+            start += offset
+            end += offset
 
             clusters = binaryIO.readClusters(f)
             start_i, end_i = self.getRelevantClusters(clusters, start, end)
-            return [(c[0], c[-1]) for c in clusters[start_i:end_i]]
+            return [(c[0]-offset, c[-1]-offset) for c in clusters[start_i:end_i]]
 
     def getCoverage(self, compressedFilename, chrom, start=None, end=None):
-        print('Getting coverage in %s: %d - %d' % (chrom, start, end))
+        #print('Getting coverage in %s: %d - %d' % (chrom, start, end))
         with open(compressedFilename, 'rb') as f:
-            t1 = time.time()
 
             chromosomes = binaryIO.readChroms(f)
             self.aligned = alignments.Alignments(chromosomes)
-            if start == None or end == None:
+            if start == None:
                 start = 0
+            else:
+                start = max(start, 0)
+            if end == None:
                 end = chromosomes[chrom]
+            else:
+                end = min(end, chromosomes[chrom])
+
+            start += self.aligned.chromOffsets[chrom]
+            end += self.aligned.chromOffsets[chrom]
 
             coverage = [0.0] * (end-start)
 
-            for k in sorted(chromosomes.keys()):
-                if not k == chrom:
-                    start += chromosomes[k]
-                    end += chromosomes[k]
-                else:
-                    break
+            self.bundles = binaryIO.readClusters(f)
+            start_i, end_i = self.getRelevantClusters(self.bundles, start, end)
 
-            bundles = binaryIO.readClusters(f)
-            start_i, end_i = self.getRelevantClusters(bundles, start, end)
-
-            if start_i == end_i:
+            if start_i >= end_i:
                 return coverage
 
             spliced_index = binaryIO.readListFromFile(f)
 
-            buckets = self.readCrossBundleBuckets(len(bundles), f)
-
-            t2 = time.time()
-            #print('Time to read index:   %f s' % (t2-t1))
-
-            # Expand the bundle-spanning buckets
-            for b in buckets:
-                # Check if this bucket overlaps the target region
-                i = b.bundleA
-                j = b.bundleB
-                if (i >= start_i and i < end_i) or (j >= start_i and j < end_i):
-                    exonsA = bundles[i]
-                    exonsB = bundles[j]
-
-                    # Is this necessary?
-                    exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
-                    b.exon_bounds = exon_bounds
-
-                    boundaries = [exon_bounds[0][1]-exon_bounds[0][0]]
-                    for n in range(1, len(exon_bounds)):
-                        boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
-                    b.boundaries = boundaries
-
-                    coverage = self.getCrossBucketCoverage(b, coverage, start, end)
-
-            t3 = time.time()
-            #print('Time to parse bundle-spanning buckets:   %f s' % (t3-t2))
+            coverage = self.getAllCrossBucketsCoverage(f, coverage, start_i, end_i, start, end)
 
             processT = 0.0
 
             f.seek(sum(spliced_index[:start_i]), 1)
             for i in range(start_i, end_i):
-                self.aligned.exons = bundles[i]
+                self.aligned.exons = self.bundles[i]
                 #print('Bundle %d - %d (%d)' % (bundles[i][0], bundles[i][-1], bundles[i][-1]-bundles[i][0]))
                 coverage, t = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
                 processT += t
 
-            t4 = time.time()
-            #print('Time to parse normal buckets:   %f s' % (t4-t3))
-
-            #print('Time to process cov:   %f s' % processT)
         return coverage
 
-    def getCrossBucketCoverage(self, bucket, coverage, range_start, range_end):
-        # marks indices in junction coverage vector where exons begin
-        mapping = [0]
-        for j in bucket.exon_bounds:
-            mapping.append(mapping[-1] + j[1] - j[0])
-        if len(bucket.boundaries) == 0:
-            mapping = [0, bucket.exon_bounds[-1][1] - bucket.exon_bounds[-1][0]]
-        else:
-            mapping = [0] + bucket.boundaries + [bucket.boundaries[-1] + bucket.exon_bounds[-1][1] - bucket.exon_bounds[-1][0]]
+    def getAllCrossBucketsCoverage(self, filehandle, coverage, start_i, end_i, range_start, range_end):
+        num_bundles = len(self.bundles)
+        bundleIdBytes = binaryIO.findNumBytes(num_bundles)
+        readLenBytes = binaryIO.readVal(filehandle, 1)
+        numBytes = binaryIO.readVal(filehandle, 1)
+        length = binaryIO.readVal(filehandle, numBytes)
 
-        genome_pos = bucket.exon_bounds[0][0] - range_start
-        length = range_end - range_start
-        map_id = 1
-        for i in range(len(bucket.coverage)):
-            if i == mapping[map_id]:
-                genome_pos += bucket.exon_bounds[map_id][0] - bucket.exon_bounds[map_id-1][1]
-                map_id += 1
+        if length > 0:
+            s = self.expandString(filehandle.read(length))
+            startPos = 0
+            while startPos < len(s):
+                b, startPos = binaryIO.readCrossBundleBucket(s, bundleIdBytes, readLenBytes, startPos)
+                b.coverage = self.RLEtoVector(b.coverage)
 
-            if genome_pos >= 0:
-                if genome_pos >= length:
-                    break
-                else:
-                    coverage[genome_pos] += bucket.coverage[i] / float(bucket.NH)
+                # Check if this bucket overlaps the target region
+                i = b.bundleA
+                j = b.bundleB
+                if (i >= start_i and i < end_i) or (j >= start_i and j < end_i):
+                    exonsA = self.bundles[i]
+                    exonsB = self.bundles[j]
 
-            genome_pos += 1
+                    # Is this necessary?
+                    exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
+                    boundaries = [0]
+                    for n in range(len(exon_bounds)):
+                        boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
+
+                    #print(boundaries)
+                    #print(exon_bounds)
+                    #print(b.coverage)
+
+                    coverage = self.getBucketCoverage(b, coverage, range_start, range_end, exon_bounds, boundaries)
+
+        return coverage
+
+    def getBucketCoverage(self, bucket, coverage, range_start, range_end, subexon_bounds, boundaries):
+        NH = float(bucket.NH)
+
+        for i in range(len(boundaries)-1):
+            if subexon_bounds[i][1] < range_start:
+                continue
+            elif subexon_bounds[i][0] >= range_end:
+                break
+
+            if subexon_bounds[i][0] <= range_start:
+                subexon_start_id = range_start - subexon_bounds[i][0]
+                range_start_id = 0
+            else:
+                subexon_start_id = 0
+                range_start_id = subexon_bounds[i][0] - range_start
+
+            if subexon_bounds[i][1] <= range_end:
+                subexon_end_id = subexon_bounds[i][1] - subexon_bounds[i][0]
+                range_end_id = subexon_bounds[i][1] - range_start
+            else:
+                subexon_end_id = range_end - subexon_bounds[i][0]
+                range_end_id = range_end - range_start
+
+            # Add junc_coverage[subexon_start_id:subexon_end_id] to coverage[range_start_id:range_end_id]
+            range_id = range_start_id
+            for j in range(boundaries[i]+subexon_start_id, boundaries[i]+subexon_end_id):
+                c = bucket.coverage[j]
+                if c > 0:
+                    coverage[range_id] += c / NH
+                range_id += 1
 
         return coverage
 
@@ -577,69 +589,22 @@ class Expander:
 
             # Read the rest of the junction information
             junc, startPos = binaryIO.readJunction(bundle, bucket.Bucket(exons, length, boundaries), readLenBytes, startPos)
-            NH = float(key[-1])
-
-            junc_coverage = self.RLEtoVector(junc.coverage)
-
+            junc.NH = float(key[-1])
+            junc.coverage = self.RLEtoVector(junc.coverage)
 
             t1 = time.time()
 
-            juncBounds = []
+            subexon_bounds = []
             for j in junc.exons:
-                juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
+                subexon_bounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
 
             # marks indices in junction coverage vector where exons begin
             if len(boundaries) == 0:
-                mapping = [0, juncBounds[-1][1] - juncBounds[-1][0]]
+                mapping = [0, subexon_bounds[-1][1] - subexon_bounds[-1][0]]
             else:
-                mapping = [0] + boundaries + [boundaries[-1] + juncBounds[-1][1] - juncBounds[-1][0]]
+                mapping = [0] + boundaries + [boundaries[-1] + subexon_bounds[-1][1] - subexon_bounds[-1][0]]
 
-            for i in range(len(mapping)-1):
-                if juncBounds[i][1] < range_start:
-                    continue
-                elif juncBounds[i][0] >= range_end:
-                    break
-
-                if juncBounds[i][0] <= range_start:
-                    subexon_start_id = range_start - juncBounds[i][0]
-                    range_start_id = 0
-                else:
-                    subexon_start_id = 0
-                    range_start_id = juncBounds[i][0] - range_start
-
-                if juncBounds[i][1] <= range_end:
-                    subexon_end_id = juncBounds[i][1] - juncBounds[i][0]
-                    range_end_id = juncBounds[i][1] - range_start
-                else:
-                    subexon_end_id = range_end - juncBounds[i][0]
-                    range_end_id = range_end - range_start
-
-                # Add junc_coverage[subexon_start_id:subexon_end_id] to coverage[range_start_id:range_end_id]
-                range_id = range_start_id
-                for j in range(mapping[i]+subexon_start_id, mapping[i]+subexon_end_id):
-                    c = junc_coverage[j]
-                    if c > 0:
-                        coverage[range_id] += c / NH
-                    range_id += 1
-
-
-            '''
-            genome_pos = self.aligned.exons[exons[0]] - range_start
-            length = range_end - range_start
-            map_id = 1
-            for i in range(len(junc_coverage)):
-                if i == mapping[map_id]:
-                    genome_pos += juncBounds[map_id][0] - juncBounds[map_id-1][1]
-                    map_id += 1
-
-                if genome_pos >= 0:
-                    if genome_pos >= length:
-                        break
-                    elif junc_coverage[i] > 0:
-                        coverage[genome_pos] += junc_coverage[i] / NH
-
-                genome_pos += 1
-            '''
+            coverage = self.getBucketCoverage(junc, coverage, range_start, range_end, subexon_bounds, mapping)
 
             t2 = time.time()
             t += t2 - t1

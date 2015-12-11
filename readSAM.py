@@ -17,9 +17,14 @@ class ReadSAM:
         self.chromosomes = chromosomes
 
     def getCoverage(self, chrom, start=None, end=None):
-        if start == None or end == None:
+        if start == None:
             start = 0
+        else:
+            start = max(start, 0)
+        if end == None:
             end = self.chromosomes[chrom]
+        else:
+            end = min(end, self.chromosomes[chrom])
 
         with open(self.filename, 'r') as f:
             coverage = [0.0] * (end-start)

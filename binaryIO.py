@@ -381,9 +381,6 @@ def readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start=0):
         if len(bucket.lensLeft) > 0:
             bucket.lensRight, start = readLens(s, readLenBytes, start)
 
-    #print(bucket.pairedLens)
-    #print('')
-
     return bucket, start
 
 def skipJunction(s, readLenBytes, start=0):
