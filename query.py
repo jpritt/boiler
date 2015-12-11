@@ -4,7 +4,7 @@ import argparse
 
 import readSAM
 import expand
-import readPRO
+#import readPRO
 import time
 import re
 import math
@@ -117,8 +117,6 @@ def queryCoverageInBundles(filename, sam, expander, bamFile, chromsFile):
             endTime = time.time()
             timesPred.append(endTime - startTime)
 
-            break
-
             # Uncomment this with the sam.getCoverage() call above to test that Boiler's coverage is correct (it should be)
             #if not len(trueCov) == len(predCov):
             #    print('Error! Coverages not the same length!')
@@ -172,7 +170,7 @@ def go(args):
 
     sam = readSAM.ReadSAM(samFile, chromosomes)
     expander = expand.Expander()
-    pro = readPRO.ReadPRO(args['pro'])
+    #pro = readPRO.ReadPRO(args['pro'])
 
 
     '''
@@ -245,8 +243,7 @@ if __name__ == '__main__':
         help='Full path of SAM or BAM file containing aligned reads')
     parser.add_argument('--compressed', type=str, required=True, 
         help='Full path of directory containing compressed reads')
-    parser.add_argument('--pro', type=str, required=True, 
-        help='Full path of flux .pro output file')
+    #parser.add_argument('--pro', type=str, required=True, help='Full path of flux .pro output file')
     parser.add_argument('--chroms', type=str, help="Temporary file to write chromosomes to. Default = chroms.genome")
     parser.add_argument("--profile", help="Run speed profiling",
         action="store_true")
