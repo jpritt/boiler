@@ -528,6 +528,7 @@ class Expander:
                 else:
                     if skip > 0:
                         filehandle.seek(skip, 1)
+                        skip = 0
 
                     chunk = self.expandString(filehandle.read(l))
                     startPos = 0

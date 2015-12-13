@@ -9,7 +9,6 @@ import time
 import re
 import math
 import random
-import matplotlib.pyplot as plt
 import os
 
 def parseCigar(cigar, offset):
@@ -92,7 +91,7 @@ def queryCoverageRanges(filename, sam, expander):
         print('  SAM:        %0.3f s' % timeTrueAvg)
         print('  Compressed: %0.3f s' % timePredAvg)
 
-def queryCoverageInBundles(filename, sam, expander, bamFile, chromsFile):
+def queryCoverageInBundles(filename, sam, expander, bamFile, bedtoolsPath, chromsFile):
     chroms = expander.getChromosomes(filename)
     #chroms = ['2R']
 
@@ -108,7 +107,7 @@ def queryCoverageInBundles(filename, sam, expander, bamFile, chromsFile):
 
             startTime = time.time()
             #trueCov = sam.getCoverage(c, b[0], b[1])
-            os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | ~/bin/bedtools2/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
+            os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
             endTime = time.time()
             timesTrue.append(endTime - startTime)
 
@@ -116,8 +115,6 @@ def queryCoverageInBundles(filename, sam, expander, bamFile, chromsFile):
             predCov = expander.getCoverage(filename, c, b[0], b[1])
             endTime = time.time()
             timesPred.append(endTime - startTime)
-
-            break
 
             # Uncomment this with the sam.getCoverage() call above to test that Boiler's coverage is correct (it should be)
             #if not len(trueCov) == len(predCov):
@@ -191,7 +188,7 @@ def go(args):
 
     print('Querying coverage')
 
-    lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], sam, expander, bamFile, args['chroms'])
+    lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], sam, expander, bamFile, args['bedtools_path'], args['chroms'])
 
     if args['output']:
         with open(args['output'], 'w') as f:
@@ -199,6 +196,8 @@ def go(args):
                 f.write(str(lens[i]) + '\t' + str(timesTrue[i]) + '\t' + str(timesPred[i]) + '\n')
 
     if args['plot']:
+        import matplotlib.pyplot as plt
+
         plt.scatter(lens, timesTrue)
         plt.xlabel('Bundle Length')
         plt.ylabel('SAM Query Time (s)')
@@ -247,6 +246,7 @@ if __name__ == '__main__':
         help='Full path of directory containing compressed reads')
     #parser.add_argument('--pro', type=str, required=True, help='Full path of flux .pro output file')
     parser.add_argument('--chroms', type=str, help="Temporary file to write chromosomes to. Default = chroms.genome")
+    parser.add_argument('--bedtools-path', type=str, required=True, help="Path to bedtools main directory")
     parser.add_argument("--profile", help="Run speed profiling",
         action="store_true")
     parser.add_argument("--output", type=str, help="File to store timing results")
