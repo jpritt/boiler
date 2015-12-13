@@ -85,6 +85,9 @@ class Compressor:
                         else:
                             lens[frag_len] = 1
 
+        if N == 0:
+            return 0
+
         # Calculate average and standard deviation
         avg = float(len_sum) / float(N)
         stdev = 0.0
