@@ -7,7 +7,6 @@ import time
 import math
 import binaryIO
 import bisect
-import resource
 
 class Expander:
     aligned = None
@@ -118,28 +117,39 @@ class Expander:
     def expandCrossBundleBuckets(self, filehandle):
         num_bundles = len(self.bundles)
         bundleIdBytes = binaryIO.findNumBytes(num_bundles)
-        readLenBytes = binaryIO.readVal(filehandle, 1)
         numBytes = binaryIO.readVal(filehandle, 1)
         length = binaryIO.readVal(filehandle, numBytes)
 
         if length > 0:
-            s = self.expandString(filehandle.read(length))
-            start = 0
-            while start < len(s):
-                b, start = binaryIO.readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start)
-                b.coverage = self.RLEtoVector(b.coverage)
+            index = self.expandString(filehandle.read(length))
+            num_buckets, startPos = binaryIO.binaryToVal(index, 4, start=0)
+            chunk_size, startPos = binaryIO.binaryToVal(index, 2, startPos)
+            readLenBytes, startPos = binaryIO.binaryToVal(index, 1, startPos)
+            buckets, startPos = binaryIO.readCrossBundleBucketNames(index, num_buckets, bundleIdBytes, startPos)
+            chunk_lens, startPos = binaryIO.readList(index, startPos)
 
-                exonsA = self.bundles[b.bundleA]
-                exonsB = self.bundles[b.bundleB]
-                exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
-                b.exon_bounds = exon_bounds
+            i = 0
+            for l in chunk_lens:
+                chunk = self.expandString(filehandle.read(l))
+                startPos = 0
 
-                boundaries = [exon_bounds[0][1]-exon_bounds[0][0]]
-                for n in range(1, len(exon_bounds)):
-                    boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
-                b.boundaries = boundaries
-                self.expandCrossBundleBucket(b)
+                for i in range(i, min(i+chunk_size, num_buckets)):
+                    b = buckets[i]
+                    startPos = binaryIO.readCrossBundleBucket(chunk, b, readLenBytes, startPos)
 
+                    b.coverage = self.RLEtoVector(b.coverage)
+
+                    exonsA = self.bundles[b.bundleA]
+                    exonsB = self.bundles[b.bundleB]
+                    exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
+                    b.exon_bounds = exon_bounds
+
+                    boundaries = [exon_bounds[0][1]-exon_bounds[0][0]]
+                    for n in range(1, len(exon_bounds)):
+                        boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
+                    b.boundaries = boundaries
+                    self.expandCrossBundleBucket(b)
+                i += 1
 
     '''
     def expandCluster(self, f, length):
@@ -294,7 +304,9 @@ class Expander:
     def expandCrossBundleBucket(self, bucket):
         if not sum([e[1]-e[0] for e in bucket.exon_bounds]) == bucket.length:
             print(bucket.exon_bounds)
+            print(sum([e[1]-e[0] for e in bucket.exon_bounds]))
             print(bucket.coverage)
+            print(len(bucket.coverage))
             print(bucket.length)
             exit()
 
@@ -817,3 +829,45 @@ class Expander:
                     self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
                                                                      self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
 
+
+    def updateRLE(self, vector, start, end, val):
+        '''
+        Update the run-length encoded vector by adding val to each base in the range [start, end)
+        :param vector:
+        :param start:
+        :param end:
+        :param val:
+        :return:
+        '''
+
+        length = end - start
+
+        len_vec = len(vector)
+        i = 0
+        while i < len_vec:
+            if start < vector[i][1]:
+                break
+            else:
+                start -= vector[i][1]
+                i += 1
+
+        if i >= len_vec:
+            return vector
+
+        if start > 0:
+            vector = vector[:i] + [[vector[i][0], start], [vector[i][0], vector[i][1]-start]] + vector[i+1:]
+            i += 1
+            len_vec += 1
+
+        while i < len_vec:
+            if length < vector[i][1]:
+                break
+            else:
+                vector[i][0] += val
+                length -= vector[i][1]
+                i += 1
+
+        if i < len_vec and length > 0:
+            vector = vector[:i] + [[vector[i][0]+val, length], [vector[i][0], vector[i][1]-length]] + vector[i+1:]
+
+        return vector

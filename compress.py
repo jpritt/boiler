@@ -162,25 +162,46 @@ class Compressor:
             print('%d cross-bundle buckets' % len(buckets_sorted))
             pos = filehandle.tell()
 
-            s = b''
-            #bucket_lens = []
-            for b in buckets_sorted:
-                start_len = len(s)
-                s += binaryIO.writeCrossBundleBucket(bundleIdBytes, readLenBytes, cross_bundle_buckets[b])
-                #bucket_lens.append(len(s)-start_len)
-            #print('Bucket lengths: ' + str(bucket_lens))
+            chunk_size = 20
+            num_chunks = math.ceil(len(buckets_sorted) / chunk_size)
+            chunk_lens = [0] * num_chunks
 
-            s = self.compressString(s)
-            length = len(s)
+            index = binaryIO.valToBinary(4, len(buckets_sorted))
+            index += binaryIO.valToBinary(2, chunk_size)
+            index += binaryIO.valToBinary(1, readLenBytes)
+            index += binaryIO.writeCrossBundleBucketNames(bundleIdBytes, cross_bundle_buckets, buckets_sorted)
+
+            main = b''
+            chunk = b''
+            chunk_id = 0
+            for i in range(len(buckets_sorted)):
+                b = buckets_sorted[i]
+
+                chunk += binaryIO.writeCrossBundleBucket(readLenBytes, cross_bundle_buckets[b])
+                if (i+1) % chunk_size == 0:
+                    compressed = self.compressString(chunk)
+                    chunk_lens[chunk_id] = len(compressed)
+                    chunk_id += 1
+                    main += compressed
+                    chunk = b''
+
+            if len(chunk) > 0:
+                compressed = self.compressString(chunk)
+                chunk_lens[chunk_id] = len(compressed)
+                main += compressed
+
+            index += binaryIO.writeList(chunk_lens)
+
+            index = self.compressString(index)
+            length = len(index)
             numBytes = binaryIO.findNumBytes(length)
-            binaryIO.writeVal(filehandle, 1, readLenBytes)
             binaryIO.writeVal(filehandle, 1, numBytes)
             binaryIO.writeVal(filehandle, numBytes, length)
-            filehandle.write(s)
+            filehandle.write(index)
+            filehandle.write(main)
 
             print('Compressed size: %d' % (filehandle.tell() - pos))
         else:
-            binaryIO.writeVal(filehandle, 1, readLenBytes)
             binaryIO.writeVal(filehandle, 1, 1)
             binaryIO.writeVal(filehandle, 1, 0)
 

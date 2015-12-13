@@ -117,6 +117,8 @@ def queryCoverageInBundles(filename, sam, expander, bamFile, chromsFile):
             endTime = time.time()
             timesPred.append(endTime - startTime)
 
+            break
+
             # Uncomment this with the sam.getCoverage() call above to test that Boiler's coverage is correct (it should be)
             #if not len(trueCov) == len(predCov):
             #    print('Error! Coverages not the same length!')

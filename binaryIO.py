@@ -321,12 +321,35 @@ def readJunction(s, junc, readLenBytes, start=0):
 
     return junc, start
 
-def writeCrossBundleBucket(bundleIdBytes, readLenBytes, bucket):
-    s = valToBinary(bundleIdBytes, bucket.bundleA)
-    s += writeList(bucket.exonIdsA)
-    s += valToBinary(bundleIdBytes, bucket.bundleB)
-    s += writeList(bucket.exonIdsB)
-    s += pack('b', bucket.XS)
+def writeCrossBundleBucketNames(bundleIdBytes, buckets, buckets_sorted):
+    s = b''
+
+    for b in buckets_sorted:
+        bucket = buckets[b]
+        s += valToBinary(bundleIdBytes, bucket.bundleA)
+        s += writeList(bucket.exonIdsA)
+        s += valToBinary(bundleIdBytes, bucket.bundleB)
+        s += writeList(bucket.exonIdsB)
+
+    return s
+
+def readCrossBundleBucketNames(s, num_buckets, bundleIdBytes, start=0):
+    buckets = [0] * num_buckets
+    for i in range(num_buckets):
+        bundleA, start = binaryToVal(s, bundleIdBytes, start)
+        exonIdsA, start = readList(s, start)
+        bundleB, start = binaryToVal(s, bundleIdBytes, start)
+        exonIdsB, start = readList(s, start)
+        buckets[i] = cross_bundle_bucket.CrossBundleBucket(bundleA, exonIdsA, bundleB, exonIdsB)
+
+    return buckets, start
+
+def writeCrossBundleBucket(readLenBytes, bucket):
+    #s = valToBinary(bundleIdBytes, bucket.bundleA)
+    #s += writeList(bucket.exonIdsA)
+    #s += valToBinary(bundleIdBytes, bucket.bundleB)
+    #s += writeList(bucket.exonIdsB)
+    s = pack('b', bucket.XS)
     s += valToBinary(1, bucket.NH)
 
     s += writeCov(bucket.coverage)
@@ -345,13 +368,7 @@ def writeCrossBundleBucket(bundleIdBytes, readLenBytes, bucket):
 
     return s
 
-def readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start=0):
-    # Read bucket exon information
-    bundleA, start = binaryToVal(s, bundleIdBytes, start)
-    exonIdsA, start = readList(s, start)
-    bundleB, start = binaryToVal(s, bundleIdBytes, start)
-    exonIdsB, start = readList(s, start)
-
+def readCrossBundleBucket(s, bucket, readLenBytes, start=0):
     v = unpack_from('b', s[start:start+1])[0]
     XS = None
     if v == -1:
@@ -362,7 +379,6 @@ def readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start=0):
 
     NH, start = binaryToVal(s, 1, start)
 
-    bucket = cross_bundle_bucket.CrossBundleBucket(bundleA, exonIdsA, bundleB, exonIdsB)
     bucket.XS = XS
     bucket.NH = NH
 
@@ -381,7 +397,7 @@ def readCrossBundleBucket(s, bundleIdBytes, readLenBytes, start=0):
         if len(bucket.lensLeft) > 0:
             bucket.lensRight, start = readLens(s, readLenBytes, start)
 
-    return bucket, start
+    return start
 
 def skipJunction(s, readLenBytes, start=0):
     _, start = readCov(s, start)
