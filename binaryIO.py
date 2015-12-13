@@ -399,6 +399,21 @@ def readCrossBundleBucket(s, bucket, readLenBytes, start=0):
 
     return start
 
+def skipCrossBundleBucket(s, readLenBytes, start=0):
+    start += 2
+
+    start = skipCov(s, start)
+
+    fragLenBytes, start = binaryToVal(s, 1, start)
+    paired, start = skipLens(s, fragLenBytes, start)
+
+    if paired:
+        left, start = skipLens(s, readLenBytes, start)
+        if left:
+            _, start = skipLens(s, readLenBytes, start)
+
+    return start
+
 def skipJunction(s, readLenBytes, start=0):
     _, start = readCov(s, start)
     _, start = readLens(s, readLenBytes, start)
@@ -547,6 +562,18 @@ def readCov(s, start=0):
         #cov += [c] * l
 
     return cov, start
+
+def skipCov(s, start=0):
+    '''
+    Skip a compressed coverage vector
+    '''
+    lenBytes, start = binaryToVal(s, 1, start)
+    covBytes, start = binaryToVal(s, 1, start)
+
+    # Read the length of the vector
+    lenCov, start = binaryToVal(s, 4, start)
+
+    return start + lenCov * (lenBytes + covBytes)
 
 def writeCovHuffman(cov, huffmanIndex):
     maxLen = 0

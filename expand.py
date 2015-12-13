@@ -498,35 +498,64 @@ class Expander:
     def getAllCrossBucketsCoverage(self, filehandle, coverage, start_i, end_i, range_start, range_end):
         num_bundles = len(self.bundles)
         bundleIdBytes = binaryIO.findNumBytes(num_bundles)
-        readLenBytes = binaryIO.readVal(filehandle, 1)
         numBytes = binaryIO.readVal(filehandle, 1)
         length = binaryIO.readVal(filehandle, numBytes)
 
         if length > 0:
-            s = self.expandString(filehandle.read(length))
-            startPos = 0
-            while startPos < len(s):
-                b, startPos = binaryIO.readCrossBundleBucket(s, bundleIdBytes, readLenBytes, startPos)
-                b.coverage = self.RLEtoVector(b.coverage)
+            index = self.expandString(filehandle.read(length))
+            num_buckets, startPos = binaryIO.binaryToVal(index, 4, start=0)
+            chunk_size, startPos = binaryIO.binaryToVal(index, 2, startPos)
+            readLenBytes, startPos = binaryIO.binaryToVal(index, 1, startPos)
+            buckets, startPos = binaryIO.readCrossBundleBucketNames(index, num_buckets, bundleIdBytes, startPos)
+            chunk_lens, startPos = binaryIO.readList(index, startPos)
 
-                # Check if this bucket overlaps the target region
-                i = b.bundleA
-                j = b.bundleB
-                if (i >= start_i and i < end_i) or (j >= start_i and j < end_i):
-                    exonsA = self.bundles[i]
-                    exonsB = self.bundles[j]
+            curr_bucket = 0
+            skip = 0
+            for l in chunk_lens:
+                buckets_in_chunk = min(chunk_size, num_buckets-curr_bucket)
+                relevant = [0] * buckets_in_chunk
+                last_relevant = -1
 
-                    # Is this necessary?
-                    exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
-                    boundaries = [0]
-                    for n in range(len(exon_bounds)):
-                        boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
+                for i in range(buckets_in_chunk):
+                    bundleA = buckets[i+curr_bucket].bundleA
+                    bundleB = buckets[i+curr_bucket].bundleB
+                    if (bundleA >= start_i and bundleA < end_i) or (bundleB >= start_i and bundleB < end_i):
+                        relevant[i] = 1
+                        last_relevant = i
 
-                    #print(boundaries)
-                    #print(exon_bounds)
-                    #print(b.coverage)
+                if last_relevant == -1:
+                    skip += l
+                else:
+                    if skip > 0:
+                        filehandle.seek(skip, 1)
 
-                    coverage = self.getBucketCoverage(b, coverage, range_start, range_end, exon_bounds, boundaries)
+                    chunk = self.expandString(filehandle.read(l))
+                    startPos = 0
+
+                    for i in range(last_relevant):
+
+                        if relevant[i]:
+                            b = buckets[i+curr_bucket]
+                            startPos = binaryIO.readCrossBundleBucket(chunk, b, readLenBytes, startPos)
+                            b.coverage = self.RLEtoVector(b.coverage)
+
+                            exonsA = self.bundles[b.bundleA]
+                            exonsB = self.bundles[b.bundleB]
+
+                            # Is this necessary?
+                            exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
+                            boundaries = [0]
+                            for n in range(len(exon_bounds)):
+                                boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
+
+                            coverage = self.getBucketCoverage(b, coverage, range_start, range_end, exon_bounds, boundaries)
+                        else:
+                            startPos = binaryIO.skipCrossBundleBucket(chunk, readLenBytes, startPos)
+
+                curr_bucket += buckets_in_chunk
+
+            if skip > 0:
+                filehandle.seek(skip, 1)
 
         return coverage
 
