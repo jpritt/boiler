@@ -149,6 +149,9 @@ class Expander:
                         boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
                     b.boundaries = boundaries
                     self.expandCrossBundleBucket(b)
+
+                    # Delete this bucket to save space
+                    buckets[i] = None
                 i += 1
 
     '''
