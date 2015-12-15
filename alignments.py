@@ -49,7 +49,8 @@ class Alignments:
         # Offset of each chromosome from the start of the genome
         self.chromOffsets = dict()
 
-        nextOffset = 0
+        # Bases are generally indexed from 1
+        nextOffset = 1
         for c in self.chromosomeNames:
             self.chromOffsets[c] = nextOffset
             nextOffset += chromosomes[c]
@@ -1771,6 +1772,9 @@ class Alignments:
                 self.exons.add(alignment[i][1])
                 self.exons.add(alignment[i+1][0])
 
+        if read.exons[-1][1] == self.chromOffsets['chrX'] + 1:
+            print('Unpaired')
+            print(name)
 
         self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
         if not paired:
@@ -1781,6 +1785,9 @@ class Alignments:
 
             fragment_len = abs(read.pairOffset - read.exons[0][0])
             if not (read.chrom == read.pairChrom) or (self.frag_len_cutoff and fragment_len > self.frag_len_cutoff):
+                if read.exons[-1][1] == self.chromOffsets['chrX'] + 1:
+                    print('Unpaired 2')
+                    print(name)
                 self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
                 found_match = False
@@ -1807,6 +1814,9 @@ class Alignments:
                     else:
                         self.curr_cross_bundle_reads[name] = [read]
             else:
+                if read.pairOffset == self.chromOffsets['chrX'] + 1:
+                    print('Paired')
+                    print(name)
                 self.update_gene_bounds(read.exons[0][0], read.pairOffset)
 
                 if name in self.unmatched:
