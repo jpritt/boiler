@@ -118,10 +118,10 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
                                 #print('%d, %d, %d' % (int(row[8]), match[3], l))
                                 #exit()
 
-                                if l > 0:
-                                    if l >= len(fragment_lengths):
-                                        fragment_lengths += [0] * (l + 1 - len(fragment_lengths))
-                                    fragment_lengths[l] += 1
+                               # if l > 0:
+                               #     if l >= len(fragment_lengths):
+                               #         fragment_lengths += [0] * (l + 1 - len(fragment_lengths))
+                               #     fragment_lengths[l] += 1
 
                                 del unmatched[name][i]
                                 foundMatch = True
