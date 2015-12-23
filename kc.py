@@ -221,7 +221,8 @@ def updateTranscripts(transcripts, refGTF, sequence, k):
             transcriptId = row[8][transcriptIdStart : transcriptIdEnd]
 
 
-            if row[1] == 'protein_coding' and row[2] == 'exon' and transcriptId in transcripts:
+            #if row[1] == 'protein_coding' and row[2] == 'exon' and transcriptId in transcripts:
+            if row[2] == 'exon' and transcriptId in transcripts:
                 transcripts[transcriptId].exons.append( (int(row[3]), int(row[4])) )
 
     transcripts = transcripts.values()

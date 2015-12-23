@@ -33,7 +33,18 @@ def go(args):
 
         compressor = compress.Compressor(args.force_xs, args.frag_len_cutoff)
         startTime = time.time()
+        import cProfile
+        import pstats
+        import io
+        pr = cProfile.Profile()
+        pr.enable()
         compressor.compress(args.alignments, compressedName, args.intermediate, args.frag_len_z_cutoff, binary, debug)
+        pr.disable()
+        s = io.StringIO()
+        sortby = 'tottime'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats(30)
+        print(s.getvalue())
         endTime = time.time()
 
         print('Compression time: %0.3f s' % (endTime-startTime))
@@ -49,20 +60,9 @@ def go(args):
         expander = expand.Expander(args.force_xs)
         startTime = time.time()
 
-        #import cProfile
-        #import pstats
-        #import io
-        #pr = cProfile.Profile()
-        #pr.enable()
 
         expander.expand(compressedName, args.expand_to, binary, debug)
 
-        #pr.disable()
-        #s = io.StringIO()
-        #sortby = 'tottime'
-        #ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        #ps.print_stats(30)
-        #print(s.getvalue())
 
         endTime = time.time()
         print('Decompression time: %0.3f s' % (endTime-startTime))
