@@ -4,7 +4,6 @@ import argparse
 
 import readSAM
 import expand
-#import readPRO
 import time
 import re
 import math
@@ -256,6 +255,7 @@ if __name__ == '__main__':
         action="store_true")
     parser.add_argument("--output", type=str, help="File to store timing results")
     parser.add_argument("--plot", help="Plot timing comparison graphs", action="store_true")
+    parser.add_argument("--timings", help="If present, read timings file and simply plot results", action="store_true")
     
     args = parser.parse_args(sys.argv[1:])
 
