@@ -24,7 +24,8 @@ class Bucket:
         self.lensLeft = dict()
         self.lensRight = dict()
 
-        self.coverage = [[0, length]]
+        #self.coverage = [[0, length]]
+        self.coverage = [0] * length
 
     def add_paired(self, p):
         p.length = self.length - p.startOffset - p.endOffset
@@ -59,6 +60,7 @@ class Bucket:
         else:
             self.unpairedLens[r.length] = 1
 
+    '''
     def updateCov(self, start, length):
         i = 0
 
@@ -82,4 +84,9 @@ class Bucket:
 
         if i < rle_len and length > 0:
             self.coverage = self.coverage[:i] + [ [max(self.coverage[i][0]+1,0), length], [self.coverage[i][0], self.coverage[i][1]-length] ] + self.coverage[i+1:]
+    '''
+
+    def updateCov(self, start, length):
+        for i in range(start, start+length):
+            self.coverage[i] += 1
 

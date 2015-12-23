@@ -290,7 +290,8 @@ def readJunctionsList(s, start=0):
     return junctions, exonBytes, start
 
 def writeJunction(readLenBytes, junc):
-    s = writeCov(junc.coverage)
+    #s = writeCov(junc.coverage)
+    s = writeCov(RLE(junc.coverage))
     s += writeLens(readLenBytes, junc.unpairedLens)
 
     # Find max number of bytes needed to encode fragment lengths
