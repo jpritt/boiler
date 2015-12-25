@@ -90,15 +90,19 @@ def queryCoverageRanges(filename, sam, expander):
         print('  SAM:        %0.3f s' % timeTrueAvg)
         print('  Compressed: %0.3f s' % timePredAvg)
 
-def queryCoverageInBundles(filename, sam, expander, bamFile, bedtoolsPath, chromsFile):
-    chroms = expander.getChromosomes(filename)
-    #chroms = ['2R']
+def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile):
+    if chrom == 'all':
+        print('Querying coverage for all chromsomes')
+        chroms = expander.getChromosomes(filename)
+    else:
+        print('Querying coverage for chromsome ' + chrom)
+        chroms = [chrom]
 
     lens = []
     timesTrue = []
     timesPred = []
     for c in chroms:
-        print('Getting bundle coverages for chromsome %s' % c)
+        #print('Getting bundle coverages for chromsome %s' % c)
         bundles = expander.getGeneBounds(filename, c)
 
         for b in bundles:
@@ -168,7 +172,7 @@ def go(args):
         for k,v in chromosomes.items():
             f.write(k + '\t' + str(v) + '\n')
 
-    sam = readSAM.ReadSAM(samFile, chromosomes)
+    #sam = readSAM.ReadSAM(samFile, chromosomes)
     expander = expand.Expander()
     #pro = readPRO.ReadPRO(args['pro'])
 
@@ -187,12 +191,10 @@ def go(args):
     exit()
     '''
 
-    print('Querying coverage')
-
     #print(expander.getGeneBounds(args['compressed'], 'chrX'))
     #exit()
 
-    lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], sam, expander, bamFile, args['bedtools_path'], args['chroms'])
+    lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'])
 
     if args['output']:
         with open(args['output'], 'w') as f:
@@ -249,6 +251,7 @@ if __name__ == '__main__':
     parser.add_argument('--compressed', type=str, required=True, 
         help='Full path of directory containing compressed reads')
     #parser.add_argument('--pro', type=str, required=True, help='Full path of flux .pro output file')
+    parser.add_argument('--chrom', type=str, help="Chromsome to query. Write 'all' to query bundles on all chromosomes")
     parser.add_argument('--chroms', type=str, help="Temporary file to write chromosomes to. Default = chroms.genome")
     parser.add_argument('--bedtools-path', type=str, required=True, help="Path to bedtools main directory")
     parser.add_argument("--profile", help="Run speed profiling",
@@ -261,4 +264,8 @@ if __name__ == '__main__':
 
     if not args.chroms:
         args.chroms = 'chroms.genome'
-    go_profile(vars(args))
+
+    if args.profile:
+        go_profile(vars(args))
+    else:
+        go(vars(args))
