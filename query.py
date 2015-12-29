@@ -251,7 +251,7 @@ if __name__ == '__main__':
     parser.add_argument('--compressed', type=str, required=True, 
         help='Full path of directory containing compressed reads')
     #parser.add_argument('--pro', type=str, required=True, help='Full path of flux .pro output file')
-    parser.add_argument('--chrom', type=str, help="Chromsome to query. Write 'all' to query bundles on all chromosomes")
+    parser.add_argument('--chrom', type=str, required=True, help="Chromsome to query. Write 'all' to query bundles on all chromosomes")
     parser.add_argument('--chroms', type=str, help="Temporary file to write chromosomes to. Default = chroms.genome")
     parser.add_argument('--bedtools-path', type=str, required=True, help="Path to bedtools main directory")
     parser.add_argument("--profile", help="Run speed profiling",
@@ -263,7 +263,7 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     if not args.chroms:
-        args.chroms = 'chroms.genome'
+        args.chroms = 'chroms.' + args.chrom
 
     if args.profile:
         go_profile(vars(args))
