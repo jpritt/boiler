@@ -688,63 +688,221 @@ class Expander:
         end_i = bisect.bisect_left(exons, end)
         return start_i, end_i
 
-    def getReads(self, compressedFile, chrom, start=None, end=None):
-        '''
-        Return all reads for which at least one exon overlaps the given region
-        :param compressedFile:
-        :param chrom:
-        :param start:
-        :param end:
-        :return:
-        '''
-
-        with open(compressedFile, 'rb') as f:
+    def getReads(self, compressedFilename, chrom, start=None, end=None):
+        with open(compressedFilename, 'rb') as f:
             chromosomes = binaryIO.readChroms(f)
             self.aligned = alignments.Alignments(chromosomes)
-            if start == None or end == None:
+            if start == None:
                 start = 0
+            else:
+                start = max(start, 0)
+            if end == None:
                 end = chromosomes[chrom]
+            else:
+                end = min(end, chromosomes[chrom])
 
-            for k in sorted(chromosomes.keys()):
-                if not k == chrom:
-                    start += chromosomes[k]
-                    end += chromosomes[k]
-                else:
-                    break
+            start += self.aligned.chromOffsets[chrom]
+            end += self.aligned.chromOffsets[chrom]
 
-            clusters = binaryIO.readClusters(f)
-            start_i, end_i = self.getRelevantClusters(clusters, start, end)
-            if start_i == end_i:
-                return [], []
+            self.bundles = binaryIO.readClusters(f)
+            start_i, end_i = self.getRelevantClusters(self.bundles, start, end)
 
-            unspliced_index = binaryIO.readListFromFile(f)
+            if start_i >= end_i:
+                return []
+
             spliced_index = binaryIO.readListFromFile(f)
 
-            skip = sum(unspliced_index[:start_i]) + sum(spliced_index[:start_i])
-            f.seek(skip, 1)
+            unpaired, paired = self.getAllCrossBucketsReads(f, start_i, end_i, start, end)
 
+            f.seek(sum(spliced_index[:start_i]), 1)
             for i in range(start_i, end_i):
-                self.aligned.exons = clusters[i]
+                self.aligned.exons = self.bundles[i]
+                #print('Bundle %d - %d (%d)' % (bundles[i][0], bundles[i][-1], bundles[i][-1]-bundles[i][0]))
+                self.getBundleReads(f, spliced_index[i], start, end, unpaired, paired)
 
-                #self.getUnsplicedReads(f, unspliced_index[i], start, end)
-                self.getSplicedReads(f, spliced_index[i], start, end)
+        return unpaired, paired
 
-        return self.aligned.unpaired, self.aligned.paired
+    def getAllCrossBucketsReads(self, filehandle, start_i, end_i, range_start, range_end):
+        num_bundles = len(self.bundles)
+        bundleIdBytes = binaryIO.findNumBytes(num_bundles)
+        numBytes = binaryIO.readVal(filehandle, 1)
+        length = binaryIO.readVal(filehandle, numBytes)
 
-    def getSplicedReads(self, f, length, range_start, range_end):
-        ''' Expand a file containing compressed spliced alignments
-        '''
+        unpaired = []
+        paired = []
 
-        s = self.expandString(f.read(length))
+        if length > 0:
+            index = self.expandString(filehandle.read(length))
+            num_buckets, startPos = binaryIO.binaryToVal(index, 4, start=0)
+            chunk_size, startPos = binaryIO.binaryToVal(index, 2, startPos)
+            readLenBytes, startPos = binaryIO.binaryToVal(index, 1, startPos)
+            buckets, startPos = binaryIO.readCrossBundleBucketNames(index, num_buckets, bundleIdBytes, startPos)
+            chunk_lens, startPos = binaryIO.readList(index, startPos)
 
+            curr_bucket = 0
+            skip = 0
+            for l in chunk_lens:
+                buckets_in_chunk = min(chunk_size, num_buckets-curr_bucket)
+                relevant = [0] * buckets_in_chunk
+                last_relevant = -1
+
+                for i in range(buckets_in_chunk):
+                    bundleA = buckets[i+curr_bucket].bundleA
+                    bundleB = buckets[i+curr_bucket].bundleB
+                    if (bundleA >= start_i and bundleA < end_i) or (bundleB >= start_i and bundleB < end_i):
+                        relevant[i] = 1
+                        last_relevant = i
+
+                if last_relevant == -1:
+                    skip += l
+                else:
+                    if skip > 0:
+                        filehandle.seek(skip, 1)
+                        skip = 0
+
+                    chunk = self.expandString(filehandle.read(l))
+                    startPos = 0
+
+                    for i in range(last_relevant):
+
+                        if relevant[i]:
+                            b = buckets[i+curr_bucket]
+                            startPos = binaryIO.readCrossBundleBucket(chunk, b, readLenBytes, startPos)
+                            b.coverage = self.RLEtoVector(b.coverage)
+
+                            exonsA = self.bundles[b.bundleA]
+                            exonsB = self.bundles[b.bundleB]
+                            exon_bounds = [(exonsA[e], exonsA[e+1]) for e in b.exonIdsA] + [(exonsB[e], exonsB[e+1]) for e in b.exonIdsB]
+                            b.exon_bounds = exon_bounds
+
+                            boundaries = [exon_bounds[0][1]-exon_bounds[0][0]]
+                            for n in range(1, len(exon_bounds)):
+                                boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
+                            b.boundaries = boundaries
+
+                            self.getCrossBucketReads(b, range_start, range_end, unpaired, paired)
+
+                        else:
+                            startPos = binaryIO.skipCrossBundleBucket(chunk, readLenBytes, startPos)
+
+                curr_bucket += buckets_in_chunk
+
+            if skip > 0:
+                filehandle.seek(skip, 1)
+
+        return unpaired, paired
+
+    def getCrossBucketReads(self, bucket, range_start, range_end, unpaired_reads, paired_reads):
+        unpaired, paired, t1, t2 = self.aligned.findReads(dict(), bucket.pairedLens, bucket.lensLeft, bucket.lensRight, bucket.coverage, bucket.boundaries)
+
+        # Offset of start of junction from beginning of chromosome
+        bucket_offset = bucket.exon_bounds[0][0]
+
+        # marks indices in junction coverage vector where exons are
+        mapping = [0]
+        # offsets of start of each exon in junction
+        offsets = [0]
+        for j in range(1,len(bucket.exon_bounds)):
+            mapping.append(mapping[-1] + bucket.exon_bounds[j-1][1] - bucket.exon_bounds[j-1][0])
+            offsets.append(bucket.exon_bounds[j][0] - bucket.exon_bounds[0][0])
+
+        for r in unpaired:
+            start = r[0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
+
+            end = r[1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
+
+            readExons = []
+            if i == j:
+                readExons.append( [start+bucket_offset, end+bucket_offset] )
+            else:
+                readExons.append( [start+bucket_offset, offsets[i]+mapping[i+1]-mapping[i]+bucket_offset] )
+
+                for x in range(i+1,j):
+                    readExons.append( [offsets[x]+bucket_offset, offsets[x]+mapping[x+1]-mapping[x]+bucket_offset] )
+
+                readExons.append( [offsets[j]+bucket_offset, end+bucket_offset] )
+
+            if self.readOverlapsRegion(readExons, range_start, range_end):
+                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, bucket.XS, bucket.NH))
+
+        for p in paired:
+            start = p[0][0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
+
+            end = p[0][1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
+
+            readExonsA = []
+            if i == j:
+                readExonsA.append( [start+bucket_offset, end+bucket_offset] )
+            else:
+                readExonsA.append( [start+bucket_offset, offsets[i]+mapping[i+1]-mapping[i]+bucket_offset] )
+                for x in range(i+1,j):
+                    readExonsA.append( [offsets[x]+bucket_offset, offsets[x]+mapping[x+1]-mapping[x]+bucket_offset] )
+                readExonsA.append( [offsets[j]+bucket_offset, end+bucket_offset] )
+
+            start = p[1][0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
+
+            end = p[1][1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
+
+            readExonsB = []
+            if i == j:
+                readExonsB.append( [start+bucket_offset, end+bucket_offset] )
+            else:
+                readExonsB.append( [start+bucket_offset, offsets[i]+mapping[i+1]-mapping[i]+bucket_offset] )
+                for x in range(i+1,j):
+                    readExonsB.append( [offsets[x]+bucket_offset, offsets[x]+mapping[x+1]-mapping[x]+bucket_offset] )
+                readExonsB.append( [offsets[j]+bucket_offset, end+bucket_offset] )
+
+            if self.readOverlapsRegion(readExonsA, range_start, range_end) or self.readOverlapsRegion(readExonsB, range_start, range_end):
+                paired_reads.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA, self.aligned.getChromosome(readExonsB[0][0]), readExonsB, bucket.XS, bucket.NH))
+
+    def getBundleReads(self, f, length, range_start, range_end, unpaired, paired):
+        bundle = self.expandString(f.read(length))
         startPos = 0
-        readLenBytes, startPos = binaryIO.binaryToVal(s, 1, startPos)
+        readLenBytes, startPos = binaryIO.binaryToVal(bundle, 1, startPos)
+        sorted_buckets, exonBytes, startPos = binaryIO.readJunctionsList(bundle, startPos)
 
-        sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(s, startPos)
+        start_i, end_i = self.getRelevantExons(self.aligned.exons, range_start, range_end)
 
-        for key in sorted_junctions:
+        for key in sorted_buckets:
             exons = key[:-2]
 
+            relevant = False
+            for e in exons:
+                if e >= start_i and e < end_i:
+                    relevant = True
+                    break
+
+            # If the junction does not overlap the target region, skip it
+            if not relevant:
+                startPos = binaryIO.skipJunction(bundle, readLenBytes, startPos)
+                continue
+
+            # Otherwise, expand this junction
+            # Boundaries contains the positions in the junction coverage vector where each new subexon begins
             length = 0
             boundaries = []
             for i in range(len(exons)):
@@ -758,110 +916,129 @@ class Expander:
                     else:
                         boundaries.append(boundaries[-1] + subexon_length)
 
-            debug = False
-
             # Read the rest of the junction information
-            junc, startPos = binaryIO.readJunction(s, bucket.Bucket(exons, length, boundaries), readLenBytes, startPos)
-            junc.xs = key[-2]
-            junc.NH = key[-1]
+            b, startPos = binaryIO.readJunction(bundle, bucket.Bucket(exons, length, boundaries), readLenBytes, startPos)
+            b.NH = float(key[-1])
+            b.XS = key[-2]
+            b.coverage = self.RLEtoVector(b.coverage)
 
-            junc.coverage = self.RLEtoVector(junc.coverage)
+            subexon_bounds = []
+            for j in b.exons:
+                subexon_bounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
+            b.exon_bounds = subexon_bounds
 
-            unpaired, paired = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, debug)
+            self.getBucketReads(b, range_start, range_end, unpaired, paired)
 
-            juncBounds = []
-            for j in junc.exons:
-                juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
+        return unpaired, paired
 
-            # Offset of start of junction from beginning of chromosome
-            juncOffset = juncBounds[0][0]
+    def getBucketReads(self, b, range_start, range_end, unpaired_reads, paired_reads):
+        unpaired, paired, t1, t2 = self.aligned.findReads(b.unpairedLens, b.pairedLens, b.lensLeft, b.lensRight, b.coverage, b.boundaries)
 
-            # marks indices in junction coverage vector where exons are
-            mapping = [0]
-            # offsets of start of each exon in junction
-            offsets = [0]
-            for j in range(1,len(juncBounds)):
-                mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
-                offsets.append(juncBounds[j][0] - juncBounds[0][0])
+        juncBounds = []
+        for j in b.exons:
+            juncBounds.append([self.aligned.exons[j], self.aligned.exons[j+1]])
 
-            for r in unpaired:
-                start = r[0]
-                i = 0
-                while i < (len(mapping)-1) and mapping[i+1] <= start:
-                    i += 1
-                start += offsets[i] - mapping[i]
+        # Offset of start of junction from beginning of chromosome
+        juncOffset = juncBounds[0][0]
 
-                end = r[1]
-                j = 0
-                while j < (len(mapping)-1) and mapping[j+1] < end:
-                    j += 1
-                end += offsets[j] - mapping[j]
+        # marks indices in junction coverage vector where exons are
+        mapping = [0]
+        # offsets of start of each exon in junction
+        offsets = [0]
+        for j in range(1,len(juncBounds)):
+            mapping.append(mapping[-1] + juncBounds[j-1][1] - juncBounds[j-1][0])
+            offsets.append(juncBounds[j][0] - juncBounds[0][0])
 
-                readExons = []
-                if i == j:
-                    readExons.append( [start+juncOffset, end+juncOffset] )
-                else:
-                    readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+        for r in unpaired:
+            start = r[0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
 
-                    for x in range(i+1,j):
-                        readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+            end = r[1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
 
-                    readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
+            readExons = []
+            if i == j:
+                readExons.append( [start+juncOffset, end+juncOffset] )
+            else:
+                readExons.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
 
-                if readExons[-1][1] > range_start and readExons[0][0] < range_end:
-                    self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
+                for x in range(i+1,j):
+                    readExons.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
 
-            for p in paired:
-                start = p[0][0]
-                i = 0
-                while i < (len(mapping)-1) and mapping[i+1] <= start:
-                    i += 1
-                start += offsets[i] - mapping[i]
+                readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                end = p[0][1]
-                j = 0
-                while j < (len(mapping)-1) and mapping[j+1] < end:
-                    j += 1
-                end += offsets[j] - mapping[j]
+            if self.readOverlapsRegion(readExons, range_start, range_end):
+                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, b.XS, b.NH))
 
-                readExonsA = []
-                if i == j:
-                    readExonsA.append( [start+juncOffset, end+juncOffset] )
-                else:
-                    readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+        for p in paired:
+            start = p[0][0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
 
-                    for x in range(i+1,j):
-                        readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+            end = p[0][1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
 
-                    readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
+            readExonsA = []
+            if i == j:
+                readExonsA.append( [start+juncOffset, end+juncOffset] )
+            else:
+                readExonsA.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+                for x in range(i+1,j):
+                    readExonsA.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+                readExonsA.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                start = p[1][0]
-                i = 0
-                while i < (len(mapping)-1) and mapping[i+1] <= start:
-                    i += 1
-                start += offsets[i] - mapping[i]
+            start = p[1][0]
+            i = 0
+            while i < (len(mapping)-1) and mapping[i+1] <= start:
+                i += 1
+            start += offsets[i] - mapping[i]
 
-                end = p[1][1]
-                j = 0
-                while j < (len(mapping)-1) and mapping[j+1] < end:
-                    j += 1
-                end += offsets[j] - mapping[j]
+            end = p[1][1]
+            j = 0
+            while j < (len(mapping)-1) and mapping[j+1] < end:
+                j += 1
+            end += offsets[j] - mapping[j]
 
-                readExonsB = []
-                if i == j:
-                    readExonsB.append( [start+juncOffset, end+juncOffset] )
-                else:
-                    readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+            readExonsB = []
+            if i == j:
+                readExonsB.append( [start+juncOffset, end+juncOffset] )
+            else:
+                readExonsB.append( [start+juncOffset, offsets[i]+mapping[i+1]-mapping[i]+juncOffset] )
+                for x in range(i+1,j):
+                    readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+                readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                    for x in range(i+1,j):
-                        readExonsB.append( [offsets[x]+juncOffset, offsets[x]+mapping[x+1]-mapping[x]+juncOffset] )
+            if self.readOverlapsRegion(readExonsA, range_start, range_end) or self.readOverlapsRegion(readExonsB, range_start, range_end):
+                paired_reads.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
+                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, b.XS, b.NH))
 
-                    readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-                if readExonsB[-1][1] > range_start and readExonsA[0][0] < range_end:
-                    self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
+    def readOverlapsRegion(self, exons, start, end):
+        '''
+        :param exons: List of exon bounds
+        :param start: Start of region of interest
+        :param end: End of region of interest
+        :return: True if any of the exons overlap the region of interest
+        '''
 
+        for e in exons:
+            if e[0] >= end:
+                # Passed region
+                return False
+            elif e[1] > start:
+                return True
+        return False
 
     def updateRLE(self, vector, start, end, val):
         '''

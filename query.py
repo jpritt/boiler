@@ -119,7 +119,7 @@ def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chr
             endTime = time.time()
             timesPred.append(endTime - startTime)
 
-            #break
+            break
 
             # Uncomment this with the sam.getCoverage() call above to test that Boiler's coverage is correct (it should be)
             #if not len(trueCov) == len(predCov):
@@ -140,7 +140,44 @@ def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chr
 
     return lens, timesTrue, timesPred
 
-def go(args):
+def queryReadsInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile):
+    if chrom == 'all':
+        print('Querying reads for all chromsomes')
+        chroms = expander.getChromosomes(filename)
+    else:
+        print('Querying reads for chromsome ' + chrom)
+        chroms = [chrom]
+
+    lens = []
+    timesTrue = []
+    timesPred = []
+    for c in chroms:
+        #print('Getting bundle coverages for chromsome %s' % c)
+        bundles = expander.getGeneBounds(filename, c)
+
+        for b in bundles:
+            lens.append(b[1]-b[0])
+
+            startTime = time.time()
+            os.system("samtools view -h -o reads.sam " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]))
+            endTime = time.time()
+            timesTrue.append(endTime - startTime)
+
+            startTime = time.time()
+            predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
+            endTime = time.time()
+            timesPred.append(endTime - startTime)
+
+            #print('%d unpaired, %d paired --> %d unpaired, %d paired' % (len(trueUnpaired), len(truePaired), len(predUnpaired), len(predPaired)))
+
+            break
+
+    print('Average SAM query time:    %fs' % (sum(timesTrue) / len(timesTrue)))
+    print('Average Boiler query time: %fs' % (sum(timesPred) / len(timesPred)))
+
+    return lens, timesTrue, timesPred
+
+def go(args, mode):
     form = args['alignments'][-3:len(args['alignments'])]
     if form == 'sam':
         samFile = args['alignments']
@@ -177,24 +214,10 @@ def go(args):
     #pro = readPRO.ReadPRO(args['pro'])
 
 
-    '''
-    trueCov = sam.getCoverage('2R', 23136532, 23136773)
-    predCov = expander.getCoverage(args['compressed'], '2R', 23136532, 23136773)
-
-    for x in range(len(trueCov)):
-        if abs(trueCov[x] - predCov[x]) > 0.0001:
-            print('Error!')
-            print(x)
-            for n in range(x-5,x+5):
-                print(str(trueCov[n]) + '\t' + str(predCov[n]))
-            exit()
-    exit()
-    '''
-
-    #print(expander.getGeneBounds(args['compressed'], 'chrX'))
-    #exit()
-
-    lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'])
+    if mode == 0:
+        lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'])
+    else:
+        lens, timesTrue, timesPred = queryReadsInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'])
 
     if args['output']:
         with open(args['output'], 'w') as f:
@@ -204,28 +227,33 @@ def go(args):
     if args['plot']:
         import matplotlib.pyplot as plt
 
+        if mode == 0:
+            s = 'cov'
+        elif mode == 0:
+            s = 'reads'
+
         plt.scatter(lens, timesTrue)
         plt.xlabel('Bundle Length')
         plt.ylabel('SAM Query Time (s)')
-        plt.savefig('sam_query_time.png')
+        plt.savefig('sam_query_time_' + s + '.png')
         plt.clf()
 
         plt.scatter(lens, timesPred)
         plt.xlabel('Bundle Length')
         plt.ylabel('Boiler Query Time (s)')
-        plt.savefig('boiler_query_time.png')
+        plt.savefig('boiler_query_time_' + s + '.png')
         plt.clf()
 
         plt.scatter(timesTrue, timesPred)
         plt.xlabel('SAM Query Time (s)')
         plt.ylabel('Boiler Query Time (s)')
-        plt.savefig('boiler_sam_query_time.png')
+        plt.savefig('boiler_sam_query_time_' + s + '.png')
         plt.clf()
 
 
     os.remove(args['chroms'])
         
-def go_profile(args):
+def go_profile(args, mode):
    pr = None
    if args['profile']:
        import cProfile
@@ -233,7 +261,7 @@ def go_profile(args):
        import io
        pr = cProfile.Profile()
        pr.enable()
-   go(args)
+   go(args, mode)
    if args['profile']:
        pr.disable()
        s = io.StringIO()
@@ -259,13 +287,22 @@ if __name__ == '__main__':
     parser.add_argument("--output", type=str, help="File to store timing results")
     parser.add_argument("--plot", help="Plot timing comparison graphs", action="store_true")
     parser.add_argument("--timings", help="If present, read timings file and simply plot results", action="store_true")
+    parser.add_argument("--mode", type=str, required=True, help="Either 'cov' or 'reads'")
     
     args = parser.parse_args(sys.argv[1:])
+
+    if args.mode == 'cov':
+        mode = 0
+    elif args.mode == 'reads':
+        mode = 1
+    else:
+        print('Please choose either cov or reads for mode')
+        exit()
 
     if not args.chroms:
         args.chroms = 'chroms.' + args.chrom
 
     if args.profile:
-        go_profile(vars(args))
+        go_profile(vars(args), mode)
     else:
-        go(vars(args))
+        go(vars(args), mode)
