@@ -105,6 +105,9 @@ def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chr
         #print('Getting bundle coverages for chromsome %s' % c)
         bundles = expander.getGeneBounds(filename, c)
 
+        print(bundles)
+        exit()
+
         for b in bundles:
             lens.append(b[1]-b[0])
 

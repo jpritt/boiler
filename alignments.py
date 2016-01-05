@@ -53,7 +53,7 @@ class Alignments:
         nextOffset = 1
         for c in self.chromosomeNames:
             self.chromOffsets[c] = nextOffset
-            nextOffset += chromosomes[c]
+            nextOffset += chromosomes[c]+1
             #self.exons += [nextOffset]
 
         # List of potential gene boundaries as tuples
