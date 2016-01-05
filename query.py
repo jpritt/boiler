@@ -90,7 +90,7 @@ def queryCoverageRanges(filename, sam, expander):
         print('  SAM:        %0.3f s' % timeTrueAvg)
         print('  Compressed: %0.3f s' % timePredAvg)
 
-def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile):
+def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile, limit):
     if chrom == 'all':
         print('Querying coverage for all chromsomes')
         chroms = expander.getChromosomes(filename)
@@ -104,46 +104,49 @@ def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chr
     for c in chroms:
         #print('Getting bundle coverages for chromsome %s' % c)
         bundles = expander.getGeneBounds(filename, c)
+        num_bundles = len(bundles)
 
-        print(bundles)
-        exit()
+        if limit < num_bundles:
+            r = num_bundles / limit
+            for i in range(limit):
+                start = int(i * r)
+                end = int((i+1) * r) - 1
+                b = bundles[random.randint(start,end)]
 
-        for b in bundles:
-            lens.append(b[1]-b[0])
+                lens.append(b[1]-b[0])
 
-            startTime = time.time()
-            #trueCov = sam.getCoverage(c, b[0], b[1])
-            os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
-            endTime = time.time()
-            timesTrue.append(endTime - startTime)
+                startTime = time.time()
+                #trueCov = sam.getCoverage(c, b[0], b[1])
+                os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
+                endTime = time.time()
+                timesTrue.append(endTime - startTime)
 
-            startTime = time.time()
-            predCov = expander.getCoverage(filename, c, b[0], b[1])
-            endTime = time.time()
-            timesPred.append(endTime - startTime)
+                startTime = time.time()
+                predCov = expander.getCoverage(filename, c, b[0], b[1])
+                endTime = time.time()
+                timesPred.append(endTime - startTime)
 
-            break
+        else:
+            for b in bundles:
+                lens.append(b[1]-b[0])
 
-            # Uncomment this with the sam.getCoverage() call above to test that Boiler's coverage is correct (it should be)
-            #if not len(trueCov) == len(predCov):
-            #    print('Error! Coverages not the same length!')
-            #    exit()
+                startTime = time.time()
+                #trueCov = sam.getCoverage(c, b[0], b[1])
+                os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
+                endTime = time.time()
+                timesTrue.append(endTime - startTime)
 
-            #for x in range(len(trueCov)):
-            #    if abs(trueCov[x] - predCov[x]) > 0.0001:
-            #        print('Error!')
-            #        print('%s (%d, %d)' % (c, b[0], b[1]))
-            #        print(x)
-            #        for n in range(x-5,x+5):
-            #            print(str(trueCov[n]) + '\t' + str(predCov[n]))
-            #        exit()
+                startTime = time.time()
+                predCov = expander.getCoverage(filename, c, b[0], b[1])
+                endTime = time.time()
+                timesPred.append(endTime - startTime)
 
     print('Average SAM query time:    %fs' % (sum(timesTrue) / len(timesTrue)))
     print('Average Boiler query time: %fs' % (sum(timesPred) / len(timesPred)))
 
     return lens, timesTrue, timesPred
 
-def queryReadsInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile):
+def queryReadsInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile, limit):
     if chrom == 'all':
         print('Querying reads for all chromsomes')
         chroms = expander.getChromosomes(filename)
@@ -157,23 +160,40 @@ def queryReadsInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chroms
     for c in chroms:
         #print('Getting bundle coverages for chromsome %s' % c)
         bundles = expander.getGeneBounds(filename, c)
+        num_bundles = len(bundles)
 
-        for b in bundles:
-            lens.append(b[1]-b[0])
+        if limit < num_bundles:
+            r = num_bundles / limit
+            for i in range(limit):
+                start = int(i * r)
+                end = int((i+1) * r) - 1
+                b = bundles[random.randint(start,end)]
 
-            startTime = time.time()
-            os.system("samtools view -h -o reads.sam " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]))
-            endTime = time.time()
-            timesTrue.append(endTime - startTime)
+                lens.append(b[1]-b[0])
 
-            startTime = time.time()
-            predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
-            endTime = time.time()
-            timesPred.append(endTime - startTime)
+                startTime = time.time()
+                os.system("samtools view -h -o reads.sam " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]))
+                endTime = time.time()
+                timesTrue.append(endTime - startTime)
 
-            #print('%d unpaired, %d paired --> %d unpaired, %d paired' % (len(trueUnpaired), len(truePaired), len(predUnpaired), len(predPaired)))
+                startTime = time.time()
+                predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
+                endTime = time.time()
+                timesPred.append(endTime - startTime)
+        else:
+            for b in bundles:
+                lens.append(b[1]-b[0])
 
-            break
+                startTime = time.time()
+                os.system("samtools view -h -o reads.sam " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]))
+                endTime = time.time()
+                timesTrue.append(endTime - startTime)
+
+                startTime = time.time()
+                predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
+                endTime = time.time()
+                timesPred.append(endTime - startTime)
+
 
     print('Average SAM query time:    %fs' % (sum(timesTrue) / len(timesTrue)))
     print('Average Boiler query time: %fs' % (sum(timesPred) / len(timesPred)))
@@ -218,9 +238,9 @@ def go(args, mode):
 
 
     if mode == 0:
-        lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'])
+        lens, timesTrue, timesPred = queryCoverageInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'], args['limit'])
     else:
-        lens, timesTrue, timesPred = queryReadsInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'])
+        lens, timesTrue, timesPred = queryReadsInBundles(args['compressed'], expander, args['chrom'], bamFile, args['bedtools_path'], args['chroms'], args['limit'])
 
     if args['output']:
         with open(args['output'], 'w') as f:
@@ -291,6 +311,7 @@ if __name__ == '__main__':
     parser.add_argument("--plot", help="Plot timing comparison graphs", action="store_true")
     parser.add_argument("--timings", help="If present, read timings file and simply plot results", action="store_true")
     parser.add_argument("--mode", type=str, required=True, help="Either 'cov' or 'reads'")
+    parser.add_argument("--limit", type=int, help="Maximum number of bundles from each chromosome to query")
     
     args = parser.parse_args(sys.argv[1:])
 
