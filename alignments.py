@@ -56,6 +56,7 @@ class Alignments:
             nextOffset += chromosomes[c]+1
             #self.exons += [nextOffset]
 
+
         # List of potential gene boundaries as tuples
         self.gene_bounds = []
         # If 2 reads are less than this far apart, combine them into a single gene
@@ -149,7 +150,7 @@ class Alignments:
                 self.max_cross_bundle_read_len = p[1].length
 
             NH = min(p[0].NH, p[1].NH)
-            XS = p[0].NH or p[1].NH
+            XS = p[0].xs or p[1].xs
             if XS == '-':
                 XS = -1
             elif XS == '+':
@@ -221,6 +222,18 @@ class Alignments:
         return j
 
     def finalize_paired_read(self, p):
+        #print('')
+        #print(p.exonsA)
+        #print(p.exonsB)
+        for i in range(len(self.exons)-1):
+            if self.exons[i+1] > p.exonsA[0][0]:
+                break
+        for j in range(i, len(self.exons)):
+            if self.exons[j] > p.exonsB[-1][1]:
+                break
+        #print('Exons %d - %d' % (i,j))
+        #print(self.exons[i:j+1])
+
         # Exon ids spanned by read
         start_id = bisect.bisect_right(self.exons, p.exonsA[0][0]) - 1
         id = start_id
@@ -1792,6 +1805,9 @@ class Alignments:
                         self.cross_bundle_pairs.append([match, read])
                         del self.cross_bundle_reads[name][i]
 
+                        if name == 'chr17:15339332-15466945C':
+                            print('Found mate in cross_bundle_reads')
+
                 if not found_match and name in self.curr_cross_bundle_reads:
                     i = self.find_mate(read, name, self.curr_cross_bundle_reads)
                     if i >= 0:
@@ -1801,7 +1817,12 @@ class Alignments:
                         self.add_paired(match, read)
                         del self.curr_cross_bundle_reads[name][i]
 
+                        if name == 'chr17:15339332-15466945C':
+                            print('Found mate in curr_cross_bundle_reads')
+
                 if not found_match:
+                    if name == 'chr17:15339332-15466945C':
+                        print('No match found')
                     if name in self.curr_cross_bundle_reads:
                         self.curr_cross_bundle_reads[name].append(read)
                     else:
@@ -1815,7 +1836,15 @@ class Alignments:
                         self.unmatched[name].append(read)
                     else:
                         match = self.unmatched[name][i]
-                        self.add_paired(match, read)
+                        #if read.exons == [[1342941769, 1342941797], [1342945500, 1342945502]] or match.exons == [[1342941769, 1342941797], [1342945500, 1342945502]]:
+                        #    print(read.exons)
+                        #    print(match.exons)
+                        #    exit()
+
+                        if match.exons[0][0] == read.exons[0][0] and match.exons[-1][1] > read.exons[-1][1]:
+                            self.add_paired(read, match)
+                        else:
+                            self.add_paired(match, read)
 
                         del self.unmatched[name][i]
                 else:
@@ -1845,6 +1874,11 @@ class Alignments:
         '''
             Returns true if any of the exons from A or B overlaps one of the introns from the other set of exons
         '''
+
+        if (exonsA[0][0] < exonsB[0][0] and exonsA[-1][1] > exonsB[-1][1]) or (exonsB[0][0] < exonsA[0][0] and exonsB[-1][1] > exonsA[-1][1]):
+            # One set of exons contains the other
+            return 3
+
         for e in exonsB:
             if e[0] > exonsA[-1][0]:
                 break
@@ -1871,7 +1905,7 @@ class Alignments:
 
         return 0
 
-    def writeSAM(self, filehandle, header=True, force_xs=False):
+    def writeSAM(self, filehandle, header=True, force_xs=False, readId=0):
         ''' Write all alignments to a SAM file
         '''
 
@@ -1881,7 +1915,6 @@ class Alignments:
             for k,v in self.chromosomes.items():
                 filehandle.write('@SQ\tSN:' + str(k) + '\tLN:' + str(v) + '\n')
 
-        readId = 0
         for read in self.unpaired:
             exons = read.exons
             cigar = [str(exons[0][1] - exons[0][0]) + 'M']
@@ -1944,6 +1977,8 @@ class Alignments:
             chromA = pair.chromA
             chromB = pair.chromB
             offsetA = self.chromOffsets[chromA]
+            if not chromA == chromB:
+                offsetB = self.chromOffsets[chromB]
 
             if force_xs and spliced and not pair.xs:
                 #print('Assigning random XS value to spliced paired read')
@@ -1956,18 +1991,20 @@ class Alignments:
             if chromB == chromA:
                 filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
             else:
-                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
 
-            if pair.xs:
+            if pair.xs:# and 'N' in cigarA:
                 filehandle.write('\tXS:A:' + pair.xs)
             filehandle.write('\n')
 
             if chromB == chromA:
                 filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
             else:
-                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
-            if pair.xs:
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
+            if pair.xs:# and 'N' in cigarB:
                 filehandle.write('\tXS:A:' + pair.xs)
             filehandle.write('\n')
 
             readId += 1
+
+        return readId

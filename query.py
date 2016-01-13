@@ -90,7 +90,7 @@ def queryCoverageRanges(filename, sam, expander):
         print('  SAM:        %0.3f s' % timeTrueAvg)
         print('  Compressed: %0.3f s' % timePredAvg)
 
-def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile, limit):
+def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chromsFile, limit, sam=None):
     if chrom == 'all':
         print('Querying coverage for all chromsomes')
         chroms = expander.getChromosomes(filename)
@@ -106,7 +106,7 @@ def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chr
         bundles = expander.getGeneBounds(filename, c)
         num_bundles = len(bundles)
 
-        if limit < num_bundles:
+        if limit and limit < num_bundles:
             r = num_bundles / limit
             for i in range(limit):
                 start = int(i * r)
@@ -131,15 +131,19 @@ def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chr
                 lens.append(b[1]-b[0])
 
                 startTime = time.time()
-                #trueCov = sam.getCoverage(c, b[0], b[1])
-                os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
+                ##trueCov = sam.getCoverage(c, b[0], b[1])
+                #os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
                 endTime = time.time()
                 timesTrue.append(endTime - startTime)
 
                 startTime = time.time()
                 predCov = expander.getCoverage(filename, c, b[0], b[1])
+                #print(predCov)
+                print('Total coverage for %d -- %d: %d' % (b[0], b[1], sum(predCov)))
                 endTime = time.time()
                 timesPred.append(endTime - startTime)
+
+                break
 
     print('Average SAM query time:    %fs' % (sum(timesTrue) / len(timesTrue)))
     print('Average Boiler query time: %fs' % (sum(timesPred) / len(timesPred)))
@@ -162,7 +166,7 @@ def queryReadsInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chroms
         bundles = expander.getGeneBounds(filename, c)
         num_bundles = len(bundles)
 
-        if limit < num_bundles:
+        if limit and limit < num_bundles:
             r = num_bundles / limit
             for i in range(limit):
                 start = int(i * r)

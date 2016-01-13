@@ -13,8 +13,8 @@ class Transcript:
         ''' Compare this transcript to the given transcript and return a score representing their closeness
             0 = no match, 1 = perfect match
         '''
-        #if (not self.chrom == transcript.chrom) or (self.start > transcript.end) or (self.end < transcript.start):
-        if ((self.start > transcript.end) or (self.end < transcript.start)):
+        if (not self.chrom == transcript.chrom) or (self.start > transcript.end) or (self.end < transcript.start):
+            #if ((self.start > transcript.end) or (self.end < transcript.start)):
             return 0
 
         thisMatches = []
@@ -52,13 +52,6 @@ class Transcript:
 
             otherMatches.append(closest)
 
-        '''
-        print 'Comparing %s and %s' % (self.name, transcript.name)
-        print 'This matches:  ' + '\t'.join([str(c) for c in thisMatches])
-        print 'Other matches: ' + '\t'.join([str(c) for c in otherMatches])
-        print 'Scores:        ' + '\t'.join([str(c) for c in scores])
-        '''
-
         totalScore = 0.0
         count = len(thisMatches)
         for i in range(len(thisMatches)):
@@ -68,12 +61,54 @@ class Transcript:
             if not thisMatches[otherMatches[i]] == i:
                 count += 1
 
-        '''
-        print '%f / %f = %f' % (totalScore, count, totalScore/float(count))
-        print ''
-        '''
-
         return totalScore / float(count)
+
+    def scoreTranscript2(self, transcript, threshold):
+        if (not self.chrom == transcript.chrom) or ((self.start > transcript.end) or (self.end < transcript.start)):
+            return 0
+
+        if not len(self.exons) == len(transcript.exons):
+            return 0
+
+        score = 1
+        for i in range(len(self.exons)):
+            s = self.scoreExons(self.exons[i], transcript.exons[i], threshold)
+            if s == 0:
+                return 0
+            else:
+                score *= s
+
+        return score
+
+    
+    def scoreTranscript3(self, transcript, threshold):
+        #Same as scoreTranscript() above but calculate score as proportion of overlap
+        if (not self.chrom == transcript.chrom) or ((self.start > transcript.end) or (self.end < transcript.start)):
+            return 0
+
+        overlap = 0
+        i = 0
+        for e1 in self.exons:
+            while i < len(transcript.exons) and transcript.exons[i][1] <= e1[0]:
+                i += 1
+
+            if i == len(transcript.exons):
+                break
+
+            while i < len(transcript.exons) and transcript.exons[i][0] < e1[1]:
+                overlap += min(transcript.exons[i][1], e1[1]) - max(transcript.exons[i][0], e1[0])
+                if transcript.exons[i][0] < e1[1]:
+                    i += 1
+
+        len1 = 0
+        for e1 in transcript.exons:
+            len1 += e1[1] - e1[0]
+
+        len2 = 0
+        for e2 in transcript.exons:
+            len2 += e2[1] - e2[0]
+
+        return float(overlap * overlap) / float(len1 * len2)
 
     def scoreExons(self, exon1, exon2, threshold):
         ''' Returns a value between 0 and 1, where 1 indicates that the 2 exons are a perfect match and 0 indicates no match

@@ -336,12 +336,29 @@ def writeCrossBundleBucketNames(bundleIdBytes, buckets, buckets_sorted):
 
 def readCrossBundleBucketNames(s, num_buckets, bundleIdBytes, start=0):
     buckets = [0] * num_buckets
+    id_time = 0
+    exon_time = 0
+    bucket_time = 0
     for i in range(num_buckets):
+        t1 = time.time()
         bundleA, start = binaryToVal(s, bundleIdBytes, start)
+        t2 = time.time()
         exonIdsA, start = readList(s, start)
+        t3 = time.time()
         bundleB, start = binaryToVal(s, bundleIdBytes, start)
+        t4 = time.time()
         exonIdsB, start = readList(s, start)
+        t5 = time.time()
         buckets[i] = cross_bundle_bucket.CrossBundleBucket(bundleA, exonIdsA, bundleB, exonIdsB)
+        t6 = time.time()
+        id_time += t2-t1 + t4-t3
+        exon_time += t3-t2 + t5-t4
+        bucket_time += t6-t5
+
+    print('Id time: %f' % id_time)
+    print('Exon time: %f' % exon_time)
+    print('Bucket time: %f' % bucket_time)
+
 
     return buckets, start
 

@@ -55,6 +55,7 @@ class Compressor:
                 else:
                     break
         self.chromosomes = self.parseSAMHeader(header)
+        print('Aligning')
         self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff, self.debug)
 
         self.compressByCluster(samFilename, compressedFilename, min_filename)
@@ -230,6 +231,8 @@ class Compressor:
 
         bundle_id = 0
 
+        read_id = 0
+
         with open(input_name, 'r') as filehandle:
             for line in filehandle:
                 row = line.strip().split('\t')
@@ -256,11 +259,11 @@ class Compressor:
                     if intermediate_name:
                         if first:
                             with open(intermediate_name, 'w') as f1:
-                                self.aligned.writeSAM(f1, True, self.force_xs)
+                                read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
                             first = False
                         else:
                             with open(intermediate_name, 'a') as f1:
-                                self.aligned.writeSAM(f1, False, self.force_xs)
+                                read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
 
                     junctions, maxReadLen = self.aligned.computeJunctions()
                     self.sortedJuncs = sorted(junctions.keys())
@@ -284,6 +287,8 @@ class Compressor:
                     elif r[0:3] == 'NH:':
                         NH = int(r[5:])
 
+                if row[0] == 'chr17:15339332-15466945C':
+                    print('\t'.join(row))
 
                 r = read.Read(row[2], exons, xs, NH)
                 if row[6] == '*':
@@ -295,6 +300,8 @@ class Compressor:
                         r.pairChrom = row[6]
                     r.pairOffset = int(row[7])
                     self.aligned.processRead(r, row[0], paired=True)
+                if row[0] == 'chr17:15339332-15466945C':
+                    print('')
 
 
             # Compress final cluster
@@ -308,11 +315,11 @@ class Compressor:
             if intermediate_name:
                 if first:
                     with open(intermediate_name, 'w') as f1:
-                        self.aligned.writeSAM(f1, True, self.force_xs)
+                        read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
                     first = False
                 else:
                     with open(intermediate_name, 'a') as f1:
-                        self.aligned.writeSAM(f1, False, self.force_xs)
+                        read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
 
             junctions, maxReadLen = self.aligned.computeJunctions()
             self.sortedJuncs = sorted(junctions.keys())

@@ -482,16 +482,22 @@ class Expander:
 
             spliced_index = binaryIO.readListFromFile(f)
 
+            st = time.time()
             coverage = self.getAllCrossBucketsCoverage(f, coverage, start_i, end_i, start, end)
+            en = time.time()
+            print('%f s to get cross buckets coverage' % (en-st))
 
             processT = 0.0
 
             f.seek(sum(spliced_index[:start_i]), 1)
+            st = time.time()
             for i in range(start_i, end_i):
                 self.aligned.exons = self.bundles[i]
                 #print('Bundle %d - %d (%d)' % (bundles[i][0], bundles[i][-1], bundles[i][-1]-bundles[i][0]))
                 coverage, t = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
                 processT += t
+            en = time.time()
+            print('%f s to process bundles %d - %d' % (en-st, start_i, end_i))
 
         return coverage
 
@@ -506,11 +512,16 @@ class Expander:
             num_buckets, startPos = binaryIO.binaryToVal(index, 4, start=0)
             chunk_size, startPos = binaryIO.binaryToVal(index, 2, startPos)
             readLenBytes, startPos = binaryIO.binaryToVal(index, 1, startPos)
+            st = time.time()
             buckets, startPos = binaryIO.readCrossBundleBucketNames(index, num_buckets, bundleIdBytes, startPos)
+            en = time.time()
             chunk_lens, startPos = binaryIO.readList(index, startPos)
+            print('Parsing header time: %f s' % (en-st))
 
+            print('%d cross-bundle buckets' % num_buckets)
             curr_bucket = 0
             skip = 0
+
             for l in chunk_lens:
                 buckets_in_chunk = min(chunk_size, num_buckets-curr_bucket)
                 relevant = [0] * buckets_in_chunk
@@ -533,8 +544,7 @@ class Expander:
                     chunk = self.expandString(filehandle.read(l))
                     startPos = 0
 
-                    for i in range(last_relevant):
-
+                    for i in range(last_relevant+1):
                         if relevant[i]:
                             b = buckets[i+curr_bucket]
                             startPos = binaryIO.readCrossBundleBucket(chunk, b, readLenBytes, startPos)

@@ -134,11 +134,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        #if closestScore < 0.31:
-        #    if closestScore == 0:
-        #        print(t1.name)
-        #    else:
-        #        print('%s + %s -\t%0.2f' % (t1.name, closestT.name, closestScore) )
         if closestScore > 0:
             totalScore2 += closestScore * t1.cov
             #totalScore2 += closestScore
