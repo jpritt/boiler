@@ -3,12 +3,8 @@
 import bisect
 import bucket
 import cross_bundle_bucket
-import read
 import pairedread
-import os.path
-import sys
 import copy
-import math
 import random
 
 from random import shuffle
@@ -27,18 +23,6 @@ class Alignments:
         self.debug = debug
 
         self.frag_len_cutoff = frag_len_cutoff
-
-        self.origPairedDepth = 0
-        self.calcPairedDepth = 0
-        self.countDense = 0
-
-        self.totalPaired = 0
-        self.totalUnpaired = 0
-
-        self.countUnpaired = 0
-        self.badUnpaired = 0
-        self.countPaired = 0
-        self.badPaired = 0
 
         self.chromosomes = chromosomes
         self.chromosomeNames = sorted(chromosomes.keys())
@@ -83,24 +67,35 @@ class Alignments:
         self.paired = []
 
     def add_unpaired(self, read):
+        '''
+        Add this read to the list of unpaired
+        '''
         self.unpaired.append(read)
 
     def add_paired(self, read1, read2):
+        '''
+        Create a single paired read from these two reads and add it to the paired list
+        '''
         xs = read1.xs or read2.xs
         NH = min(read1.NH, read2.NH)
         p = pairedread.PairedRead(read1.chrom, read1.exons, read2.chrom, read2.exons, xs, NH)
         self.paired.append(p)
 
     def finalizeUnmatched(self):
-        # Finalize unmatched (discordant) reads
+        '''
+        Finalize unmatched (discordant) reads. We convert them to unpaired reads.
+        '''
         for name,reads in self.unmatched.items():
             if reads:
                 for r in reads:
                     self.add_unpaired(r)
+
+        # Reset dictionary for next bundle
         self.unmatched = dict()
 
     def finalizeExons(self):
-        ''' Convert the set of exon boundaries to a list
+        '''
+        Convert the set of exon boundaries to a list
         '''
 
         self.exons.add(self.gene_bounds[0])
@@ -108,6 +103,9 @@ class Alignments:
         self.exons = sorted(list(self.exons))
 
     def finalize_cross_bundle_reads(self, bundle_id):
+        '''
+        
+        '''
         for name,reads in self.curr_cross_bundle_reads.items():
             i = 0
             while i < len(reads):
@@ -383,10 +381,6 @@ class Alignments:
                 else:
                     fragmentLens[k] = v
 
-        #if debug:
-        countUnpaired = 0
-        for k,v in unpairedLens.items():
-            countUnpaired += v
         countPaired = 0
         for k,v in pairedLens.items():
             countPaired += v
@@ -422,9 +416,6 @@ class Alignments:
 
 
     def findPairsGreedy(self, reads, pairedLens):
-        #for k,v in pairedLens.items():
-        #    self.origPairedDepth += k * v
-
         pairedLensSorted = sorted(pairedLens.keys(), reverse=True)
 
         reads.sort()
@@ -573,11 +564,6 @@ class Alignments:
         return unpaired, paired
 
     def findPairsGreedy2(self, reads, pairedLens):
-        origPairedDepth = 0
-        for k,v in pairedLens.items():
-            origPairedDepth += k * v
-            self.origPairedDepth += k * v
-
         numReads = len(reads)
         reads.sort()
         pairedLensSorted = sorted(pairedLens.keys(), reverse=True)
@@ -647,11 +633,6 @@ class Alignments:
             if not assigned[j]:
                 unpaired[i] = reads[j]
                 i += 1
-
-        calcPairedDepth = 0
-        for p in paired:
-            calcPairedDepth += p[1][1] - p[0][0]
-            self.calcPairedDepth += p[1][1] - p[0][0]
 
         return unpaired, paired
 
@@ -1200,9 +1181,6 @@ class Alignments:
         if len(pairedLens) == 0:
             return reads, []
 
-        for k,v in pairedLens.items():
-            self.origPairedDepth += k * v
-
         length = 0
         for r in reads:
             if r[1] > length:
@@ -1337,10 +1315,6 @@ class Alignments:
 
         unpaired = u
         paired += p
-
-
-        for p in paired:
-            self.calcPairedDepth += p[1][1] - p[0][0]
 
         return unpaired, paired
 
