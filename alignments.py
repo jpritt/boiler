@@ -66,6 +66,157 @@ class Alignments:
         self.unpaired = []
         self.paired = []
 
+    def processRead(self, read, name, paired):
+        ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
+            If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
+        '''
+
+        # Update read location for chromosome
+        offset = self.chromOffsets[read.chrom]
+        for i in range(len(read.exons)):
+            read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
+
+        # update list of subexon bounds
+        alignment = read.exons
+        if len(alignment) > 1:
+            for i in range(len(alignment)-1):
+                self.exons.add(alignment[i][1])
+                self.exons.add(alignment[i+1][0])
+
+        # Update the boundaries of the current bundle
+        #self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
+
+        if not paired:  # unpaired read
+            # Update the boundaries of the current bundle
+            self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
+
+            self.add_unpaired(read)
+        else:   # paired read
+            # update pair location for chromsome
+            read.pairOffset += self.chromOffsets[read.pairChrom]
+
+            fragment_len = abs(read.pairOffset - read.exons[0][0])
+            if not (read.chrom == read.pairChrom) or (self.frag_len_cutoff and fragment_len > self.frag_len_cutoff):
+                # If the pair is very long, it might be a bundle-spanning pair
+
+                self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
+
+                # Look for a match in the bundle-spanning reads from previous bundles
+                found_match = False
+                if name in self.cross_bundle_reads:
+                    i = self.find_mate(read, name, self.cross_bundle_reads)
+                    if i >= 0:
+                        found_match = True
+                        match = self.cross_bundle_reads[name][i]
+                        self.cross_bundle_pairs.append([match, read])
+                        del self.cross_bundle_reads[name][i]
+
+                # We might just be in a long bundle -- look for a match in the other long reads from this bundle
+                if not found_match and name in self.curr_cross_bundle_reads:
+                    i = self.find_mate(read, name, self.curr_cross_bundle_reads)
+                    if i >= 0:
+                        found_match = True
+                        match = self.curr_cross_bundle_reads[name][i]
+                        #self.cross_bundle_pairs.append([match, read])
+                        self.add_paired(match, read)
+                        del self.curr_cross_bundle_reads[name][i]
+
+                # No matches found, so add it to the long reads buffer for the current bundle
+                if not found_match:
+                    if name in self.curr_cross_bundle_reads:
+                        self.curr_cross_bundle_reads[name].append(read)
+                    else:
+                        self.curr_cross_bundle_reads[name] = [read]
+            else:
+                # The pair is not too long, so the current bundle should contain it
+
+                self.update_gene_bounds(read.exons[0][0], max(read.exons[-1][1],read.pairOffset))
+
+                # Look for a mate among previous reads
+                if name in self.unmatched:
+                    i = self.find_mate(read, name, self.unmatched)
+                    if i == -1:
+                        self.unmatched[name].append(read)
+                    else:
+                        match = self.unmatched[name][i]
+
+                        if match.exons[0][0] == read.exons[0][0] and match.exons[-1][1] > read.exons[-1][1]:
+                            self.add_paired(read, match)
+                        else:
+                            self.add_paired(match, read)
+
+                        del self.unmatched[name][i]
+                else:
+                    self.unmatched[name] = [read]
+
+    def find_mate(self, read, name, unmatched):
+        '''
+        Search the list of unmatched reads for one matching the given name and location
+        :param read: Read information including location and mate location
+        :param name: Identifying name (first column of SAM information)
+        :param unmatched: Dictionary of unmatched reads with key = name, value = list of reads
+        :return: Index in unmatched of matching read, or -1 if no match found
+        '''
+        for i in range(len(unmatched[name])):
+            match = unmatched[name][i]
+            if read.pairOffset == match.exons[0][0] and match.pairOffset == read.exons[0][0] and not self.conflicts(read.exons, match.exons):
+                # Return index in unmatched dictionary of match
+                return i
+
+        # If no match found, return -1
+        return -1
+
+
+    def update_gene_bounds(self, start, end):
+        '''
+        Update the boundaries of the current bundle to include [start, end]
+        '''
+        if not self.gene_bounds:
+            self.gene_bounds = [start, end]
+        else:
+            if start < self.gene_bounds[0]:
+                self.gene_bounds[0] = start
+            if end > self.gene_bounds[1]:
+                self.gene_bounds[1] = end
+
+    def conflicts(self, exonsA, exonsB):
+        '''
+
+        :param exonsA: List containing the exon bounds for gene A in the form [(x_0,y_0), (x_1,y_1),...]
+        :param exonsB: List containing the exon bounds for gene B in the same form as exonsA
+        :return: 1 if an exon in gene A overlaps an intron in gene B, 2 if vice versa, 3 if one gene range lies strictly inside the other, 0 otherwise.
+        '''
+
+        if (exonsA[0][0] < exonsB[0][0] and exonsA[-1][1] > exonsB[-1][1]) or (exonsB[0][0] < exonsA[0][0] and exonsB[-1][1] > exonsA[-1][1]):
+            # One set of exons contains the other
+            return 3
+
+        for e in exonsB:
+            if e[0] > exonsA[-1][0]:
+                break
+
+            for i in range(len(exonsA)-1):
+                if e[0] >= exonsA[-i-1][0]:
+                    break
+                elif e[1] > exonsA[-i-2][1]:
+                    # Exon in B overlaps an intron in A
+                    return 1
+
+        countA = len(exonsA)
+        for i in range(countA):
+            e = exonsA[countA-i-1]
+            if e[1] < exonsB[0][1]:
+                break
+
+            for i in range(len(exonsB)-1):
+                if e[1] <= exonsB[i][1]:
+                    break
+                elif e[1] > exonsB[i][1] and e[0] < exonsB[i+1][0]:
+                    # Exon in A overlaps an intron in B
+                    return 2
+
+        return 0
+
     def add_unpaired(self, read):
         '''
         Add this read to the list of unpaired
@@ -76,9 +227,9 @@ class Alignments:
         '''
         Create a single paired read from these two reads and add it to the paired list
         '''
-        xs = read1.xs or read2.xs
+        strand = read1.strand or read2.strand
         NH = min(read1.NH, read2.NH)
-        p = pairedread.PairedRead(read1.chrom, read1.exons, read2.chrom, read2.exons, xs, NH)
+        p = pairedread.PairedRead(read1.chrom, read1.exons, read2.chrom, read2.exons, strand, NH)
         self.paired.append(p)
 
     def finalizeUnmatched(self):
@@ -104,8 +255,10 @@ class Alignments:
 
     def finalize_cross_bundle_reads(self, bundle_id):
         '''
-        
+        Process the list of reads with mates outside this bundle
         '''
+
+        # curr_cross_bundle_reads is a buffer containing potential cross-bundle reads from the current bundle.
         for name,reads in self.curr_cross_bundle_reads.items():
             i = 0
             while i < len(reads):
@@ -115,6 +268,7 @@ class Alignments:
                     self.add_unpaired(read)
                     del reads[i]
                 else:
+                    # Read's mate lies in another bundle
                     read.bundle = bundle_id
                     read.exonIds, read.length = self.getExonIds(read.exons)
                     read.bucket_length = sum([self.exons[e+1]-self.exons[e] for e in read.exonIds])
@@ -122,12 +276,13 @@ class Alignments:
                     read.endOffset = self.exons[read.exonIds[-1]+1] - read.exons[-1][1]
                     i += 1
 
+            # Move remaining reads from this buffer to the cross_bundle_reads list
             if name in self.cross_bundle_reads:
                 self.cross_bundle_reads[name] += reads
             else:
                 self.cross_bundle_reads[name] = reads
 
-        # Finalize cross-bundle pairs that were finalized in this bundle
+        # Finalize cross-bundle pairs that were discovered in this bundle
         for p in self.cross_bundle_pairs:
             if not hasattr(p[0],'bundle'):
                 p[0].bundle = bundle_id
@@ -142,32 +297,33 @@ class Alignments:
                 p[1].startOffset = p[1].exons[0][0] - self.exons[p[1].exonIds[0]]
                 p[1].endOffset = self.exons[p[1].exonIds[-1]+1] - p[1].exons[-1][1]
 
+            # Update maximum length of a read in a cross-bucket bundle (needed to efficiently store length distribution)
             if p[0].length > self.max_cross_bundle_read_len:
                 self.max_cross_bundle_read_len = p[0].length
             if p[1].length > self.max_cross_bundle_read_len:
                 self.max_cross_bundle_read_len = p[1].length
 
             NH = min(p[0].NH, p[1].NH)
-            XS = p[0].xs or p[1].xs
-            if XS == '-':
-                XS = -1
-            elif XS == '+':
-                XS = 1
+            strand = p[0].strand or p[1].strand
+            if strand == '-':
+                strand = -1
+            elif strand == '+':
+                strand = 1
             else:
-                XS = 0
-            key = str(p[0].bundle) + ' ' + ' '.join([str(e) for e in p[0].exonIds]) + ',' + str(p[1].bundle) + ' ' + ' '.join([str(e) for e in p[1].exonIds]) + ' ' + str(NH) + ' ' + str(XS)
+                strand = 0
+            key = str(p[0].bundle) + ' ' + ' '.join([str(e) for e in p[0].exonIds]) + ',' + str(p[1].bundle) + ' ' + ' '.join([str(e) for e in p[1].exonIds]) + ' ' + str(NH) + ' ' + str(strand)
             if key in self.cross_bundle_buckets:
                 self.cross_bundle_buckets[key].add_pair(p[0], p[1])
             else:
                 b = cross_bundle_bucket.CrossBundleBucket(p[0].bundle, p[0].exonIds, p[1].bundle, p[1].exonIds)
                 b.set_length(p[0].bucket_length + p[1].bucket_length)
                 b.NH = NH
-                b.XS = XS
+                b.strand = strand
                 b.add_pair(p[0], p[1])
                 self.cross_bundle_buckets[key] = b
 
-    def computeJunctions(self):
-        # Compute coverage levels across every exon junction
+    def computeBuckets(self):
+        # Compute coverage levels across every bucket
         partitions = dict()
 
         # Maximum fragment length
@@ -184,6 +340,35 @@ class Alignments:
 
         return partitions, max_len
 
+    def add_paired_to_partition(self, p, partitions):
+        '''
+
+        :param p: Paired read to add
+        :param partitions: List of previously computed partitions
+        :return: Updated partitions list
+        '''
+
+        self.finalize_paired_read(p)
+
+        b = self.find_key(p, partitions)
+        b.add_paired(p)
+
+        return partitions
+
+    def add_unpaired_to_partition(self, r, partitions):
+        '''
+        :param r: Read to add
+        :param partitions: List of previously computed partitions
+        :return: Updated partitions list
+        '''
+
+        self.finalize_unpaired_read(r)
+
+        b = self.find_key(r, partitions)
+        b.add_unpaired(r)
+
+        return partitions
+
     def find_key(self, r, partitions):
         '''
 
@@ -194,12 +379,12 @@ class Alignments:
 
         exonIds = r.exonIds
 
-        xs = '0'
-        if r.xs == '-':
-            xs = '-1'
-        elif r.xs == '+':
-            xs = '1'
-        key = '\t'.join([str(e) for e in exonIds]) + '\t' + xs + '\t' + str(r.NH)
+        strand = '0'
+        if r.strand == '-':
+            strand = '-1'
+        elif r.strand == '+':
+            strand = '1'
+        key = '\t'.join([str(e) for e in exonIds]) + '\t' + strand + '\t' + str(r.NH)
 
         if not key in partitions:
             covLength = 0
@@ -210,7 +395,7 @@ class Alignments:
                 covLength += subexon_length
 
             partitions[key] = bucket.Bucket(exonIds, covLength)
-            partitions[key].xs = r.xs
+            partitions[key].strand = r.strand
             partitions[key].NH = r.NH
 
             partitions[key].countBefore = 0
@@ -220,17 +405,20 @@ class Alignments:
         return j
 
     def finalize_paired_read(self, p):
-        #print('')
-        #print(p.exonsA)
-        #print(p.exonsB)
-        for i in range(len(self.exons)-1):
-            if self.exons[i+1] > p.exonsA[0][0]:
-                break
-        for j in range(i, len(self.exons)):
-            if self.exons[j] > p.exonsB[-1][1]:
-                break
-        #print('Exons %d - %d' % (i,j))
-        #print(self.exons[i:j+1])
+        # TODO: Take this out
+        if p.exonsB[0][0] < p.exonsA[0][0] or p.exonsA[-1][1] > p.exonsB[-1][1]:
+            print('Weird reads:')
+            print(p.exonsA)
+            print(p.exonsB)
+            print('')
+
+        # Find what range of subexon ids contains this pair
+        #for i in range(len(self.exons)-1):
+        #    if self.exons[i+1] > p.exonsA[0][0]:
+        #        break
+        #for j in range(i, len(self.exons)):
+        #    if self.exons[j] > p.exonsB[-1][1]:
+        #        break
 
         # Exon ids spanned by read
         start_id = bisect.bisect_right(self.exons, p.exonsA[0][0]) - 1
@@ -271,22 +459,6 @@ class Alignments:
         r.startOffset = r.exons[0][0] - self.exons[r.exonIds[0]]
         r.endOffset = self.exons[r.exonIds[-1]+1] - r.exons[-1][1]
 
-        '''
-        id = bisect.bisect_right(self.exons, r.exons[0][0]) - 1
-        r.startOffset = r.exons[0][0] - self.exons[id]
-        r.length = 0
-
-        for exon in r.exons:
-            r.length += exon[1] - exon[0]
-            while self.exons[id+1] <= exon[0]:
-                id += 1
-            while self.exons[id] < exon[1]:
-                r.exonIds.append(id)
-                id += 1
-
-        r.endOffset = self.exons[id] - r.exons[-1][1]
-        '''
-
     def getExonIds(self, exons):
         exonIds = []
 
@@ -302,35 +474,6 @@ class Alignments:
                 id += 1
 
         return exonIds, length
-
-    def add_paired_to_partition(self, p, partitions):
-        '''
-
-        :param p: Paired read to add
-        :param partitions: List of previously computed partitions
-        :return: Updated partitions list
-        '''
-
-        self.finalize_paired_read(p)
-
-        b = self.find_key(p, partitions)
-        b.add_paired(p)
-
-        return partitions
-
-    def add_unpaired_to_partition(self, r, partitions):
-        '''
-        :param r: Read to add
-        :param partitions: List of previously computed partitions
-        :return: Updated partitions list
-        '''
-
-        self.finalize_unpaired_read(r)
-
-        b = self.find_key(r, partitions)
-        b.add_unpaired(r)
-
-        return partitions
 
     def RLE(self, vector):
         rle = []
@@ -349,13 +492,14 @@ class Alignments:
 
         return rle
 
-    def resetCluster(self):
+    def resetBundle(self):
         self.exons = set()
         self.gene_bounds = []
         self.unpaired = []
         self.paired = []
         self.cross_bundle_pairs = []
         self.curr_cross_bundle_reads = dict()
+
 
 
     def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage, boundaries=None, debug=False):
@@ -1742,143 +1886,6 @@ class Alignments:
             else:
                 index -= self.chromosomes[c]
 
-    def processRead(self, read, name, paired):
-        ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
-            If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
-        '''
-
-        # Update read index based on chromosome
-        offset = self.chromOffsets[read.chrom]
-        for i in range(len(read.exons)):
-            read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
-
-        # update list of exons
-        alignment = read.exons
-        if len(alignment) > 1:
-            for i in range(len(alignment)-1):
-                self.exons.add(alignment[i][1])
-                self.exons.add(alignment[i+1][0])
-
-        self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
-        if not paired:
-            # unpaired read
-            self.add_unpaired(read)
-        else:
-            read.pairOffset += self.chromOffsets[read.pairChrom]
-
-            fragment_len = abs(read.pairOffset - read.exons[0][0])
-            if not (read.chrom == read.pairChrom) or (self.frag_len_cutoff and fragment_len > self.frag_len_cutoff):
-                self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
-
-                found_match = False
-                if name in self.cross_bundle_reads:
-                    i = self.find_mate(read, name, self.cross_bundle_reads)
-                    if i >= 0:
-                        found_match = True
-                        match = self.cross_bundle_reads[name][i]
-                        self.cross_bundle_pairs.append([match, read])
-                        del self.cross_bundle_reads[name][i]
-
-                        if name == 'chr17:15339332-15466945C':
-                            print('Found mate in cross_bundle_reads')
-
-                if not found_match and name in self.curr_cross_bundle_reads:
-                    i = self.find_mate(read, name, self.curr_cross_bundle_reads)
-                    if i >= 0:
-                        found_match = True
-                        match = self.curr_cross_bundle_reads[name][i]
-                        #self.cross_bundle_pairs.append([match, read])
-                        self.add_paired(match, read)
-                        del self.curr_cross_bundle_reads[name][i]
-
-                        if name == 'chr17:15339332-15466945C':
-                            print('Found mate in curr_cross_bundle_reads')
-
-                if not found_match:
-                    if name == 'chr17:15339332-15466945C':
-                        print('No match found')
-                    if name in self.curr_cross_bundle_reads:
-                        self.curr_cross_bundle_reads[name].append(read)
-                    else:
-                        self.curr_cross_bundle_reads[name] = [read]
-            else:
-                self.update_gene_bounds(read.exons[0][0], read.pairOffset)
-
-                if name in self.unmatched:
-                    i = self.find_mate(read, name, self.unmatched)
-                    if i == -1:
-                        self.unmatched[name].append(read)
-                    else:
-                        match = self.unmatched[name][i]
-                        #if read.exons == [[1342941769, 1342941797], [1342945500, 1342945502]] or match.exons == [[1342941769, 1342941797], [1342945500, 1342945502]]:
-                        #    print(read.exons)
-                        #    print(match.exons)
-                        #    exit()
-
-                        if match.exons[0][0] == read.exons[0][0] and match.exons[-1][1] > read.exons[-1][1]:
-                            self.add_paired(read, match)
-                        else:
-                            self.add_paired(match, read)
-
-                        del self.unmatched[name][i]
-                else:
-                    self.unmatched[name] = [read]
-
-    def find_mate(self, read, name, unmatched):
-        for i in range(len(unmatched[name])):
-            match = unmatched[name][i]
-            if read.pairOffset == match.exons[0][0] and match.pairOffset == read.exons[0][0] and not self.conflicts(read.exons, match.exons):
-                # Return index in unmatched dictionary of match
-                return i
-
-        # If no match found, return -1
-        return -1
-
-
-    def update_gene_bounds(self, start, end):
-        if not self.gene_bounds:
-            self.gene_bounds = [start, end]
-        else:
-            if start < self.gene_bounds[0]:
-                self.gene_bounds[0] = start
-            if end > self.gene_bounds[1]:
-                self.gene_bounds[1] = end
-
-    def conflicts(self, exonsA, exonsB):
-        '''
-            Returns true if any of the exons from A or B overlaps one of the introns from the other set of exons
-        '''
-
-        if (exonsA[0][0] < exonsB[0][0] and exonsA[-1][1] > exonsB[-1][1]) or (exonsB[0][0] < exonsA[0][0] and exonsB[-1][1] > exonsA[-1][1]):
-            # One set of exons contains the other
-            return 3
-
-        for e in exonsB:
-            if e[0] > exonsA[-1][0]:
-                break
-
-            for i in range(len(exonsA)-1):
-                if e[0] >= exonsA[-i-1][0]:
-                    break
-                elif e[1] > exonsA[-i-2][1]:
-                    # Exon in B overlaps an intron in A
-                    return 1
-
-        countA = len(exonsA)
-        for i in range(countA):
-            e = exonsA[countA-i-1]
-            if e[1] < exonsB[0][1]:
-                break
-
-            for i in range(len(exonsB)-1):
-                if e[1] <= exonsB[i][1]:
-                    break
-                elif e[1] > exonsB[i][1] and e[0] < exonsB[i+1][0]:
-                    # Exon in A overlaps an intron in B
-                    return 2
-
-        return 0
-
     def writeSAM(self, filehandle, header=True, force_xs=False, readId=0):
         ''' Write all alignments to a SAM file
         '''
@@ -1906,15 +1913,15 @@ class Alignments:
             chrom = read.chrom
             offset = self.chromOffsets[chrom]
 
-            if force_xs and spliced and not read.xs:
+            if force_xs and spliced and not read.strand:
                 #print('Assigning random XS value to spliced unpaired read')
                 if random.randint(0,1) == 0:
-                    read.xs = '+'
+                    read.strand = '+'
                 else:
-                    read.xs = '-'
+                    read.strand = '-'
 
-            if read.xs:
-                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.xs + '\tNH:i:' + str(read.NH) + '\n')
+            if read.strand:
+                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.strand + '\tNH:i:' + str(read.NH) + '\n')
             else:
                 filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
             readId += 1
@@ -1954,12 +1961,12 @@ class Alignments:
             if not chromA == chromB:
                 offsetB = self.chromOffsets[chromB]
 
-            if force_xs and spliced and not pair.xs:
+            if force_xs and spliced and not pair.strand:
                 #print('Assigning random XS value to spliced paired read')
                 if random.randint(0,1) == 0:
-                    pair.xs = '+'
+                    pair.strand = '+'
                 else:
-                    pair.xs = '-'
+                    pair.strand = '-'
 
 
             if chromB == chromA:
@@ -1967,16 +1974,16 @@ class Alignments:
             else:
                 filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
 
-            if pair.xs:# and 'N' in cigarA:
-                filehandle.write('\tXS:A:' + pair.xs)
+            if pair.strand:# and 'N' in cigarA:
+                filehandle.write('\tXS:A:' + pair.strand)
             filehandle.write('\n')
 
             if chromB == chromA:
                 filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
             else:
                 filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
-            if pair.xs:# and 'N' in cigarB:
-                filehandle.write('\tXS:A:' + pair.xs)
+            if pair.strand:# and 'N' in cigarB:
+                filehandle.write('\tXS:A:' + pair.strand)
             filehandle.write('\n')
 
             readId += 1

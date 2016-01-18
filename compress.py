@@ -55,17 +55,16 @@ class Compressor:
                 else:
                     break
         self.chromosomes = self.parseSAMHeader(header)
-        print('Aligning')
         self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff, self.debug)
 
-        self.compressByCluster(samFilename, compressedFilename, min_filename)
+        self.compressByBundle(samFilename, compressedFilename, min_filename)
 
     def firstPass(self, samFilename, cutoff_z):
         '''
         Make a first pass over the file to determine the fragment length distribution and establish a cutoff for long fragments
         '''
 
-
+        # Count fragment lengths
         lens = dict()
         len_sum = 0
         N = 0
@@ -96,11 +95,6 @@ class Compressor:
             stdev += ((length - avg) ** 2) * freq
         stdev = math.sqrt(stdev / N)
 
-        #print('%d fragments' % N)
-        #print('Average fragment length: %f' % avg)
-        #print('Standard deviation: %f' % stdev)
-        #print('')
-
         self.frag_len_cutoff = int(avg + cutoff_z * stdev)
 
         print('Set fragment length cutoff to z=%f (%d) based on length distribution' % (cutoff_z, self.frag_len_cutoff))
@@ -127,13 +121,178 @@ class Compressor:
         #    print('z-score %0.1f (%d): %d / %d = %0.3f %%' % (zs[i], cutoffs[i], counts[i], N, 100.0*float(counts[i])/float(N)))
         #print('')
 
+    def compressByBundle(self, input_name, compressed_name, intermediate_name=None):
+        '''
+        Read a sorted SAM file and compress in segments determined by clusters of reads
 
-    def compressCluster(self, junctions, maxReadLen, filehandle):
+        :param filename:
+        :return:
+        '''
+
+        # If coverage is 0 for at least this many bases end of a potential gene
+        overlapRadius = 50
+
+        if self.debug:
+            start_time = time.time()
+
+        spliced_index = []
+        bundles = []
+
+        first = True
+
+        bundle_id = 0
+
+        read_id = 0
+
+        with open(input_name, 'r') as filehandle:
+            for line in filehandle:
+                row = line.strip().split('\t')
+
+                # Check if header line
+                if len(row) < 6:
+                    continue
+
+                if not row[2] in self.chromosomes.keys():
+                    print('Error! Chromosome ' + str(row[2]) + ' not found!')
+                    exit()
+
+                # Starting position of this read
+                start = self.aligned.chromOffsets[row[2]] + int(row[3])
+
+                if self.aligned.gene_bounds and start > (self.aligned.gene_bounds[-1] + overlapRadius):
+                    # Compress most recent bundle
+                    self.aligned.finalizeUnmatched()
+                    self.aligned.finalizeExons()
+                    self.aligned.finalize_cross_bundle_reads(bundle_id)
+                    bundle_id += 1
+
+                    bundles.append(self.aligned.exons)
+
+                    # Write to intermediate file
+                    if intermediate_name:
+                        if first:
+                            # If it's the first bundle, write the header as well
+                            with open(intermediate_name, 'w') as f1:
+                                read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
+                            first = False
+                        else:
+                            with open(intermediate_name, 'a') as f1:
+                                read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
+
+                    junctions, maxReadLen = self.aligned.computeBuckets()
+                    self.sortedJuncs = sorted(junctions.keys())
+
+                    # Compress bundle to temporary file
+                    if first:
+                        mode = 'wb'
+                    else:
+                        mode = 'ab'
+                    with open('temp.bin', mode) as f:
+                        l = self.compressBundle(junctions, maxReadLen, f)
+                        spliced_index.append(l)
+
+                    # Start new bundle
+                    self.aligned.resetBundle()
+                    self.aligned.exons.add(start)
+
+                # Process read
+                exons = self.parseCigar(row[5], int(row[3]))
+
+                # find XS (strand) and NH values
+                strand = None
+                NH = 1
+                for r in row[11 : len(row)]:
+                    if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
+                        strand = r[5]
+                    elif r[0:3] == 'NH:':
+                        NH = int(r[5:])
+
+                r = read.Read(row[2], exons, strand, NH)
+                if row[6] == '*':
+                    self.aligned.processRead(r, row[0], paired=False)
+                else:
+                    if row[6] == '=':
+                        r.pairChrom = row[2]
+                    else:
+                        r.pairChrom = row[6]
+                    r.pairOffset = int(row[7])
+                    self.aligned.processRead(r, row[0], paired=True)
+
+
+            # Compress final cluster
+            self.aligned.finalizeUnmatched()
+            self.aligned.finalizeExons()
+            self.aligned.finalize_cross_bundle_reads(bundle_id)
+            bundle_id += 1
+
+            bundles.append(self.aligned.exons)
+
+            # Write to intermediate file
+            if intermediate_name:
+                if first:
+                    # If it's the first bundle, write the header as well
+                    with open(intermediate_name, 'w') as f1:
+                        read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
+                    first = False
+                else:
+                    with open(intermediate_name, 'a') as f1:
+                        read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
+
+            junctions, maxReadLen = self.aligned.computeBuckets()
+            self.sortedJuncs = sorted(junctions.keys())
+
+            # Compress bundle to temporary file
+            if first:
+                mode = 'wb'
+            else:
+                mode = 'ab'
+            with open('temp.bin', mode) as f:
+                l = self.compressBundle(junctions, maxReadLen, f)
+                spliced_index.append(l)
+
+        leftovers = 0
+        for k,v in self.aligned.cross_bundle_reads.items():
+            #if len(v) > 0:
+            #    print(k)
+            #    print(v)
+            #    exit()
+            leftovers += len(v)
+        print('%d cross-bundle reads unmatched' % leftovers)
+
+        bundle_lens = [c[-1]-c[0] for c in bundles]
+        print('Minimum bundle length: %d' % min(bundle_lens))
+        print('Maximum bundle length: %d' % max(bundle_lens))
+        print('Average bundle length: %d'% (sum(bundle_lens) / len(bundle_lens)))
+
+        # Write index information and append spliced and unspliced files
+        with open(compressed_name, 'wb') as f:
+            s = binaryIO.writeChroms(self.aligned.chromosomes)
+            s += binaryIO.writeClusters(bundles)
+            s += binaryIO.writeList(spliced_index)
+            f.write(s)
+
+            # Compress bundle-spanning buckets
+            self.compressCrossBundle(self.aligned.cross_bundle_buckets, self.aligned.max_cross_bundle_read_len, bundle_id, f)
+
+            # Move contents of temporary file to output file
+            with open('temp.bin', 'rb') as f2:
+                f.write(f2.read())
+
+        os.remove('temp.bin')
+
+
+        if self.debug:
+            end_time = time.time()
+            print('Compression time: %0.3fs' % (end_time - start_time))
+
+
+    def compressBundle(self, junctions, maxReadLen, filehandle):
         # Determine the number of bytes for read lengths
         readLenBytes = binaryIO.findNumBytes(maxReadLen)
         cluster = binaryIO.valToBinary(1, readLenBytes)
         cluster += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
 
+        # TODO: No need for junc_lens?
         junc_lens = []
         junc_string = b''
         for j in self.sortedJuncs:
@@ -208,158 +367,6 @@ class Compressor:
         else:
             binaryIO.writeVal(filehandle, 1, 1)
             binaryIO.writeVal(filehandle, 1, 0)
-
-
-    def compressByCluster(self, input_name, compressed_name, intermediate_name=None):
-        '''
-        Read a sorted SAM file and compress in segments determined by clusters of reads
-
-        :param filename:
-        :return:
-        '''
-
-        # If coverage is 0 for at least this many bases end of a potential gene
-        overlapRadius = 50
-
-        if self.debug:
-            start_time = time.time()
-
-        spliced_index = []
-        bundles = []
-
-        first = True
-
-        bundle_id = 0
-
-        read_id = 0
-
-        with open(input_name, 'r') as filehandle:
-            for line in filehandle:
-                row = line.strip().split('\t')
-
-                # Check if header line
-                if len(row) < 6:
-                    continue
-
-                if not row[2] in self.chromosomes.keys():
-                    print('Error! Chromosome ' + str(row[2]) + ' not found!')
-                    exit()
-
-                start = self.aligned.chromOffsets[row[2]] + int(row[3])
-
-                if self.aligned.gene_bounds and start > (self.aligned.gene_bounds[-1] + overlapRadius):
-                    # Compress most recent cluster
-                    self.aligned.finalizeUnmatched()
-                    self.aligned.finalizeExons()
-                    self.aligned.finalize_cross_bundle_reads(bundle_id)
-                    bundle_id += 1
-
-                    bundles.append(self.aligned.exons)
-
-                    if intermediate_name:
-                        if first:
-                            with open(intermediate_name, 'w') as f1:
-                                read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
-                            first = False
-                        else:
-                            with open(intermediate_name, 'a') as f1:
-                                read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
-
-                    junctions, maxReadLen = self.aligned.computeJunctions()
-                    self.sortedJuncs = sorted(junctions.keys())
-
-                    with open('temp.bin', 'ab') as f:
-                        l = self.compressCluster(junctions, maxReadLen, f)
-                        spliced_index.append(l)
-
-                    # Start new cluster
-                    self.aligned.resetCluster()
-                    self.aligned.exons.add(start)
-
-                exons = self.parseCigar(row[5], int(row[3]))
-
-                # find XS and NH values
-                xs = None
-                NH = 1
-                for r in row[11 : len(row)]:
-                    if r[0:5] == 'XS:A:' or r[0:5] == 'XS:a:':
-                        xs = r[5]
-                    elif r[0:3] == 'NH:':
-                        NH = int(r[5:])
-
-                if row[0] == 'chr17:15339332-15466945C':
-                    print('\t'.join(row))
-
-                r = read.Read(row[2], exons, xs, NH)
-                if row[6] == '*':
-                    self.aligned.processRead(r, row[0], paired=False)
-                else:
-                    if row[6] == '=':
-                        r.pairChrom = row[2]
-                    else:
-                        r.pairChrom = row[6]
-                    r.pairOffset = int(row[7])
-                    self.aligned.processRead(r, row[0], paired=True)
-                if row[0] == 'chr17:15339332-15466945C':
-                    print('')
-
-
-            # Compress final cluster
-            self.aligned.finalizeUnmatched()
-            self.aligned.finalizeExons()
-            self.aligned.finalize_cross_bundle_reads(bundle_id)
-            bundle_id += 1
-
-            bundles.append(self.aligned.exons)
-
-            if intermediate_name:
-                if first:
-                    with open(intermediate_name, 'w') as f1:
-                        read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
-                    first = False
-                else:
-                    with open(intermediate_name, 'a') as f1:
-                        read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
-
-            junctions, maxReadLen = self.aligned.computeJunctions()
-            self.sortedJuncs = sorted(junctions.keys())
-
-            with open('temp.bin', 'ab') as f:
-                l = self.compressCluster(junctions, maxReadLen, f)
-                spliced_index.append(l)
-
-        leftovers = 0
-        for k,v in self.aligned.cross_bundle_reads.items():
-            if len(v) > 0:
-                print(k)
-                print(v)
-                exit()
-            leftovers += len(v)
-        print('%d cross-bundle reads unmatched' % leftovers)
-
-        bundle_lens = [c[-1]-c[0] for c in bundles]
-        print('Minimum bundle length: %d' % min(bundle_lens))
-        print('Maximum bundle length: %d' % max(bundle_lens))
-        print('Average bundle length: %d'% (sum(bundle_lens) / len(bundle_lens)))
-
-        # Write index information and append spliced and unspliced files
-        with open(compressed_name, 'wb') as f:
-            s = binaryIO.writeChroms(self.aligned.chromosomes)
-            s += binaryIO.writeClusters(bundles)
-            s += binaryIO.writeList(spliced_index)
-            f.write(s)
-
-            self.compressCrossBundle(self.aligned.cross_bundle_buckets, self.aligned.max_cross_bundle_read_len, bundle_id, f)
-
-            with open('temp.bin', 'rb') as f2:
-                f.write(f2.read())
-
-        os.remove('temp.bin')
-
-
-        if self.debug:
-            end_time = time.time()
-            print('Compression time: %0.3fs' % (end_time - start_time))
 
     def parseCigar(self, cigar, offset):
         ''' Parse the cigar string starting at the given index of the genome

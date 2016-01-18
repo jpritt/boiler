@@ -107,7 +107,7 @@ class Expander:
 
             # Read the rest of the junction information
             junc, startPos = binaryIO.readJunction(cluster, bucket.Bucket(exons, length, boundaries), readLenBytes, startPos)
-            junc.xs = key[-2]
+            junc.strand = key[-2]
             junc.NH = key[-1]
 
             junc.coverage = self.RLEtoVector(junc.coverage)
@@ -185,7 +185,7 @@ class Expander:
 
                 # Read the rest of the junction information
                 junc, pos = binaryIO.readJunction(chunk, junction.Junction(exons, length, boundaries), readLenBytes, pos)
-                junc.xs = key[-2]
+                junc.strand = key[-2]
                 junc.NH = key[-1]
 
                 junc.coverage = self.RLEtoVector(junc.coverage)
@@ -255,7 +255,7 @@ class Expander:
 
                 readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.xs, junc.NH))
+            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.strand, junc.NH))
 
         for p in paired:
             start = p[0][0]
@@ -301,7 +301,7 @@ class Expander:
                 readExonsB.append( [offsets[j]+juncOffset, end+juncOffset] )
 
             self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.xs, junc.NH))
+                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.strand, junc.NH))
 
 
     def expandCrossBundleBucket(self, bucket):
@@ -363,7 +363,7 @@ class Expander:
 
                 readExons.append( [offsets[j]+bucket_offset, end+bucket_offset] )
 
-            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, bucket.XS, bucket.NH))
+            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, bucket.strand, bucket.NH))
 
         for p in paired:
             start = p[0][0]
@@ -409,7 +409,7 @@ class Expander:
                 readExonsB.append( [offsets[j]+bucket_offset, end+bucket_offset] )
 
             self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, bucket.XS, bucket.NH))
+                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, bucket.strand, bucket.NH))
 
     def RLEtoVector(self, rle):
         ''' Convert a run length encoded vector to the original coverage vector '''
@@ -841,7 +841,7 @@ class Expander:
                 readExons.append( [offsets[j]+bucket_offset, end+bucket_offset] )
 
             if self.readOverlapsRegion(readExons, range_start, range_end):
-                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, bucket.XS, bucket.NH))
+                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, bucket.strand, bucket.NH))
 
         for p in paired:
             start = p[0][0]
@@ -887,7 +887,7 @@ class Expander:
                 readExonsB.append( [offsets[j]+bucket_offset, end+bucket_offset] )
 
             if self.readOverlapsRegion(readExonsA, range_start, range_end) or self.readOverlapsRegion(readExonsB, range_start, range_end):
-                paired_reads.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA, self.aligned.getChromosome(readExonsB[0][0]), readExonsB, bucket.XS, bucket.NH))
+                paired_reads.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA, self.aligned.getChromosome(readExonsB[0][0]), readExonsB, bucket.strand, bucket.NH))
 
     def getBundleReads(self, f, length, range_start, range_end, unpaired, paired):
         bundle = self.expandString(f.read(length))
@@ -929,7 +929,7 @@ class Expander:
             # Read the rest of the junction information
             b, startPos = binaryIO.readJunction(bundle, bucket.Bucket(exons, length, boundaries), readLenBytes, startPos)
             b.NH = float(key[-1])
-            b.XS = key[-2]
+            b.strand = key[-2]
             b.coverage = self.RLEtoVector(b.coverage)
 
             subexon_bounds = []
@@ -984,7 +984,7 @@ class Expander:
                 readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
             if self.readOverlapsRegion(readExons, range_start, range_end):
-                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, b.XS, b.NH))
+                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, b.strand, b.NH))
 
         for p in paired:
             start = p[0][0]
@@ -1031,7 +1031,7 @@ class Expander:
 
             if self.readOverlapsRegion(readExonsA, range_start, range_end) or self.readOverlapsRegion(readExonsB, range_start, range_end):
                 paired_reads.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
-                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, b.XS, b.NH))
+                                                     self.aligned.getChromosome(readExonsB[0][0]), readExonsB, b.strand, b.NH))
 
 
     def readOverlapsRegion(self, exons, start, end):

@@ -226,8 +226,8 @@ def writeJunctionsList(junctions, exonBytes):
         # Second byte: Number of exons in junction
         # These could probably be combined into a single byte, but I'm keeping them separate just in case
         #   A junction ever contains more than 64 subexons
-        xs = int(j[-2])
-        s += pack('b', xs)
+        strand = int(j[-2])
+        s += pack('b', strand)
         s += pack('B', len(j)-2)
 
         '''
@@ -251,11 +251,11 @@ def readJunctionsList(s, start=0):
     for j in range(numJunctions):
         # Read xs value
         v = unpack_from('b', s[start:start+1])[0]
-        xs = None
+        strand = None
         if v == -1:
-            xs = '-'
+            strand = '-'
         elif v == 1:
-            xs = '+'
+            strand = '+'
 
         # Read number of exons
         num_exons = unpack_from('B', s[start+1:start+2])[0]
@@ -269,10 +269,10 @@ def readJunctionsList(s, start=0):
 
         # Read XS value
         if v < 0:
-            xs = '-'
+            strand = '-'
             numExons = -v
         else:
-            xs = '+'
+            strand = '+'
             numExons = v
         '''
 
@@ -285,7 +285,7 @@ def readJunctionsList(s, start=0):
         NH, start = binaryToVal(s, 2, start)
 
         # Create junction string
-        junctions[j] = juncExons + [xs, NH]
+        junctions[j] = juncExons + [strand, NH]
 
     return junctions, exonBytes, start
 
@@ -355,9 +355,9 @@ def readCrossBundleBucketNames(s, num_buckets, bundleIdBytes, start=0):
         exon_time += t3-t2 + t5-t4
         bucket_time += t6-t5
 
-    print('Id time: %f' % id_time)
-    print('Exon time: %f' % exon_time)
-    print('Bucket time: %f' % bucket_time)
+    #print('Id time: %f' % id_time)
+    #print('Exon time: %f' % exon_time)
+    #print('Bucket time: %f' % bucket_time)
 
 
     return buckets, start
@@ -367,7 +367,7 @@ def writeCrossBundleBucket(readLenBytes, bucket):
     #s += writeList(bucket.exonIdsA)
     #s += valToBinary(bundleIdBytes, bucket.bundleB)
     #s += writeList(bucket.exonIdsB)
-    s = pack('b', bucket.XS)
+    s = pack('b', bucket.strand)
     s += valToBinary(1, bucket.NH)
 
     s += writeCov(bucket.coverage)
@@ -388,16 +388,16 @@ def writeCrossBundleBucket(readLenBytes, bucket):
 
 def readCrossBundleBucket(s, bucket, readLenBytes, start=0):
     v = unpack_from('b', s[start:start+1])[0]
-    XS = None
+    strand = None
     if v == -1:
-        XS = '-'
+        strand = '-'
     elif v == 1:
-        XS = '+'
+        strand = '+'
     start += 1
 
     NH, start = binaryToVal(s, 1, start)
 
-    bucket.XS = XS
+    bucket.strand = strand
     bucket.NH = NH
 
     coverage, start = readCov(s, start)
