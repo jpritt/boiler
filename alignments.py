@@ -14,13 +14,11 @@ import time
 class Alignments:
     ''' A set of reads aligned to a genome '''
 
-    def __init__(self, chromosomes, frag_len_cutoff=None, debug=False):
+    def __init__(self, chromosomes, frag_len_cutoff=None):
         ''' Initialize a genome for alignments
 
             chromosomes: A dictionary with keys corresponding to chromosome names and values corresponding to lengths
         '''
-
-        self.debug = debug
 
         self.frag_len_cutoff = frag_len_cutoff
 
@@ -62,14 +60,16 @@ class Alignments:
 
         self.max_cross_bundle_read_len = 0
 
-
         self.unpaired = []
         self.paired = []
 
-    def processRead(self, read, name, paired):
+    def processRead(self, read, id, pair_id):
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
         '''
+
+        # last id seen
+        self.last_id = id
 
         # Update read location for chromosome
         offset = self.chromOffsets[read.chrom]
@@ -86,7 +86,7 @@ class Alignments:
         # Update the boundaries of the current bundle
         #self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
-        if not paired:  # unpaired read
+        if pair_id == -1:  # unpaired read
             # Update the boundaries of the current bundle
             self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
@@ -95,59 +95,32 @@ class Alignments:
             # update pair location for chromsome
             read.pairOffset += self.chromOffsets[read.pairChrom]
 
-            fragment_len = abs(read.pairOffset - read.exons[0][0])
-            if not (read.chrom == read.pairChrom) or (self.frag_len_cutoff and fragment_len > self.frag_len_cutoff):
-                # If the pair is very long, it might be a bundle-spanning pair
+            if id < pair_id:
+                fragment_len = abs(read.pairOffset - read.exons[0][0])
+                if not (read.chrom == read.pairChrom) or (self.frag_len_cutoff and fragment_len > self.frag_len_cutoff):
+                    # If the pair is very long, it might be a bundle-spanning pair
+                    self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
+                else:
+                    # The pair is not too long, so the current bundle should contain it
+                    self.update_gene_bounds(read.exons[0][0], max(read.exons[-1][1],read.pairOffset))
 
+                self.unmatched[id] = read
+
+            else:
+                # Update the boundaries of the current bundle
                 self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
-                # Look for a match in the bundle-spanning reads from previous bundles
-                found_match = False
-                if name in self.cross_bundle_reads:
-                    i = self.find_mate(read, name, self.cross_bundle_reads)
-                    if i >= 0:
-                        found_match = True
-                        match = self.cross_bundle_reads[name][i]
-                        self.cross_bundle_pairs.append([match, read])
-                        del self.cross_bundle_reads[name][i]
+                match = self.unmatched[pair_id]
 
-                # We might just be in a long bundle -- look for a match in the other long reads from this bundle
-                if not found_match and name in self.curr_cross_bundle_reads:
-                    i = self.find_mate(read, name, self.curr_cross_bundle_reads)
-                    if i >= 0:
-                        found_match = True
-                        match = self.curr_cross_bundle_reads[name][i]
-                        #self.cross_bundle_pairs.append([match, read])
-                        self.add_paired(match, read)
-                        del self.curr_cross_bundle_reads[name][i]
-
-                # No matches found, so add it to the long reads buffer for the current bundle
-                if not found_match:
-                    if name in self.curr_cross_bundle_reads:
-                        self.curr_cross_bundle_reads[name].append(read)
-                    else:
-                        self.curr_cross_bundle_reads[name] = [read]
-            else:
-                # The pair is not too long, so the current bundle should contain it
-
-                self.update_gene_bounds(read.exons[0][0], max(read.exons[-1][1],read.pairOffset))
-
-                # Look for a mate among previous reads
-                if name in self.unmatched:
-                    i = self.find_mate(read, name, self.unmatched)
-                    if i == -1:
-                        self.unmatched[name].append(read)
-                    else:
-                        match = self.unmatched[name][i]
-
-                        if match.exons[0][0] == read.exons[0][0] and match.exons[-1][1] > read.exons[-1][1]:
-                            self.add_paired(read, match)
-                        else:
-                            self.add_paired(match, read)
-
-                        del self.unmatched[name][i]
+                if not match.bundle == read.bundle:
+                    self.cross_bundle_pairs.append([match, read])
                 else:
-                    self.unmatched[name] = [read]
+                    if match.exons[0][0] == read.exons[0][0] and match.exons[-1][1] > read.exons[-1][1]:
+                        self.add_paired(read, match)
+                    else:
+                        self.add_paired(match, read)
+
+                del self.unmatched[pair_id]
 
     def find_mate(self, read, name, unmatched):
         '''
@@ -257,45 +230,28 @@ class Alignments:
         '''
         Process the list of reads with mates outside this bundle
         '''
-
-        # curr_cross_bundle_reads is a buffer containing potential cross-bundle reads from the current bundle.
-        for name,reads in self.curr_cross_bundle_reads.items():
-            i = 0
-            while i < len(reads):
-                read = reads[i]
-                if read.pairOffset >= self.gene_bounds[0] and read.pairOffset < self.gene_bounds[1]:
-                    # Read's mate should lie in the current bundle -- the only explanation is that the pair is discordant
-                    self.add_unpaired(read)
-                    del reads[i]
-                else:
-                    # Read's mate lies in another bundle
-                    read.bundle = bundle_id
-                    read.exonIds, read.length = self.getExonIds(read.exons)
-                    read.bucket_length = sum([self.exons[e+1]-self.exons[e] for e in read.exonIds])
-                    read.startOffset = read.exons[0][0] - self.exons[read.exonIds[0]]
-                    read.endOffset = self.exons[read.exonIds[-1]+1] - read.exons[-1][1]
-                    i += 1
-
-            # Move remaining reads from this buffer to the cross_bundle_reads list
-            if name in self.cross_bundle_reads:
-                self.cross_bundle_reads[name] += reads
-            else:
-                self.cross_bundle_reads[name] = reads
+        for id,read in self.unmatched.items():
+            if not hasattr(read, 'exonIds'):
+                read.exonIds, read.length = self.getExonIds(read.exons)
+                read.bucket_length = sum([self.exons[e+1]-self.exons[e] for e in read.exonIds])
+                read.startOffset = read.exons[0][0] - self.exons[read.exonIds[0]]
+                read.endOffset = self.exons[read.exonIds[-1]+1] - read.exons[-1][1]
 
         # Finalize cross-bundle pairs that were discovered in this bundle
         for p in self.cross_bundle_pairs:
-            if not hasattr(p[0],'bundle'):
-                p[0].bundle = bundle_id
+            if not hasattr(p[0], 'exonIds'):
+                #p[0].bundle = bundle_id
                 p[0].exonIds, p[0].length = self.getExonIds(p[0].exons)
                 p[0].bucket_length = sum([self.exons[e+1]-self.exons[e] for e in p[0].exonIds])
                 p[0].startOffset = p[0].exons[0][0] - self.exons[p[0].exonIds[0]]
                 p[0].endOffset = self.exons[p[0].exonIds[-1]+1] - p[0].exons[-1][1]
-            if not hasattr(p[1],'bundle'):
-                p[1].bundle = bundle_id
+            if not hasattr(p[1], 'exonIds'):
+                #p[1].bundle = bundle_id
                 p[1].exonIds, p[1].length = self.getExonIds(p[1].exons)
                 p[1].bucket_length = sum([self.exons[e+1]-self.exons[e] for e in p[1].exonIds])
                 p[1].startOffset = p[1].exons[0][0] - self.exons[p[1].exonIds[0]]
                 p[1].endOffset = self.exons[p[1].exonIds[-1]+1] - p[1].exons[-1][1]
+
 
             # Update maximum length of a read in a cross-bucket bundle (needed to efficiently store length distribution)
             if p[0].length > self.max_cross_bundle_read_len:
@@ -502,7 +458,7 @@ class Alignments:
 
 
 
-    def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage, boundaries=None, debug=False):
+    def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage, boundaries=None):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
 

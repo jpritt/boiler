@@ -36,31 +36,17 @@ class Expander:
         self.force_xs = force_xs
 
 
-    def expand(self, compressedFilename, uncompressedFilename, binary=False, debug=False):
+    def expand(self, compressedFilename, uncompressedFilename):
         ''' Expand both spliced and unspliced alignments
         '''
-        self.debug = debug
 
         self.aligned = None
 
-        if binary:
-            with open(compressedFilename, 'rb') as f:
-                if self.debug:
-                    start = time.time()
+        with open(compressedFilename, 'rb') as f:
+            chroms = binaryIO.readChroms(f)
+            self.aligned = alignments.Alignments(chroms)
 
-                chroms = binaryIO.readChroms(f)
-                self.aligned = alignments.Alignments(chroms, self.debug)
-
-                self.expandByCluster(f, uncompressedFilename)
-
-                if self.debug:
-                    end = time.time()
-                    print('Decompression time: %0.3fs' % (end-start))
-
-        else:
-            print('Non-binary expanding not supported')
-            exit()
-
+            self.expandByCluster(f, uncompressedFilename)
 
     def expandByCluster(self, f, out_name):
         self.bundles = binaryIO.readClusters(f)
@@ -200,7 +186,7 @@ class Expander:
     '''
 
     def expandJunc(self, junc):
-        unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries, self.debug)
+        unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries)
 
 
         numP = len(paired)

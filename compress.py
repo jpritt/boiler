@@ -10,6 +10,7 @@ import math
 import readNode
 import time
 import os
+import preprocess
 
 class Compressor:
     aligned = None
@@ -33,18 +34,19 @@ class Compressor:
             print('Set fragment length cutoff to %d' % frag_len_cutoff)
         self.frag_len_cutoff = frag_len_cutoff
 
-    def compress(self, samFilename, compressedFilename, min_filename=None, frag_len_z_cutoff=None, binary=False, debug=False):
+    def compress(self, samFilename, compressedFilename, min_filename, frag_len_z_cutoff, split_diff_strands, split_discordant):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
 
             file_prefix: Prefix for all output file names
         '''
 
-        if not(frag_len_z_cutoff == None) and not self.frag_len_cutoff:
-            self.firstPass(samFilename, frag_len_z_cutoff)
-        elif not self.frag_len_cutoff:
-            print('No fragment length cutoff')
+        print('Preprocessing')
+        self.p = preprocess.Preprocessor(samFilename, frag_len_z_cutoff, split_diff_strands, split_discordant)
+        print('Done!')
 
-        self.debug = debug
+        if not self.frag_len_cutoff:
+            self.frag_len_cutoff = self.p.frag_len_cutoff
+        print('Using fragment length cutoff of ' + str(self.frag_len_cutoff))
 
         # Read header
         header = ''
@@ -55,71 +57,9 @@ class Compressor:
                 else:
                     break
         self.chromosomes = self.parseSAMHeader(header)
-        self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff, self.debug)
+        self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff)
 
         self.compressByBundle(samFilename, compressedFilename, min_filename)
-
-    def firstPass(self, samFilename, cutoff_z):
-        '''
-        Make a first pass over the file to determine the fragment length distribution and establish a cutoff for long fragments
-        '''
-
-        # Count fragment lengths
-        lens = dict()
-        len_sum = 0
-        N = 0
-        with open(samFilename, 'r') as f:
-            for line in f:
-                row = line.rstrip().split('\t')
-                if len(row) < 6:
-                    continue
-
-                if row[6] == '=':
-                    frag_len = int(row[7]) - int(row[3])
-                    if frag_len >= 0:
-                        len_sum += frag_len
-                        N += 1
-
-                        if frag_len in lens:
-                            lens[frag_len] += 1
-                        else:
-                            lens[frag_len] = 1
-
-        if N == 0:
-            return 0
-
-        # Calculate average and standard deviation
-        avg = float(len_sum) / float(N)
-        stdev = 0.0
-        for length,freq in lens.items():
-            stdev += ((length - avg) ** 2) * freq
-        stdev = math.sqrt(stdev / N)
-
-        self.frag_len_cutoff = int(avg + cutoff_z * stdev)
-
-        print('Set fragment length cutoff to z=%f (%d) based on length distribution' % (cutoff_z, self.frag_len_cutoff))
-        count_longer = 0
-        for l,f in lens.items():
-            if l > self.frag_len_cutoff:
-                count_longer += f
-        print('%0.2f %% of pairs are longer than the cutoff' % (100.0 * float(count_longer) / float(N)))
-
-        # Test different z scores
-        #zs = [2, 2.5, 3, 3.5, 4, 5, 6, 7, 8]
-        #cutoffs = [avg + c * stdev for c in zs]
-        #num_c = len(cutoffs)
-        #counts = [0] *  num_c
-
-        #for length,freq in lens.items():
-        #    for i in range(num_c):
-        #        if length > cutoffs[i]:
-        #            counts[i] += freq
-        #        else:
-        #            break
-
-        #for i in range(num_c):
-        #    print('z-score %0.1f (%d): %d / %d = %0.3f %%' % (zs[i], cutoffs[i], counts[i], N, 100.0*float(counts[i])/float(N)))
-        #print('')
 
     def compressByBundle(self, input_name, compressed_name, intermediate_name=None):
         '''
@@ -132,9 +72,6 @@ class Compressor:
         # If coverage is 0 for at least this many bases end of a potential gene
         overlapRadius = 50
 
-        if self.debug:
-            start_time = time.time()
-
         spliced_index = []
         bundles = []
 
@@ -145,6 +82,7 @@ class Compressor:
         read_id = 0
 
         with open(input_name, 'r') as filehandle:
+            id = 0
             for line in filehandle:
                 row = line.strip().split('\t')
 
@@ -161,8 +99,9 @@ class Compressor:
 
                 if self.aligned.gene_bounds and start > (self.aligned.gene_bounds[-1] + overlapRadius):
                     # Compress most recent bundle
-                    self.aligned.finalizeUnmatched()
+                    #self.aligned.finalizeUnmatched()
                     self.aligned.finalizeExons()
+                    #print(self.aligned.exons)
                     self.aligned.finalize_cross_bundle_reads(bundle_id)
                     bundle_id += 1
 
@@ -174,7 +113,6 @@ class Compressor:
                             # If it's the first bundle, write the header as well
                             with open(intermediate_name, 'w') as f1:
                                 read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
-                            first = False
                         else:
                             with open(intermediate_name, 'a') as f1:
                                 read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
@@ -195,6 +133,8 @@ class Compressor:
                     self.aligned.resetBundle()
                     self.aligned.exons.add(start)
 
+                    first = False
+
                 # Process read
                 exons = self.parseCigar(row[5], int(row[3]))
 
@@ -208,16 +148,17 @@ class Compressor:
                         NH = int(r[5:])
 
                 r = read.Read(row[2], exons, strand, NH)
-                if row[6] == '*':
-                    self.aligned.processRead(r, row[0], paired=False)
-                else:
+                pair_id = self.p.get_pair(id)
+                if pair_id >= 0:
+                    r.bundle = bundle_id
+                    r.pairOffset = int(row[7])
                     if row[6] == '=':
                         r.pairChrom = row[2]
                     else:
                         r.pairChrom = row[6]
-                    r.pairOffset = int(row[7])
-                    self.aligned.processRead(r, row[0], paired=True)
+                self.aligned.processRead(r, id, pair_id)
 
+                id += 1
 
             # Compress final cluster
             self.aligned.finalizeUnmatched()
@@ -279,11 +220,6 @@ class Compressor:
                 f.write(f2.read())
 
         os.remove('temp.bin')
-
-
-        if self.debug:
-            end_time = time.time()
-            print('Compression time: %0.3fs' % (end_time - start_time))
 
 
     def compressBundle(self, junctions, maxReadLen, filehandle):

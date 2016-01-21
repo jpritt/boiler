@@ -128,11 +128,11 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
                                 break
 
                         if not foundMatch:
-                            unmatched[name].append((int(row[3]), exons, int(row[7]), int(row[8])))
+                            unmatched[name].append((int(row[3]), exons, int(row[7])))
                     else:
-                        unmatched[name] = [(int(row[3]), exons, int(row[7]), int(row[8]))]
+                        unmatched[name] = [(int(row[3]), exons, int(row[7]))]
 
-            reads.append((row[2], int(row[3]), genCigar(exons), row[6], int(row[7]), int(row[8])))
+            reads.append((row[2], int(row[3]), genCigar(exons), row[6], int(row[7])))
 
     for k,v in unmatched.items():
         countDiscordant += len(v)
@@ -197,6 +197,10 @@ def compareSAMs(file1, file2):
         # Pairing
         tp = 0
         id = 0
+
+        # Set index to 1 when we've matched to a read
+        counted = [0] * len(reads2)
+
         for r in reads1:
             while id < len(reads2) and reads2[id] < r:
                 id += 1
@@ -204,6 +208,9 @@ def compareSAMs(file1, file2):
             if id < len(reads2) and reads2[id] == r:
                     tp += 1
                     id += 1
+            else:
+                print(r)
+
         TP_pairs += tp
         FN_pairs += len(reads1) - tp
         FP_pairs += len(reads2) - tp

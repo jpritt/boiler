@@ -12,14 +12,6 @@ import compress
 VERSION = '0.0.1'
 
 def go(args):
-    binary = False
-    if args.binary:
-        binary = True
-
-    debug = False
-    if args.debug:
-        debug = True
-
     compressedName = 'compressed.bin'
     if args.output:
         compressedName = args.output
@@ -38,7 +30,7 @@ def go(args):
         #import io
         #pr = cProfile.Profile()
         #pr.enable()
-        compressor.compress(args.alignments, compressedName, args.intermediate, args.frag_len_z_cutoff, binary, debug)
+        compressor.compress(args.alignments, compressedName, args.intermediate, args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
         #pr.disable()
         #s = io.StringIO()
         #sortby = 'tottime'
@@ -61,7 +53,7 @@ def go(args):
         startTime = time.time()
 
 
-        expander.expand(compressedName, args.expand_to, binary, debug)
+        expander.expand(compressedName, args.expand_to)
 
 
         endTime = time.time()
@@ -80,14 +72,14 @@ if __name__ == '__main__':
     parser.add_argument('--compress', help="Run compression", action="store_true")
     parser.add_argument('--decompress', help="Run decompression", action="store_true")
     parser.add_argument('--alignments', type=str, help='Full path of SAM file containing aligned reads')
-    parser.add_argument("--binary", help="Write in binary format", action="store_true")
     parser.add_argument("--expand-to", type=str, help="After compressing, decompress to this filename")
     parser.add_argument("--output", type=str, help="Compressed filename")
     parser.add_argument("--intermediate", type=str, help="Name of SAM file to write to after processing but before compressing")
-    parser.add_argument("--debug", help="Print debug information", action="store_true")
     parser.add_argument("--force-xs", help="If we decompress a spliced read with no XS value, assign it a random one (so Cufflinks can run)", action="store_false")
     parser.add_argument("--frag-len-cutoff", type=int, help='Store any fragments longer than this in a bundle-spanning bucket')
     parser.add_argument("--frag-len-z-cutoff", type=float, help='Store any fragments above this z-score in a bundle-spanning bucket')
+    parser.add_argument("--split-diff-strands", action="store_true", help='Split any pairs with different XS values')
+    parser.add_argument("--split-discordant", action="store_true", help='Treat discordant pairs as unpaired reads')
 
     args = parser.parse_args(sys.argv[1:])
 

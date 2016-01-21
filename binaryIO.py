@@ -225,7 +225,7 @@ def writeJunctionsList(junctions, exonBytes):
         # First byte: XS value, 0 = None, -1 = -, 1 = +
         # Second byte: Number of exons in junction
         # These could probably be combined into a single byte, but I'm keeping them separate just in case
-        #   A junction ever contains more than 64 subexons
+        #   a junction ever contains more than 64 subexons
         strand = int(j[-2])
         s += pack('b', strand)
         s += pack('B', len(j)-2)
