@@ -14,13 +14,14 @@ import time
 class Alignments:
     ''' A set of reads aligned to a genome '''
 
-    def __init__(self, chromosomes, frag_len_cutoff=None):
+    def __init__(self, chromosomes, frag_len_cutoff=None, split_discordant=True):
         ''' Initialize a genome for alignments
 
             chromosomes: A dictionary with keys corresponding to chromosome names and values corresponding to lengths
         '''
 
         self.frag_len_cutoff = frag_len_cutoff
+        self.split_discordant = split_discordant
 
         self.chromosomes = chromosomes
         self.chromosomeNames = sorted(chromosomes.keys())
@@ -115,10 +116,15 @@ class Alignments:
                 if not match.bundle == read.bundle:
                     self.cross_bundle_pairs.append([match, read])
                 else:
-                    if match.exons[0][0] == read.exons[0][0] and match.exons[-1][1] > read.exons[-1][1]:
+                    if match.exons[0][0] < read.exons[0][0]:
+                        self.add_paired(match, read)
+                    elif match.exons[0][0] > read.exons[0][0]:
                         self.add_paired(read, match)
                     else:
-                        self.add_paired(match, read)
+                        if match.exons[-1][1] > read.exons[-1][1]:
+                            self.add_paired(read, match)
+                        else:
+                            self.add_paired(match, read)
 
                 del self.unmatched[pair_id]
 
@@ -200,9 +206,22 @@ class Alignments:
         '''
         Create a single paired read from these two reads and add it to the paired list
         '''
+
+
         strand = read1.strand or read2.strand
         NH = min(read1.NH, read2.NH)
         p = pairedread.PairedRead(read1.chrom, read1.exons, read2.chrom, read2.exons, strand, NH)
+
+        if not self.split_discordant and read1.chrom == read2.chrom and self.conflicts(read1.exons, read2.exons):
+            p.discordant = True
+            #if not read1.name == read2.name:
+            #    print('Names %s, %s do not match' % (read1.name, read2.name))
+            #    exit()
+            #print(read1.name)
+            #exit()
+        else:
+            p.discordant = False
+
         self.paired.append(p)
 
     def finalizeUnmatched(self):
@@ -362,11 +381,11 @@ class Alignments:
 
     def finalize_paired_read(self, p):
         # TODO: Take this out
-        if p.exonsB[0][0] < p.exonsA[0][0] or p.exonsA[-1][1] > p.exonsB[-1][1]:
-            print('Weird reads:')
-            print(p.exonsA)
-            print(p.exonsB)
-            print('')
+        #if p.exonsB[0][0] < p.exonsA[0][0] or p.exonsA[-1][1] > p.exonsB[-1][1]:
+        #    print('Weird reads:')
+        #    print(p.exonsA)
+        #    print(p.exonsB)
+        #    print('')
 
         # Find what range of subexon ids contains this pair
         #for i in range(len(self.exons)-1):
@@ -404,10 +423,13 @@ class Alignments:
 
         p.endOffset = self.exons[id] - p.exonsB[-1][1]
 
-        n = 0
-        while n < len(exonIdsA) and exonIdsA[n] < exonIdsB[0]:
-            n += 1
-        p.exonIds = exonIdsA[:n] + exonIdsB
+        if p.discordant:
+            p.exonIds = exonIdsA + exonIdsB
+        else:
+            n = 0
+            while n < len(exonIdsA) and exonIdsA[n] < exonIdsB[0]:
+                n += 1
+            p.exonIds = exonIdsA[:n] + exonIdsB
 
     def finalize_unpaired_read(self, r):
         # Exon ids spanned by read
@@ -1910,7 +1932,7 @@ class Alignments:
             cigarB = ''.join(cigarB)
 
             # Distance from start of first read to end of second read
-            totalLen = exonsB[-1][1] - exonsA[0][0]
+            totalLen = max(exonsA[-1][1],exonsB[-1][1]) - exonsA[0][0]
 
             chromA = pair.chromA
             chromB = pair.chromB
@@ -1925,20 +1947,29 @@ class Alignments:
                 else:
                     pair.strand = '-'
 
-
+            #if chromA == chromB and self.conflicts(exonsA, exonsB):
+            #    if pair.strand:
+            #        filehandle.write(chromA+':'+str(readId) + '\t0\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t*\t0\t0\t*\t*\tNH:i:' + str(pair.NH) + '\tXS:A:' + pair.strand + '\n')
+            #        readId += 1
+            #        filehandle.write(chromB+':'+str(readId) + '\t0\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t*\t0\t0\t*\t*\tNH:i:' + str(pair.NH) + '\tXS:A:' + pair.strand + '\n')
+            #    else:
+            #        filehandle.write(chromA+':'+str(readId) + '\t0\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t*\t0\t0\t*\t*\tNH:i:' + str(pair.NH) + '\n')
+            #        readId += 1
+            #        filehandle.write(chromB+':'+str(readId) + '\t0\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t*\t0\t0\t*\t*\tNH:i:' + str(pair.NH) + '\n')
+            #else:
             if chromB == chromA:
-                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
             else:
-                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
 
             if pair.strand:# and 'N' in cigarA:
                 filehandle.write('\tXS:A:' + pair.strand)
             filehandle.write('\n')
 
             if chromB == chromA:
-                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
             else:
-                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
             if pair.strand:# and 'N' in cigarB:
                 filehandle.write('\tXS:A:' + pair.strand)
             filehandle.write('\n')

@@ -57,7 +57,7 @@ class Compressor:
                 else:
                     break
         self.chromosomes = self.parseSAMHeader(header)
-        self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff)
+        self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff, split_discordant)
 
         self.compressByBundle(samFilename, compressedFilename, min_filename)
 
@@ -148,6 +148,7 @@ class Compressor:
                         NH = int(r[5:])
 
                 r = read.Read(row[2], exons, strand, NH)
+                r.name = row[0]
                 pair_id = self.p.get_pair(id)
                 if pair_id >= 0:
                     r.bundle = bundle_id
