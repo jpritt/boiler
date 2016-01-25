@@ -70,7 +70,7 @@ class Preprocessor:
             mates = self.unmatched[name]
             for i in range(len(mates)):
                 mate = mates[i]
-                if chrom == mate[3] and mate_chrom == mate[1] and pos == mate[4] and mate_pos == mate[2] and (not chrom == mate_chrom or not self.conflicts(exons, mate[5])) and strand == mate[6]:
+                if chrom == mate[3] and mate_chrom == mate[1] and pos == mate[4] and mate_pos == mate[2] and (not chrom == mate_chrom or not self.conflicts(exons, mate[5])) and (strand == 0 or mate[6] == 0 or strand == mate[6]):
                     # Perfect match
                     self.pairing[id] = mate[0]
                     self.pairing[mate[0]] = id
@@ -107,7 +107,7 @@ class Preprocessor:
                     while j < len(reads):
                         if reads[i][1] == reads[j][3] and reads[i][3] == reads[j][1] and reads[i][2] == reads[j][4] and reads[i][4] == reads[j][2]:
                             if not split_discordant or not reads[i][1] == reads[i][3] or not self.conflicts(reads[i][5], reads[j][5]):
-                                if not split_diff_strand or reads[i][6] == reads[j][6]:
+                                if not split_diff_strand or (reads[i][6] == 0 or reads[j][6] == 0 or reads[i][6] == reads[j][6]):
                                     self.pairing[reads[i][0]] = reads[j][0]
                                     self.pairing[reads[j][0]] = reads[i][0]
 

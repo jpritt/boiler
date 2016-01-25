@@ -1793,7 +1793,8 @@ class Alignments:
                 if r:
                     reads = r
                 else:
-                    #print('Skipping final read of length %d' % (readEnd-start))
+                    # We want to make sure that coverage ends at the right place
+                    reads = self.add_read(reads, [readEnd - min_len, readEnd])
                     for i in range(start, readEnd):
                         cov[i] -= 1
             else:
