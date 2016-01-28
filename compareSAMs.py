@@ -208,8 +208,8 @@ def compareSAMs(file1, file2):
             if id < len(reads2) and reads2[id] == r:
                     tp += 1
                     id += 1
-            else:
-                print(r)
+            #else:
+            #    print(r)
 
         TP_pairs += tp
         FN_pairs += len(reads1) - tp

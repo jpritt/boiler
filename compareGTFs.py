@@ -86,8 +86,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     totalScore = 0.0
     threshold = 10
 
-    print('Precision:')
-    chromCounts = dict()
     transcriptsTrueCount = 0
     line = 0
     countUnmatched = 0
@@ -111,20 +109,14 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
             totalScore += closestScore
         else:
             countUnmatched += 1
-            print('%s (%s:%d-%d)' % (t1.name, t1.chrom, t1.start, t1.end))
-            if t1.chrom in chromCounts:
-                chromCounts[t1.chrom] += 1
-            else:
-                chromCounts[t1.chrom] = 1
         transcriptsTrueCount += 1
-    print(chromCounts)
-    print('%d / %d unmatched true transcripts' % (countUnmatched, transcriptsTrueCount))
-    print('')
+    recall = float(totalScore) / float(transcriptsTrueCount)
+    print 'Recall    = TP/T = ' + str(recall)
     
-    print('Recall:')
-    chromCounts = dict()
     line = 0
     countUnmatched = 0
+    totalScore = 0
+    transcriptsPredictedCount = 0
     for t1 in transcriptsPredicted:
         line += 1
 
@@ -145,19 +137,7 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
             totalScore += closestScore
         else:
             countUnmatched += 1
-            print('%s (%s:%d-%d)' % (t1.name, t1.chrom, t1.start, t1.end))
-            if t1.chrom in chromCounts:
-                chromCounts[t1.chrom] += 1
-            else:
-                chromCounts[t1.chrom] = 1
-    print(chromCounts)
-    transcriptsPredictedCount = len(transcriptsPredicted)
-    print('%d / %d unmatched predicted transcripts' % (countUnmatched, transcriptsPredictedCount))
-    print('')
-
-    recall = float(totalScore) / float(transcriptsTrueCount)
-    print 'Recall    = TP/T = ' + str(recall)
-
+        transcriptsPredictedCount += 1
     precision = float(totalScore) / float(transcriptsPredictedCount)
     print 'Precision    = TP/P = ' + str(precision)
 

@@ -471,7 +471,6 @@ class Expander:
             st = time.time()
             coverage = self.getAllCrossBucketsCoverage(f, coverage, start_i, end_i, start, end)
             en = time.time()
-            print('%f s to get cross buckets coverage' % (en-st))
 
             processT = 0.0
 
@@ -479,11 +478,9 @@ class Expander:
             st = time.time()
             for i in range(start_i, end_i):
                 self.aligned.exons = self.bundles[i]
-                #print('Bundle %d - %d (%d)' % (bundles[i][0], bundles[i][-1], bundles[i][-1]-bundles[i][0]))
                 coverage, t = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
                 processT += t
             en = time.time()
-            print('%f s to process bundles %d - %d' % (en-st, start_i, end_i))
 
         return coverage
 
@@ -502,9 +499,7 @@ class Expander:
             buckets, startPos = binaryIO.readCrossBundleBucketNames(index, num_buckets, bundleIdBytes, startPos)
             en = time.time()
             chunk_lens, startPos = binaryIO.readList(index, startPos)
-            print('Parsing header time: %f s' % (en-st))
 
-            print('%d cross-bundle buckets' % num_buckets)
             curr_bucket = 0
             skip = 0
 

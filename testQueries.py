@@ -131,19 +131,15 @@ def queryCoverageInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chr
                 lens.append(b[1]-b[0])
 
                 startTime = time.time()
-                ##trueCov = sam.getCoverage(c, b[0], b[1])
-                #os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
+                #trueCov = sam.getCoverage(c, b[0], b[1])
+                os.system("samtools view -b -h " + bamFile + " " + c + ":" + str(b[0]) + "-" + str(b[1]) + " | " + bedtoolsPath + "/bin/genomeCoverageBed -bga -split -ibam stdin -g " + chromsFile + " > coverage.txt")
                 endTime = time.time()
                 timesTrue.append(endTime - startTime)
 
                 startTime = time.time()
                 predCov = expander.getCoverage(filename, c, b[0], b[1])
-                #print(predCov)
-                print('Total coverage for %d -- %d: %d' % (b[0], b[1], sum(predCov)))
                 endTime = time.time()
                 timesPred.append(endTime - startTime)
-
-                break
 
     print('Average SAM query time:    %fs' % (sum(timesTrue) / len(timesTrue)))
     print('Average Boiler query time: %fs' % (sum(timesPred) / len(timesPred)))

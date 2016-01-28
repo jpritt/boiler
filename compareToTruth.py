@@ -92,10 +92,7 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
 
     totalScore1 = 0.0
     transcriptsTrueCount = 0
-    line = 0
     for t1 in transcriptsTrue:
-        line += 1
-
         closestScore = 0.0
         closestT = None
         
@@ -107,24 +104,11 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
 
         if closestScore > 0:
             totalScore1 += closestScore * t1.cov
-            #totalScore1 += closestScore
         transcriptsTrueCount += t1.cov
-        #transcriptsTrueCount += 1
 
-        
-
-    #transcriptsPredictedCount = len(transcriptsPredicted)
     totalScore2 = 0.0
     transcriptsPredictedCount = 0
-    line = 0
-
-
-    transcriptCovs = []
-
     for t1 in transcriptsPredicted:
-        transcriptCovs.append((t1.cov, t1.name))
-        line += 1
-
         closestScore = 0.0
         closestT = None
         
@@ -136,42 +120,14 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
 
         if closestScore > 0:
             totalScore2 += closestScore * t1.cov
-            #totalScore2 += closestScore
         transcriptsPredictedCount += t1.cov
-        #transcriptsPredictedCount += 1
-
-    #print(sorted(transcriptCovs, reverse=True)[:10])
-
-    #print "%d transcripts in file 1" % transcriptsTrueCount
-    #print "%d transcripts in file 2" % transcriptsPredictedCount
 
     recall = float(totalScore1) / float(transcriptsTrueCount)
-    #print('TP = ' + str(totalScore1))
-    #print('T  = ' + str(transcriptsTrueCount))
     print('Recall    = ' + str(recall))
 
-
     precision = float(totalScore2) / float(transcriptsPredictedCount)
-    #print('TP = ' + str(totalScore2))
-    #print('P  = ' + str(transcriptsPredictedCount))
     print('Precision = ' + str(precision))
 
-    '''
-    scatterX = []
-    scatterY = []
-    for i in xrange(len(matchingLines)):
-        if matchingLines[i] >= 0:
-            l1 = lines1[i]
-            l2 = lines2[matchingLines[i]]
-            matching += exonsMatch((l1[3], l1[4]), (l2[3], l2[4]), threshold)
-            scatterX += [l1[5]]
-            scatterY += [l2[5]]
-
-    plt.figure(1)
-    plt.scatter(scatterX, scatterY)
-    plt.savefig('scatter.png')
-    '''
 
 compareGTFs(sys.argv[1], sys.argv[2], sys.argv[3])
-
 

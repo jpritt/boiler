@@ -108,6 +108,14 @@ class Transcript:
         for e2 in transcript.exons:
             len2 += e2[1] - e2[0]
 
+        if overlap > len1 or overlap > len2:
+            print(self.exons)
+            print(transcript.exons)
+            print('Length 1 = %d' % len1)
+            print('Length 2 = %d' % len2)
+            print('Overlap = %d' % overlap)
+            exit()
+
         return float(overlap * overlap) / float(len1 * len2)
 
     def scoreExons(self, exon1, exon2, threshold):

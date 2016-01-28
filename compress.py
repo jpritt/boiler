@@ -40,13 +40,21 @@ class Compressor:
             file_prefix: Prefix for all output file names
         '''
 
-        print('Preprocessing')
         self.p = preprocess.Preprocessor(samFilename, frag_len_z_cutoff, split_diff_strands, split_discordant)
-        print('Done!')
 
         if not self.frag_len_cutoff:
             self.frag_len_cutoff = self.p.frag_len_cutoff
         print('Using fragment length cutoff of ' + str(self.frag_len_cutoff))
+
+        if split_diff_strands:
+            print('Splitting mates on different strands')
+        else:
+            print('Not splitting mates on different strands')
+
+        if split_discordant:
+            print('Splitting discordant')
+        else:
+            print('Not splitting discordant')
 
         # Read header
         header = ''
