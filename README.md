@@ -1,7 +1,7 @@
 compress-alignments
 ===================
 
-'boiler.py' is the main script that runs compression and decompression.
+'boiler.py' is the main script that runs compression and decompression. Python 3 is required to run Boiler. The input SAM file must be sorted by read start position.
 To compress, run the following:.
 
 > ./boiler.py --compress --alignments path/to/alignments.sam --output path/to/compressed.bin [--frag-len-z-cutoff 0.125] [--split-discordant] [--split-diff-strands]

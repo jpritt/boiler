@@ -423,8 +423,9 @@ class Expander:
     def getGeneBounds(self, compressedFilename, chrom, start=None, end=None):
         with open(compressedFilename, 'rb') as f:
             chromosomes = binaryIO.readChroms(f)
-            if start == None or end == None:
+            if start == None:
                 start = 0
+            if end == None:
                 end = chromosomes[chrom]
 
             offset = 0
