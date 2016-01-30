@@ -30,9 +30,10 @@ class Preprocessor:
         with open(samFilename, 'r') as f:
             id = 0
             for line in f:
-                row = line.rstrip().split('\t')
-                if len(row) < 6:
+                if line[0] == '@':
                     continue
+
+                row = line.rstrip().split('\t')
 
                 chrom = row[2]
                 pos = int(row[3])
