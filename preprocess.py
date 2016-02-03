@@ -3,13 +3,13 @@ import math
 import re
 
 class Preprocessor:
-    def __init__(self, samFilename, cutoff_z, split_diff_strand, split_discordant):
-        self.num_reads = sum(1 for line in open(samFilename))
+    def __init__(self, samFilename, cutoff_z, split_diff_strand):
+        #self.num_reads = sum(1 for line in open(samFilename))
         self.frag_len_cutoff = None
 
-        self.preprocess(samFilename, cutoff_z, split_diff_strand, split_discordant)
+        self.preprocess(samFilename, cutoff_z, split_diff_strand)
 
-    def preprocess(self, samFilename, cutoff_z, split_diff_strand, split_discordant):
+    def preprocess(self, samFilename, cutoff_z, split_diff_strand):
         '''
         Make a first pass over the file
         '''
@@ -22,7 +22,8 @@ class Preprocessor:
             self.len_sum = 0
 
         # For determining pairs
-        self.pairing = [-1] * self.num_reads
+        #self.pairing = ['-1'] * self.num_reads
+        self.unpaired = []
         self.unmatched = dict()
 
         with open(samFilename, 'r') as f:
@@ -40,9 +41,18 @@ class Preprocessor:
 
                 id += 1
 
+        self.num_reads = id
+
+        self.unpaired.sort()
+
         if find_cutoff:
             self.calculate_cutoff(cutoff_z)
-        self.reprocess_pairs(split_diff_strand, split_discordant)
+        #self.reprocess_pairs(split_diff_strand)
+
+
+        #print(self.pairing[:15])
+        #with open('pairs.txt', 'w') as f:
+        #    f.write('\n'.join(self.pairing))
 
     def process_pairs(self, id, row):
         name = row[0]
@@ -64,40 +74,32 @@ class Preprocessor:
                 elif r[5] == '-':
                     strand = -1
 
+
         if name in self.unmatched:
             foundMatch = False
 
             mates = self.unmatched[name]
             for i in range(len(mates)):
                 mate = mates[i]
-                if chrom == mate[3] and mate_chrom == mate[1] and pos == mate[4] and mate_pos == mate[2] and (not chrom == mate_chrom or not self.conflicts(exons, mate[5])) and (strand == 0 or mate[6] == 0 or strand == mate[6]):
-                    # Perfect match
-                    self.pairing[id] = mate[0]
-                    self.pairing[mate[0]] = id
-
-                    # TODO: Delete list if empty?
-                    del self.unmatched[name][i]
+                if chrom == mate[3] and mate_chrom == mate[1] and pos == mate[4] and mate_pos == mate[2]:
+                    if (strand == 1 and mate[5] == -1) or (strand == -1 and mate[5] == 1):
+                        # Strand mismatch
+                        self.unpaired.append(mate[0])
+                        self.unpaired.append(id)
+                        #print(name)
+                    if len(self.unmatched[name]) == 1:
+                        del self.unmatched[name]
+                    else:
+                        del self.unmatched[name][i]
                     foundMatch = True
                     break
             if not foundMatch:
-                self.unmatched[name].append((id, chrom, pos, mate_chrom, mate_pos, exons, strand))
+                self.unmatched[name].append((id, chrom, pos, mate_chrom, mate_pos, strand))
         else:
-            self.unmatched[name] = [(id, chrom, pos, mate_chrom, mate_pos, exons, strand)]
+            self.unmatched[name] = [(id, chrom, pos, mate_chrom, mate_pos, strand)]
 
-    def reprocess_pairs(self, split_diff_strand, split_discordant):
-        '''
-        Second pass looking for pairs, allow different strands and discordant if not required to split them
-        :param split_diff_strand:
-        :param split_discordant:
-        :return:
-        '''
-
-        count = 0
-        for name,reads in self.unmatched.items():
-            count += len(reads)
-        print('%d reads remaining before second pass' % count)
-
-        count = 0
+    '''
+    def reprocess_pairs(self, split_diff_strand):
         for name,reads in self.unmatched.items():
             if len(reads) > 1:
                 i = 0
@@ -108,10 +110,8 @@ class Preprocessor:
                         if reads[i][1] == reads[j][3] and reads[i][3] == reads[j][1] and reads[i][2] == reads[j][4] and reads[i][4] == reads[j][2]:
                             if not split_discordant or not reads[i][1] == reads[i][3] or not self.conflicts(reads[i][5], reads[j][5]):
                                 if not split_diff_strand or (reads[i][6] == 0 or reads[j][6] == 0 or reads[i][6] == reads[j][6]):
-                                    self.pairing[reads[i][0]] = reads[j][0]
-                                    self.pairing[reads[j][0]] = reads[i][0]
-
-                                    count += 2
+                                    #self.pairing[reads[i][0]] = str(reads[j][0])
+                                    #self.pairing[reads[j][0]] = str(reads[i][0])
 
                                     del self.unmatched[name][j]
                                     del self.unmatched[name][i]
@@ -125,13 +125,12 @@ class Preprocessor:
                     if not foundMatch:
                         i += 1
 
-        print('%d reads matched up' % count)
 
         # All remaining reads are unmatched
         count = 0
         for name,reads in self.unmatched.items():
             count += len(reads)
-        print('%d reads remaining' % count)
+    '''
 
     def get_pair(self, i):
         return self.pairing[i]

@@ -40,7 +40,7 @@ class Compressor:
             file_prefix: Prefix for all output file names
         '''
 
-        self.p = preprocess.Preprocessor(samFilename, frag_len_z_cutoff, split_diff_strands, split_discordant)
+        self.p = preprocess.Preprocessor(samFilename, frag_len_z_cutoff, split_diff_strands)
 
         if not self.frag_len_cutoff:
             self.frag_len_cutoff = self.p.frag_len_cutoff
@@ -55,6 +55,10 @@ class Compressor:
             print('Splitting discordant')
         else:
             print('Not splitting discordant')
+
+        # Reads on different strands that should be unpaired
+        self.diff_strand_unpaired = self.p.unpaired
+        del self.p
 
         # Read header
         header = ''
@@ -89,6 +93,9 @@ class Compressor:
 
         read_id = 0
 
+        diff_strand_unpaired_id = 0
+        num_diff_strand_unpaired = len(self.diff_strand_unpaired)
+
         with open(input_name, 'r') as filehandle:
             id = 0
             for line in filehandle:
@@ -107,10 +114,9 @@ class Compressor:
 
                 if self.aligned.gene_bounds and start > (self.aligned.gene_bounds[-1] + overlapRadius):
                     # Compress most recent bundle
-                    #self.aligned.finalizeUnmatched()
                     self.aligned.finalizeExons()
-                    #print(self.aligned.exons)
-                    self.aligned.finalize_cross_bundle_reads(bundle_id)
+                    self.aligned.finalizeUnmatched()
+                    self.aligned.finalize_cross_bundle_reads()
                     bundle_id += 1
 
                     bundles.append(self.aligned.exons)
@@ -156,23 +162,31 @@ class Compressor:
                         NH = int(r[5:])
 
                 r = read.Read(row[2], exons, strand, NH)
-                r.name = row[0]
-                pair_id = self.p.get_pair(id)
-                if pair_id >= 0:
+                #r.name = row[0]
+
+                if row[6] == '*':
+                    paired = False
+                elif diff_strand_unpaired_id < num_diff_strand_unpaired and id == self.diff_strand_unpaired[diff_strand_unpaired_id]:
+                    #if not row[6] == '*':
+                    #    print('\t'.join(row))
+                    paired = False
+                    diff_strand_unpaired_id += 1
+                else:
+                    paired = True
                     r.bundle = bundle_id
                     r.pairOffset = int(row[7])
                     if row[6] == '=':
                         r.pairChrom = row[2]
                     else:
                         r.pairChrom = row[6]
-                self.aligned.processRead(r, id, pair_id)
+                self.aligned.processRead(row[0], r, paired)
 
                 id += 1
 
             # Compress final cluster
-            self.aligned.finalizeUnmatched()
             self.aligned.finalizeExons()
-            self.aligned.finalize_cross_bundle_reads(bundle_id)
+            self.aligned.finalizeUnmatched()
+            self.aligned.finalize_cross_bundle_reads()
             bundle_id += 1
 
             bundles.append(self.aligned.exons)
