@@ -99,11 +99,11 @@ class Compressor:
         with open(input_name, 'r') as filehandle:
             id = 0
             for line in filehandle:
-                row = line.strip().split('\t')
-
                 # Check if header line
-                if len(row) < 6:
+                if line[0] == '@':
                     continue
+
+                row = line.strip().split('\t')
 
                 if not row[2] in self.chromosomes.keys():
                     print('Error! Chromosome ' + str(row[2]) + ' not found!')

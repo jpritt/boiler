@@ -26,12 +26,24 @@ class Preprocessor:
         self.unpaired = []
         self.unmatched = dict()
 
+        lastChrom = None
+        lastPos = 0
         with open(samFilename, 'r') as f:
             id = 0
             for line in f:
-                row = line.rstrip().split('\t')
-                if len(row) < 6:
+                if line[0] == '@':
                     continue
+
+                row = line.rstrip().split('\t')
+
+                chrom = row[2]
+                pos = int(row[3])
+                if chrom == lastChrom and pos < lastPos:
+                    print('Error! SAM file appears to be unsorted.')
+                    print('Found a read at %s:%d after a read at %s:%d' % (chrom, pos, lastChrom, lastPos))
+                    exit()
+                lastChrom = chrom
+                lastPos = pos
 
                 if find_cutoff and row[6] == '=':
                     self.process_frag_lens(int(row[7]) - int(row[3]))
