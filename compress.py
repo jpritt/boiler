@@ -20,15 +20,13 @@ class Compressor:
     # 2 - bz2
     compressMethod = 0
 
-    def __init__(self, force_xs, frag_len_cutoff):
+    def __init__(self, frag_len_cutoff):
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
         elif self.compressMethod == 1:
             self.lzma = __import__('lzma')
         elif self.compressMethod == 2:
             self.bz2 = __import__('bz2')
-
-        self.force_xs = force_xs
 
         if frag_len_cutoff:
             print('Set fragment length cutoff to %d' % frag_len_cutoff)
@@ -126,10 +124,10 @@ class Compressor:
                         if first:
                             # If it's the first bundle, write the header as well
                             with open(intermediate_name, 'w') as f1:
-                                read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
+                                read_id = self.aligned.writeSAM(f1, self.aligned.unpaired, self.aligned.paired, True, False, read_id)
                         else:
                             with open(intermediate_name, 'a') as f1:
-                                read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
+                                read_id = self.aligned.writeSAM(f1, self.aligned.unpaired, self.aligned.paired, False, False, read_id)
 
                     junctions, maxReadLen = self.aligned.computeBuckets()
                     self.sortedJuncs = sorted(junctions.keys())
@@ -196,11 +194,11 @@ class Compressor:
                 if first:
                     # If it's the first bundle, write the header as well
                     with open(intermediate_name, 'w') as f1:
-                        read_id = self.aligned.writeSAM(f1, True, self.force_xs, read_id)
+                        read_id = self.aligned.writeSAM(f1, self.aligned.unpaired, self.aligned.paired, True, False, read_id)
                     first = False
                 else:
                     with open(intermediate_name, 'a') as f1:
-                        read_id = self.aligned.writeSAM(f1, False, self.force_xs, read_id)
+                        read_id = self.aligned.writeSAM(f1, self.aligned.unpaired, self.aligned.paired, False, False, read_id)
 
             junctions, maxReadLen = self.aligned.computeBuckets()
             self.sortedJuncs = sorted(junctions.keys())

@@ -62,10 +62,10 @@ class Expander:
 
             if i == 0:
                 with open(out_name, 'w') as f2:
-                    self.aligned.writeSAM(f2, True, self.force_xs)
+                    self.aligned.writeSAM(f2, self.aligned.unpaired, self.aligned.paired, True, self.force_xs)
             else:
                 with open(out_name, 'a') as f2:
-                    self.aligned.writeSAM(f2, False, self.force_xs)
+                    self.aligned.writeSAM(f2, self.aligned.unpaired, self.aligned.paired, False, self.force_xs)
 
             self.aligned.unpaired = []
             self.aligned.paired = []
@@ -712,7 +712,7 @@ class Expander:
                 #print('Bundle %d - %d (%d)' % (bundles[i][0], bundles[i][-1], bundles[i][-1]-bundles[i][0]))
                 self.getBundleReads(f, spliced_index[i], start, end, unpaired, paired)
 
-        return unpaired, paired
+        return self.aligned, unpaired, paired
 
     def getAllCrossBucketsReads(self, filehandle, start_i, end_i, range_start, range_end):
         num_bundles = len(self.bundles)
