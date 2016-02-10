@@ -263,18 +263,18 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     plt.ylabel('Frequency')
     plt.yscale('log')
     plt.legend([a,b], ['Original', 'Compressed'])
-    plt.savefig('frag_len_dist.png')
+    plt.savefig('frag_len_dist_geuv.pdf', format='pdf')
     plt.clf()
 
-    diffs = [0] * x_range
-    for i in range(x_range):
-        diffs[i] = fragment_lengths1[i] - fragment_lengths2[i]
+    #diffs = [0] * x_range
+    #for i in range(x_range):
+    #    diffs[i] = fragment_lengths1[i] - fragment_lengths2[i]
 
-    plt.plot(range(x_range), diffs)
-    plt.xlabel('Fragment Length (kb)')
-    plt.ylabel('Original - Compressed Frequency')
-    plt.savefig('frag_len_diff.png')
-    plt.clf()
+    #plt.plot(range(x_range), diffs)
+    #plt.xlabel('Fragment Length (kb)')
+    #plt.ylabel('Original - Compressed Frequency')
+    #plt.savefig('frag_len_diff.png')
+    #plt.clf()
 
     ratio = [0] * x_range
     for i in range(x_range):
@@ -282,7 +282,7 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     plt.plot(range(x_range), ratio)
     plt.xlabel('Fragment Length (kb)')
     plt.ylabel('Compressed / Original Frequency')
-    plt.savefig('frag_len_ratio.png')
+    plt.savefig('frag_len_ratio_geuv.pdf', format='pdf')
     plt.clf()
 
 def write_frag_lens(filename, fragment_lengths1, fragment_lengths2):

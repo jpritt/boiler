@@ -1878,7 +1878,7 @@ class Alignments:
             else:
                 index -= self.chromosomes[c]
 
-    def writeSAM(self, filehandle, header=True, force_xs=False, readId=0):
+    def writeSAM(self, filehandle, unpaired, paired, header=True, force_xs=False, readId=0):
         ''' Write all alignments to a SAM file
         '''
 
@@ -1888,7 +1888,7 @@ class Alignments:
             for k,v in self.chromosomes.items():
                 filehandle.write('@SQ\tSN:' + str(k) + '\tLN:' + str(v) + '\n')
 
-        for read in self.unpaired:
+        for read in unpaired:
             exons = read.exons
             cigar = [str(exons[0][1] - exons[0][0]) + 'M']
             spliced = False
@@ -1913,12 +1913,12 @@ class Alignments:
                     read.strand = '-'
 
             if read.strand:
-                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.strand + '\tNH:i:' + str(read.NH) + '\n')
+                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tXS:A:' + read.strand + '\tNH:i:' + str(int(read.NH)) + '\n')
             else:
-                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(read.NH) + '\n')
+                filehandle.write(chrom+':'+str(readId) + '\t0\t' + chrom + '\t' + str(exons[0][0]-offset) + '\t50\t' + cigar + '\t*\t0\t0\t*\t*\tNH:i:' + str(int(read.NH)) + '\n')
             readId += 1
         
-        for pair in self.paired:
+        for pair in paired:
             exonsA = pair.exonsA
             cigarA = [str(exonsA[0][1] - exonsA[0][0]) + 'M']
             spliced = False
@@ -1971,18 +1971,18 @@ class Alignments:
             #        filehandle.write(chromB+':'+str(readId) + '\t0\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t*\t0\t0\t*\t*\tNH:i:' + str(pair.NH) + '\n')
             #else:
             if chromB == chromA:
-                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t=\t' + str(exonsB[0][0]-offsetA) + '\t' + str(totalLen) + '\t*\t*\tNH:i:' + str(int(pair.NH)))
             else:
-                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t81\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t50\t' + cigarA + '\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t0\t*\t*\tNH:i:' + str(int(pair.NH)))
 
             if pair.strand:# and 'N' in cigarA:
                 filehandle.write('\tXS:A:' + pair.strand)
             filehandle.write('\n')
 
             if chromB == chromA:
-                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromB + '\t' + str(exonsB[0][0]-offsetA) + '\t50\t' + cigarB + '\t=\t' + str(exonsA[0][0]-offsetA) + '\t' + str(-totalLen) + '\t*\t*\tNH:i:' + str(int(pair.NH)))
             else:
-                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t0\t*\t*\tNH:i:' + str(pair.NH))
+                filehandle.write(chromA+':'+str(readId) + '\t161\t' + chromB + '\t' + str(exonsB[0][0]-offsetB) + '\t50\t' + cigarB + '\t' + chromA + '\t' + str(exonsA[0][0]-offsetA) + '\t0\t*\t*\tNH:i:' + str(int(pair.NH)))
             if pair.strand:# and 'N' in cigarB:
                 filehandle.write('\tXS:A:' + pair.strand)
             filehandle.write('\n')
