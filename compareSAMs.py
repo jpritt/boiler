@@ -42,10 +42,15 @@ def parseCigar(cigar, offset):
     exons = []
     newExon = True
 
+    orig_cigar = cigar[:]
+
     # Parse cigar string
     match = re.search("\D", cigar)
     while match:
         index = match.start()
+
+        if len(cigar[:index]) == 0:
+            print(orig_cigar)
         length = int(''.join(cigar[:index]))
 
         if cigar[index] == 'N':
@@ -86,7 +91,7 @@ def bin(data, width):
         new_data[i] = sum(data[i*width:(i+1)*width])
     return new_data
 
-def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDiscordant):
+def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDiscordant, bin=1000):
     reads = []
     unmatched = dict()
     for line in f:
@@ -118,10 +123,11 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
                                 #print('%d, %d, %d' % (int(row[8]), match[3], l))
                                 #exit()
 
-                               # if l > 0:
-                               #     if l >= len(fragment_lengths):
-                               #         fragment_lengths += [0] * (l + 1 - len(fragment_lengths))
-                               #     fragment_lengths[l] += 1
+                                if l > 0:
+                                    lbin = int(l / bin)
+                                    if lbin >= len(fragment_lengths):
+                                        fragment_lengths += [0] * (lbin + 1 - len(fragment_lengths))
+                                    fragment_lengths[lbin] += 1
 
                                 del unmatched[name][i]
                                 foundMatch = True
@@ -215,6 +221,9 @@ def compareSAMs(file1, file2):
         FN_pairs += len(reads1) - tp
         FP_pairs += len(reads2) - tp
 
+    #print(fragment_lengths1)
+    #print(fragment_lengths2)
+
     print('No pairing:')
     #print('TP: %d' % TP_no_pairs)
     #print('FN: %d' % FN_no_pairs)
@@ -237,8 +246,11 @@ def compareSAMs(file1, file2):
     print('')
 
 
-    fragment_lengths1 = bin(fragment_lengths1, 1000)
-    fragment_lengths2 = bin(fragment_lengths2, 1000)
+    #fragment_lengths1 = bin(fragment_lengths1, 1000)
+    #fragment_lengths2 = bin(fragment_lengths2, 1000)
+    #print(fragment_lengths1)
+    #print(fragment_lengths2)
+
     return fragment_lengths1, fragment_lengths2
 
 def plot_frag_lens(fragment_lengths1, fragment_lengths2):
@@ -274,6 +286,8 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     plt.clf()
 
 def write_frag_lens(filename, fragment_lengths1, fragment_lengths2):
+    print(len(fragment_lengths1))
+    print(len(fragment_lengths2))
     with open(filename, 'w') as f:
         f.write(','.join([str(l) for l in fragment_lengths1]) + '\n')
         f.write(','.join([str(l) for l in fragment_lengths2]) + '\n')

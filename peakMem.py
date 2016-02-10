@@ -4,7 +4,7 @@ import fileinput
 
 max_mem = 0.0
 i = 0
-mem_id = 7
+mem_id = 6
 for line in fileinput.input():
     curr_id = 0
     if i == 0:
