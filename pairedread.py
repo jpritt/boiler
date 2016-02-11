@@ -1,5 +1,3 @@
-#! /usr/bin/env python
-
 class PairedRead:
     def __init__(self, chromA, exonsA, chromB, exonsB, strand=None, NH=1):
         ''' exon is a list of (start,end) tuples marking each exonic region of this read.

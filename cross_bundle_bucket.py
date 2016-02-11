@@ -1,5 +1,3 @@
-#! /usr/bin/env python
-
 class CrossBundleBucket:
     ''' A bucket spanning two bundles '''
 

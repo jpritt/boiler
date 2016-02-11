@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 import sys
 import argparse
 import time
@@ -7,6 +7,10 @@ import logging
 VERSION = '0.0.1'
 
 def go(args):
+    if sys.version_info < (3,0):
+        print('Boiler requires Python version 3 or better to run')
+        exit()
+
     if args.command == 'compress':
         import compress
 
@@ -30,7 +34,7 @@ def go(args):
                 #logging.info('Couldn\'t open file %s for writing. Using standard out instead.' % args.output)
                 f = sys.stdout
         else:
-            logging.warning('Writing results to standard out')
+            #logging.warning('Writing results to standard out')
             f = sys.stdout
 
         expander = expand.Expander()

@@ -1,5 +1,3 @@
-#! /usr/bin/env python
-
 import bisect
 import bucket
 import cross_bundle_bucket

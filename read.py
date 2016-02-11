@@ -1,5 +1,3 @@
-#! /usr/bin/env python
-
 class Read:
     def __init__(self, chrom, exons, strand=None, NH=1):
         ''' exon is a list of (start,end) tuples marking each exonic region of this read.

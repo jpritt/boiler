@@ -1,5 +1,3 @@
-#! /usr/bin/env python
-
 class Bucket:
     ''' A bucket spanned by at least 1 aligned read '''
 

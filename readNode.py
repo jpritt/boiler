@@ -1,5 +1,3 @@
-#! /usr/bin/env python
-
 class ReadNode():
     '''
     Represents a node in a linked list of reads
