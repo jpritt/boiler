@@ -4,9 +4,6 @@ import cross_bundle_bucket
 import pairedread
 import copy
 import random
-
-from random import shuffle
-
 import time
 
 class Alignments:

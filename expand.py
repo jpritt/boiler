@@ -3,7 +3,6 @@ import read
 import pairedread
 import bucket
 import time
-import math
 import binaryIO
 import bisect
 

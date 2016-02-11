@@ -1,13 +1,8 @@
 import alignments
 import re
 import read
-import pairedread
-import bucket
-import bisect
 import binaryIO
 import math
-import readNode
-import time
 import os
 import preprocess
 

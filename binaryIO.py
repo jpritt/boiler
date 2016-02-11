@@ -1,8 +1,5 @@
-import sys
 import math
-import bucket
 import cross_bundle_bucket
-import huffman
 import time
 from struct import *
 
@@ -591,104 +588,6 @@ def skipCov(s, start=0):
     lenCov, start = binaryToVal(s, 4, start)
 
     return start + lenCov * (lenBytes + covBytes)
-
-def writeCovHuffman(cov, huffmanIndex):
-    maxLen = 0
-    for c in cov:
-        if c[1] > maxLen:
-            maxLen = c[1]
-
-    # find length in bytes to fit all lengths
-    lenBytes = findNumBytes(maxLen)
-    #print('%d cov length bytes' % lenBytes)
-
-    # Write size of length in bytes
-    s = valToBinary(1, lenBytes)
-
-    # Write the length of the vector
-    s += valToBinary(2, len(cov))
-
-    # Write lengths
-    for c in cov:
-        #print('Writing %d to %d bytes' % (c[1], lenBytes))
-        s += valToBinary(lenBytes, c[1])
-
-    # Write covs
-    encoding = huffman.bitsToBytes(huffman.encode([c[0] for c in cov], huffmanIndex))
-    #print('Writing %d to 4 bytes' % len(encoding))
-    s += encoding
-    #print('Finished writing')
-    return s
-
-def readCovHuffman(s, huffmanTree, start=0):
-    # Read size of length and cov in bytes
-    lenBytes, start = binaryToVal(s, 1, start)
-
-    # Read the length of the vector
-    lenCov, start = binaryToVal(s, 2, start)
-
-    # Read lengths
-    lengths = [0] * lenCov
-    for i in range(lenCov):
-        l, start = binaryToVal(s, lenBytes, start)
-        lengths[i] = l
-
-    # Read coverage 
-    #l = binaryToVal(s, 4)
-    #c, s = huffman.decode(huffman.bytesToBits(s, lenCov), huffmanTree, lenCov)
-
-    c, start = huffman.decode(s, huffmanTree, lenCov, start)
-
-    cov = []
-    for i in range(lenCov):
-        cov += [c[i]] * lengths[i]
-
-    return cov, start
-
-
-def writeHuffmanIndex(index):
-    # Write number of values
-    s = valToBinary(4, len(index))
-
-    # Write the number of bytes used to write each value
-    maxVal = max(index.keys())
-    valBytes = findNumBytes(maxVal)
-    s += valToBinary(1, valBytes)
-
-    for val,bits in index.items():
-        # Write the value
-        s += valToBinary(valBytes, val)
-
-        # Write the number of bits in the encoding
-        s += valToBinary(1, len(bits))
-
-        # Write the bits, padded by zeros
-        s += huffman.bitsToBytes(bits)
-
-    return s
-
-def readHuffmanIndex(s, start=0):
-    # Read number of values
-    numVals, start = binaryToVal(s, 4, start)
-
-    # Read the number of bytes used to write each value
-    valBytes, start = binaryToVal(s, 1, start)
-
-    index = dict()
-    for _ in range(numVals):
-        # Read the value
-        val, start = binaryToVal(s, valBytes, start)
-
-        # Read the number of bits in the encoding
-        numBits, start = binaryToVal(s, 1, start)
-
-        # Read the bits
-        numBytes = math.ceil(numBits / 8)
-        bits = huffman.bytesToBits(s[:numBytes])
-        start += numBytes
-
-        index[val] = bits[:numBits]
-    return index, start
 
 def RLE(vector):
     rle = []
