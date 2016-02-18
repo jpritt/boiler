@@ -256,33 +256,27 @@ def compareSAMs(file1, file2):
 def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     from matplotlib import pyplot as plt
 
+    font = {'size': 18}
+    plt.rc('font', **font)
+
     x_range = 100
-    a, = plt.plot(range(x_range), fragment_lengths1[:x_range])
-    b, = plt.plot(range(x_range), fragment_lengths2[:x_range])
-    plt.xlabel('Fragment Length (kb)')
-    plt.ylabel('Frequency')
-    plt.yscale('log')
-    plt.legend([a,b], ['Original', 'Compressed'])
-    plt.savefig('frag_len_dist_geuv.pdf', format='pdf')
-    plt.clf()
-
-    #diffs = [0] * x_range
-    #for i in range(x_range):
-    #    diffs[i] = fragment_lengths1[i] - fragment_lengths2[i]
-
-    #plt.plot(range(x_range), diffs)
-    #plt.xlabel('Fragment Length (kb)')
-    #plt.ylabel('Original - Compressed Frequency')
-    #plt.savefig('frag_len_diff.png')
+    f, axs = plt.subplots(1,2,figsize=(20,8))
+    a, = axs[0].plot(range(x_range), fragment_lengths1[:x_range])
+    b, = axs[0].plot(range(x_range), fragment_lengths2[:x_range])
+    axs[0].set_xlabel('Fragment Length (kb)')
+    axs[0].set_ylabel('Frequency')
+    axs[0].set_yscale('log')
+    axs[0].legend([a,b], ['Original', 'Compressed'], prop={'size':14})
+    #plt.savefig('frag_len_dist_geuv.pdf', format='pdf')
     #plt.clf()
 
     ratio = [0] * x_range
     for i in range(x_range):
         ratio[i] = float(fragment_lengths2[i]) / float(fragment_lengths1[i])
-    plt.plot(range(x_range), ratio)
-    plt.xlabel('Fragment Length (kb)')
-    plt.ylabel('Compressed / Original Frequency')
-    plt.savefig('frag_len_ratio_geuv.pdf', format='pdf')
+    axs[1].plot(range(x_range), ratio)
+    axs[1].set_xlabel('Fragment Length (kb)')
+    axs[1].set_ylabel('Compressed / Original Frequency')
+    plt.savefig('frag_len_geuv.pdf', format='pdf', bbox_inches='tight')
     plt.clf()
 
 def write_frag_lens(filename, fragment_lengths1, fragment_lengths2):
