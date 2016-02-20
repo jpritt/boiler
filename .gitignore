@@ -8,3 +8,4 @@ scripts/tech_reps/*.pbs.*
 scripts/tech_reps/*/*.pbs.*
 *.pyc
 __pycache__/
+.idea
