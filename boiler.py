@@ -4,7 +4,7 @@ import argparse
 import time
 import logging
 
-VERSION = '0.0.1'
+VERSION = '1.0.0'
 
 def go(args):
     if sys.version_info < (3,0):

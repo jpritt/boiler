@@ -263,7 +263,7 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     f, axs = plt.subplots(1,2,figsize=(20,8))
     a, = axs[0].plot(range(x_range), fragment_lengths1[:x_range])
     b, = axs[0].plot(range(x_range), fragment_lengths2[:x_range])
-    axs[0].set_xlabel('Fragment Length (kb)')
+    axs[0].set_xlabel('Genomic Outer Distance (kb)')
     axs[0].set_ylabel('Frequency')
     axs[0].set_yscale('log')
     axs[0].legend([a,b], ['Original', 'Compressed'], prop={'size':14})
@@ -274,7 +274,7 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     for i in range(x_range):
         ratio[i] = float(fragment_lengths2[i]) / float(fragment_lengths1[i])
     axs[1].plot(range(x_range), ratio)
-    axs[1].set_xlabel('Fragment Length (kb)')
+    axs[1].set_xlabel('Genomic Outer Distance (kb)')
     axs[1].set_ylabel('Compressed / Original Frequency')
     plt.savefig('frag_len_geuv.pdf', format='pdf', bbox_inches='tight')
     plt.clf()
