@@ -1641,6 +1641,7 @@ class Alignments:
 
     def findReadsInCoverage_v3(self, cov, frag_lens):
         reads = []
+        num_reads = 0
 
         start = 0
         end = len(cov)
@@ -1663,7 +1664,7 @@ class Alignments:
                 mode_len = l
 
         while start < end:
-            reads, start, end = self.findReadLeft(cov, start, end, reads, min_len, max_len, mode_len)
+            start, end, num_reads = self.findReadLeft(cov, start, end, reads, min_len, max_len, mode_len, num_reads)
 
             #if start < end:
             #    start, end = self.findReadRight(cov, start, end, reads, min_len, max_len, mode_len)
@@ -1728,28 +1729,35 @@ class Alignments:
         else:
             return None
 
-    def extendReadRight(self, cov, start, stop, reads, max_len):
+    def extendReadRight(self, cov, start, stop, reads, max_len, num_reads):
         '''
         Extend the right end of a read ending at 'start' up to 'stop'
         '''
-        for i in range(len(reads)):
+
+        for i in range(num_reads-1, -1, -1):
+            if reads[i][1] < stop:
+                break
+        j = i
+
+        for i in range(j, -1, -1):
             r = reads[i]
             if r[1] < start:
                 return False
             elif r[1] == start and (r[1] - r[0]) < (max_len * r[2]):
                 r[1] = min(max_len*r[2] + r[0], stop)
-                reads = self.preserve_sorted(reads, i)
+                if i < j:
+                    self.move_reads(i, j)
                 for i in range(start, r[1]):
                     cov[i] -= 1
-                return reads
+                return True
         return False
 
-    def shortenReadRight(self, cov, start, stop, reads, max_shorten, min_len):
+    def shortenReadRight(self, cov, start, stop, reads, max_shorten, min_len, num_reads):
         '''
         Shorten the right end of a read ending at 'stop' down to 'start'
         '''
 
-        for i in range(len(reads)):
+        for i in range(num_reads-1, -1, -1):
             r = reads[i]
             if r[1] < stop:
                 return False
@@ -1757,59 +1765,63 @@ class Alignments:
                 for j in range(start, r[1]):
                     cov[j] += 1
                 r[1] = start
-                reads = self.preserve_sorted(reads, i)
-                return reads
+
+                for j in range(i, -1, -1):
+                    if reads[j][1] < start:
+                        break
+
+                if j < i:
+                    self.move_read(reads, i, j)
+
+                return True
         return False
 
-    def add_read(self, reads, new_read):
-        # Try to find a string of reads ending where this one starts
-        for i in range(len(reads)):
-            r = reads[i]
-            if r[1] == new_read[0]:
-                r[1] = new_read[1]
-                r[2] += 1
+    def add_read(self, reads, new_read, num_reads):
+        if num_reads == 0:
+            reads.append([new_read[0], new_read[1], 1])
+            return 1
 
-                reads = self.preserve_sorted(reads, i)
+        for i in range(num_reads-1, -1, -1):
+            if reads[i][1] < new_read[1]:
+                break
+        # After adding new read, this should be its position in the array
+        j = i
 
-                return reads
-        # If no reads end where this one starts, just add it to the list of reads
-        return self.insert_in_order(reads, [new_read[0], new_read[1], 1])
+        for i in range(j, -1, -1):
+            if reads[i][1] == new_read[0]:
+                # We can extend this read rather than adding a new one
+                reads[i][1] = new_read[1]
+                reads[i][2] += 1
 
-    def preserve_sorted(self, reads, updated_i):
-        '''
+                # Move read from i to j
+                if i < j:
+                    self.move_read(reads, i, j)
+                return num_reads
 
-        :param reads: List of reads
-        :param updated_i: Last read updated
+            elif reads[i][1] < new_read[0]:
+                break
 
-        Reorder reads so they are sorted by read end, in decreasing order
-        '''
+        # We have to add a new read
+        reads.append([new_read[0], new_read[1], 1])
 
-        new_i = updated_i
-        while new_i > 0 and reads[new_i][1] > reads[new_i-1][1]:
-            new_i -= 1
+        # Move read from end to j
+        if j < num_reads:
+            self.move_read(reads, num_reads,j)
 
-        num_reads = len(reads)
-        while new_i < num_reads-1 and reads[new_i][1] < reads[new_i+1][1]:
-            new_i += 1
+        return num_reads+1
 
-        return reads[:new_i] + [reads[updated_i]] + reads[new_i:updated_i] + reads[updated_i+1:]
+    def move_read(self, reads, i, j):
+        r = reads[i]
+        if i < j:
+            for x in range(i, j):
+                reads[x] = reads[x+1]
+            reads[j] = r
+        elif i > j:
+            for x in range(j, i):
+                reads[x+1] = reads[x]
+            reads[j] = r
 
-    def insert_in_order(self, reads, r):
-        '''
-
-        :param reads:
-        :param r:
-        Insert r into reads such that the reads remain sorted by read end, in decreasing order
-        '''
-
-        num_reads = len(reads)
-        i = 0
-        while i < (num_reads-1) and r[1] < reads[i][1]:
-            i += 1
-
-        return reads[:i] + [r] + reads[i:]
-
-    def findReadLeft(self, cov, start, end, reads, min_len, max_len, mode_len):
+    def findReadLeft(self, cov, start, end, reads, min_len, max_len, mode_len, num_reads):
         gap = self.findNextGap(cov, start, end, mode_len)
 
         len_range = max_len - min_len
@@ -1817,40 +1829,31 @@ class Alignments:
         if not gap:
             readEnd = min(start+mode_len,end)
 
-            r = None
             if readEnd-start < min_len:
-                r = self.extendReadRight(cov, start, readEnd, reads, max_len)
-                if r:
-                    reads = r
-                else:
+                if not self.extendReadRight(cov, start, readEnd, reads, max_len, num_reads):
                     # We want to make sure that coverage ends at the right place
-                    reads = self.add_read(reads, [readEnd - min_len, readEnd])
+                    num_reads = self.add_read(reads, [readEnd - min_len, readEnd], num_reads)
                     for i in range(start, readEnd):
                         cov[i] -= 1
             else:
-                reads = self.add_read(reads, [start, readEnd])
+                num_reads = self.add_read(reads, [start, readEnd], num_reads)
                 for i in range(start, readEnd):
                     cov[i] -= 1
         else:
-            r = self.extendReadRight(cov, start, start+gap[0], reads, max_len)
-            if r:
-                reads = r
-
+            r = self.extendReadRight(cov, start, start+gap[0], reads, max_len, num_reads)
             if not r:
-                r = self.shortenReadRight(cov, start+gap[0], start+gap[1], reads, len_range, min_len)
-                if r:
-                    reads = r
+                r = self.shortenReadRight(cov, start+gap[0], start+gap[1], reads, len_range, min_len, num_reads)
 
             if not r:
                 if gap[0] >= min_len:
                     readEnd = start+gap[0]
-                    reads = self.add_read(reads, [start, readEnd])
+                    num_reads = self.add_read(reads, [start, readEnd], num_reads)
                 elif gap[0] < min_len/2:
                     # Skip bases
                     readEnd = start+gap[0]
                 else:
                     readEnd = min(start+mode_len, end)
-                    reads = self.add_read(reads, [start, readEnd])
+                    num_reads = self.add_read(reads, [start, readEnd], num_reads)
 
                 for i in range(start, readEnd):
                     cov[i] -= 1
@@ -1860,7 +1863,7 @@ class Alignments:
         while start < end and cov[end-1] <= 0:
             end -= 1
 
-        return reads, start, end
+        return start, end, num_reads
 
 
     def getChromosome(self, index):

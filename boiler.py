@@ -118,22 +118,11 @@ if __name__ == '__main__':
         print('Boiler v' + VERSION)
         sys.exit(0)
 
-    '''
-    # Print file's docstring if -h is invoked
-    parser = argparse.ArgumentParser(description=__doc__, 
-            formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--compress', help="Run compression", action="store_true")
-    parser.add_argument('--decompress', help="Run decompression", action="store_true")
-    parser.add_argument('--alignments', type=str, help='Full path of SAM file containing aligned reads')
-    parser.add_argument("--expand-to", type=str, help="After compressing, decompress to this filename")
-    parser.add_argument("--output", type=str, help="Compressed filename")
-    parser.add_argument("--intermediate", type=str, help="Name of SAM file to write to after processing but before compressing")
-    parser.add_argument("--force-xs", help="If we decompress a spliced read with no XS value, assign it a random one (so Cufflinks can run)", action="store_false")
-    parser.add_argument("--frag-len-cutoff", type=int, help='Store any fragments longer than this in a bundle-spanning bucket')
-    parser.add_argument("--frag-len-z-cutoff", type=float, help='Store any fragments above this z-score in a bundle-spanning bucket')
-    parser.add_argument("--split-diff-strands", action="store_true", help='Split any pairs with different XS values')
-    parser.add_argument("--split-discordant", action="store_true", help='Treat discordant pairs as unpaired reads')
-    '''
+    # Check for Python version
+    version = sys.version_info[0]
+    if version < 3:
+        print('Python 3 is required to run Boiler')
+        exit()
 
     # Print file's docstring if -h is invoked
     parser = argparse.ArgumentParser(description=__doc__,
