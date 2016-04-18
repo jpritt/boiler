@@ -33,6 +33,10 @@ class Expander:
 
         self.force_xs = force_xs
 
+        self.read_time = 0.0
+        self.pair_time = 0.0
+        self.assign_time = 0.0
+
 
     def expand(self, compressedFilename, uncompressedFilename):
         ''' Expand both spliced and unspliced alignments
@@ -47,10 +51,13 @@ class Expander:
             self.expandByCluster(f, uncompressedFilename)
 
     def expandByCluster(self, f, out_name):
+        t1 = time.time()
         self.bundles = binaryIO.readClusters(f)
         spliced_index = binaryIO.readListFromFile(f)
-
+        t2 = time.time()
+        
         self.expandCrossBundleBuckets(f)
+        t3 = time.time()
 
         for i in range(len(self.bundles)):
             self.aligned.exons = self.bundles[i]
@@ -67,6 +74,16 @@ class Expander:
 
             self.aligned.unpaired = []
             self.aligned.paired = []
+        t4 = time.time()
+
+        self.aligned.printTime()
+
+        print('Reading index time:        %f s' % (t2-t1))
+        print('Cross-bundle buckets time: %f s' % (t3-t2))
+        print('Expanding clusters time:   %f s' % (t4-t3))
+        print('  Getting reads time:      %f s' % self.read_time)
+        print('  Getting pairs time:      %f s' % self.pair_time)
+        print('  Assigning reads time:    %f s' % self.assign_time)
 
     def expandCluster(self, f, length):
         cluster = self.expandString(f.read(length))
@@ -186,6 +203,10 @@ class Expander:
     def expandJunc(self, junc):
         unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries)
 
+        self.read_time += t1
+        self.pair_time += t2
+
+        start_t = time.time()
 
         numP = len(paired)
         numR = len(unpaired) + 2 * numP
@@ -287,6 +308,8 @@ class Expander:
             self.aligned.paired.append(pairedread.PairedRead(self.aligned.getChromosome(readExonsA[0][0]), readExonsA,  \
                                                      self.aligned.getChromosome(readExonsB[0][0]), readExonsB, junc.strand, junc.NH))
 
+        end_t = time.time()
+        self.assign_time += (end_t - start_t)
 
     def expandCrossBundleBucket(self, bucket):
         if not sum([e[1]-e[0] for e in bucket.exon_bounds]) == bucket.length:

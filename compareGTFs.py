@@ -88,7 +88,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
 
     transcriptsTrueCount = 0
     line = 0
-    countUnmatched = 0
     for t1 in transcriptsTrue:
         line += 1
 
@@ -105,16 +104,18 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        if closestScore > 0:
-            totalScore += closestScore
+        if weightByCov:
+            if closestScore > 0:
+                totalScore += closestScore * t1.cov
+            transcriptsTrueCount += t1.cov
         else:
-            countUnmatched += 1
-        transcriptsTrueCount += 1
+            if closestScore > 0:
+                totalScore += closestScore
+            transcriptsTrueCount += 1
     recall = float(totalScore) / float(transcriptsTrueCount)
     print 'Recall    = TP/T = ' + str(recall)
     
     line = 0
-    countUnmatched = 0
     totalScore = 0
     transcriptsPredictedCount = 0
     for t1 in transcriptsPredicted:
@@ -133,11 +134,14 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        if closestScore > 0:
-            totalScore += closestScore
+        if weightByCov:
+            if closestScore > 0:
+                totalScore += closestScore * t1.cov
+            transcriptsPredictedCount += t1.cov
         else:
-            countUnmatched += 1
-        transcriptsPredictedCount += 1
+            if closestScore > 0:
+                totalScore += closestScore
+            transcriptsPredictedCount += 1
     precision = float(totalScore) / float(transcriptsPredictedCount)
     print 'Precision    = TP/P = ' + str(precision)
 
@@ -157,6 +161,9 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     plt.savefig('scatter.png')
     '''
 
+weightByCov = False
+if sys.argv[3] == '1':
+    weightByCov = True
 compareGTFs(sys.argv[1], sys.argv[2])
 
 

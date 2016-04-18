@@ -122,7 +122,13 @@ class Transcript:
         ''' Returns a value between 0 and 1, where 1 indicates that the 2 exons are a perfect match and 0 indicates no match
         '''
 
-        dx = min(abs(exon1[0] - exon2[0]), threshold)
-        dy = min(abs(exon1[1] - exon2[1]), threshold)
+        if threshold == 0:
+            if exon1[0] == exon2[0] and exon1[1] == exon2[1]:
+                return 1
+            else:
+                return 0
+        else:
+            dx = min(abs(exon1[0] - exon2[0]), threshold)
+            dy = min(abs(exon1[1] - exon2[1]), threshold)
 
-        return 1 - dx / (2.0*threshold) - dy / (2.0*threshold)
+            return 1 - dx / (2.0*threshold) - dy / (2.0*threshold)

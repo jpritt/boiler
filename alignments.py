@@ -59,6 +59,11 @@ class Alignments:
         self.unpaired = []
         self.paired = []
 
+        self.read_timeA = 0.0
+        self.read_countA = 0
+        self.read_timeB = 0.0
+        self.read_countB = 0
+
     def processRead(self, name, read, paired):
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
@@ -530,9 +535,17 @@ class Alignments:
             elif coverage[i] > coverage[i-1]:
                 starts += coverage[i+1] - coverage[i]
         if starts == numFragments:
+            ta = time.time()
             reads = self.findReadsInCoverage_v1(coverage, fragmentLens)
+            tb = time.time()
+            self.read_timeA += (tb - ta)
+            self.read_countA += 1
         else:
+            ta = time.time()
             reads = self.findReadsInCoverage_v3(coverage, fragmentLens)
+            tb = time.time()
+            self.read_timeB += (tb - ta)
+            self.read_countB += 1
         t2 = time.time()
 
         if boundaries:
@@ -544,6 +557,17 @@ class Alignments:
 
         return unpaired, paired, t2-t1, t3-t2
 
+    def printTime(self):
+        print('Simple version:')
+        print('  Total time: %f s' % self.read_timeA)
+        print('  Num segments: %d' % self.read_countA)
+        print('  Avg time: %f s' % (self.read_timeA / self.read_countA))
+        print('')
+        print('Full version:')
+        print('  Total time: %f s' % self.read_timeB)
+        print('  Num segments: %d' % self.read_countB)
+        print('  Avg time: %f s' % (self.read_timeB / self.read_countB))
+        print('')
 
     def findPairsGreedy(self, reads, pairedLens):
         pairedLensSorted = sorted(pairedLens.keys(), reverse=True)

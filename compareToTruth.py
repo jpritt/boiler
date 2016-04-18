@@ -88,8 +88,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     ''' Compare 
     '''
     
-    threshold = 10
-
     totalScore1 = 0.0
     transcriptsTrueCount = 0
     for t1 in transcriptsTrue:
@@ -102,9 +100,14 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        if closestScore > 0:
-            totalScore1 += closestScore * t1.cov
-        transcriptsTrueCount += t1.cov
+        if weightByCov:
+            if closestScore > 0:
+                totalScore1 += closestScore * t1.cov
+            transcriptsTrueCount += t1.cov
+        else:
+            if closestScore > 0:
+                totalScore1 += closestScore
+            transcriptsTrueCount += 1
 
     totalScore2 = 0.0
     transcriptsPredictedCount = 0
@@ -118,9 +121,14 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        if closestScore > 0:
-            totalScore2 += closestScore * t1.cov
-        transcriptsPredictedCount += t1.cov
+        if weightByCov:
+            if closestScore > 0:
+                totalScore2 += closestScore * t1.cov
+            transcriptsPredictedCount += t1.cov
+        else:
+            if closestScore > 0:
+                totalScore2 += closestScore
+            transcriptsPredictedCount += 1
 
     recall = float(totalScore1) / float(transcriptsTrueCount)
     print('Recall    = ' + str(recall))
@@ -128,6 +136,10 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     precision = float(totalScore2) / float(transcriptsPredictedCount)
     print('Precision = ' + str(precision))
 
-
+weightByCov = False
+if sys.argv[4] == '1':
+    weightByCov = True
+threshold = 10
+#print('Transcript threshold = %d' % threshold)
 compareGTFs(sys.argv[1], sys.argv[2], sys.argv[3])
 
