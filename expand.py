@@ -76,14 +76,14 @@ class Expander:
             self.aligned.paired = []
         t4 = time.time()
 
-        self.aligned.printTime()
+        #self.aligned.printTime()
 
-        print('Reading index time:        %f s' % (t2-t1))
-        print('Cross-bundle buckets time: %f s' % (t3-t2))
-        print('Expanding clusters time:   %f s' % (t4-t3))
-        print('  Getting reads time:      %f s' % self.read_time)
-        print('  Getting pairs time:      %f s' % self.pair_time)
-        print('  Assigning reads time:    %f s' % self.assign_time)
+        #print('Reading index time:        %f s' % (t2-t1))
+        #print('Cross-bundle buckets time: %f s' % (t3-t2))
+        #print('Expanding clusters time:   %f s' % (t4-t3))
+        #print('  Getting reads time:      %f s' % self.read_time)
+        #print('  Getting pairs time:      %f s' % self.pair_time)
+        #print('  Assigning reads time:    %f s' % self.assign_time)
 
     def expandCluster(self, f, length):
         cluster = self.expandString(f.read(length))

@@ -1758,10 +1758,14 @@ class Alignments:
         Extend the right end of a read ending at 'start' up to 'stop'
         '''
 
+        if num_reads == 0:
+            return False
+
+        j = 0
         for i in range(num_reads-1, -1, -1):
             if reads[i][1] < stop:
+                j = i
                 break
-        j = i
 
         for i in range(j, -1, -1):
             r = reads[i]
@@ -1769,10 +1773,21 @@ class Alignments:
                 return False
             elif r[1] == start and (r[1] - r[0]) < (max_len * r[2]):
                 r[1] = min(max_len*r[2] + r[0], stop)
-                if i < j:
-                    self.move_reads(i, j)
+
+                if r[1] < stop:
+                    # Recalculate new position for read
+                    for new_pos in range(j, i-1, -1):
+                        if reads[new_pos][1] < r[1]:
+                            break
+                else:
+                    new_pos = j
+
+                if i < new_pos:
+                    self.move_read(reads, i, new_pos)
+
                 for i in range(start, r[1]):
                     cov[i] -= 1
+
                 return True
         return False
 
@@ -1781,21 +1796,25 @@ class Alignments:
         Shorten the right end of a read ending at 'stop' down to 'start'
         '''
 
+        if num_reads == 0:
+            return False
+
         for i in range(num_reads-1, -1, -1):
             r = reads[i]
             if r[1] < stop:
                 return False
             elif (start - r[0]) >= (min_len * r[2]):
-                for j in range(start, r[1]):
-                    cov[j] += 1
-                r[1] = start
-
+                new_pos = 0
                 for j in range(i, -1, -1):
                     if reads[j][1] < start:
+                        new_pos = j+1
                         break
 
-                if j < i:
-                    self.move_read(reads, i, j)
+                for n in range(start, r[1]):
+                    cov[n] += 1
+                r[1] = start
+
+                self.move_read(reads, i, new_pos)
 
                 return True
         return False
@@ -1805,32 +1824,34 @@ class Alignments:
             reads.append([new_read[0], new_read[1], 1])
             return 1
 
+        # After adding new read, this should be its position in the array
+        new_pos = -1
         for i in range(num_reads-1, -1, -1):
             if reads[i][1] < new_read[1]:
+                new_pos = i
                 break
-        # After adding new read, this should be its position in the array
-        j = i
 
-        for i in range(j, -1, -1):
+        for i in range(new_pos, -1, -1):
             if reads[i][1] == new_read[0]:
                 # We can extend this read rather than adding a new one
                 reads[i][1] = new_read[1]
                 reads[i][2] += 1
 
                 # Move read from i to j
-                if i < j:
-                    self.move_read(reads, i, j)
+                if i < new_pos:
+                    self.move_read(reads, i, new_pos)
                 return num_reads
 
             elif reads[i][1] < new_read[0]:
                 break
 
         # We have to add a new read
-        reads.append([new_read[0], new_read[1], 1])
+        r = [new_read[0], new_read[1], 1]
+        reads.append(r)
 
         # Move read from end to j
-        if j < num_reads:
-            self.move_read(reads, num_reads,j)
+        if new_pos+1 < num_reads:
+            self.move_read(reads, num_reads, new_pos+1)
 
         return num_reads+1
 
@@ -1841,8 +1862,8 @@ class Alignments:
                 reads[x] = reads[x+1]
             reads[j] = r
         elif i > j:
-            for x in range(j, i):
-                reads[x+1] = reads[x]
+            for x in range(i, j, -1):
+                reads[x] = reads[x-1]
             reads[j] = r
 
     def findReadLeft(self, cov, start, end, reads, min_len, max_len, mode_len, num_reads):
@@ -1860,6 +1881,7 @@ class Alignments:
                     for i in range(start, readEnd):
                         cov[i] -= 1
             else:
+                #print('Adding read [%d, %d]' % (start, readEnd))
                 num_reads = self.add_read(reads, [start, readEnd], num_reads)
                 for i in range(start, readEnd):
                     cov[i] -= 1
@@ -1888,7 +1910,6 @@ class Alignments:
             end -= 1
 
         return start, end, num_reads
-
 
     def getChromosome(self, index):
         ''' Return chromosome name containing the given index from the whole-genome vector
