@@ -97,6 +97,9 @@ class Compressor:
 
                 row = line.strip().split('\t')
 
+                if row[2] == '*':
+                    # HISAT includes unmapped reads at the end of the file; we just skip them
+                    continue
                 if not row[2] in self.chromosomes.keys():
                     print('Error! Chromosome ' + str(row[2]) + ' not found!')
                     exit()
@@ -142,7 +145,11 @@ class Compressor:
                     first = False
 
                 # Process read
-                exons = self.parseCigar(row[5], int(row[3]))
+                if row[5] == '*':
+                    # HISAT occasionally prints * as the cigar string when it is identical to its mate
+                    exons = None
+                else:
+                    exons = self.parseCigar(row[5], int(row[3]))
 
                 # find XS (strand) and NH values
                 strand = None
@@ -153,7 +160,7 @@ class Compressor:
                     elif r[0:3] == 'NH:':
                         NH = int(r[5:])
 
-                r = read.Read(row[2], exons, strand, NH)
+                r = read.Read(row[2], int(row[3]), exons, strand, NH)
                 #r.name = row[0]
 
                 if row[6] == '*':

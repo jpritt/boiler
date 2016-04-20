@@ -70,7 +70,6 @@ class Preprocessor:
         name = row[0]
         chrom = row[2]
         pos = int(row[3])
-        exons = self.parseCigar(row[5], pos)
         if row[6] == '=':
             mate_chrom = chrom
         else:

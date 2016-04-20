@@ -260,7 +260,7 @@ class Expander:
 
                 readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
-            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, junc.strand, junc.NH))
+            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons[0][0], readExons, junc.strand, junc.NH))
 
         for p in paired:
             start = p[0][0]
@@ -370,7 +370,7 @@ class Expander:
 
                 readExons.append( [offsets[j]+bucket_offset, end+bucket_offset] )
 
-            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, bucket.strand, bucket.NH))
+            self.aligned.unpaired.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons[0][0], readExons, bucket.strand, bucket.NH))
 
         for p in paired:
             start = p[0][0]
@@ -844,7 +844,7 @@ class Expander:
                 readExons.append( [offsets[j]+bucket_offset, end+bucket_offset] )
 
             if self.readOverlapsRegion(readExons, range_start, range_end):
-                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, bucket.strand, bucket.NH))
+                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons[0][0], readExons, bucket.strand, bucket.NH))
 
         for p in paired:
             start = p[0][0]
@@ -987,7 +987,7 @@ class Expander:
                 readExons.append( [offsets[j]+juncOffset, end+juncOffset] )
 
             if self.readOverlapsRegion(readExons, range_start, range_end):
-                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons, b.strand, b.NH))
+                unpaired_reads.append(read.Read(self.aligned.getChromosome(readExons[0][0]), readExons[0][0], readExons, b.strand, b.NH))
 
         for p in paired:
             start = p[0][0]

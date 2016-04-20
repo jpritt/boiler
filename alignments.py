@@ -71,15 +71,17 @@ class Alignments:
 
         # Update read location for chromosome
         offset = self.chromOffsets[read.chrom]
-        for i in range(len(read.exons)):
-            read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
+        read.pos += offset
+        if read.exons:
+            for i in range(len(read.exons)):
+                read.exons[i] = [read.exons[i][0]+offset, read.exons[i][1]+offset]
 
-        # update list of subexon bounds
-        alignment = read.exons
-        if len(alignment) > 1:
-            for i in range(len(alignment)-1):
-                self.exons.add(alignment[i][1])
-                self.exons.add(alignment[i+1][0])
+            # update list of subexon bounds
+            alignment = read.exons
+            if len(alignment) > 1:
+                for i in range(len(alignment)-1):
+                    self.exons.add(alignment[i][1])
+                    self.exons.add(alignment[i+1][0])
 
         # Update the boundaries of the current bundle
         #self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
@@ -93,14 +95,16 @@ class Alignments:
             # update pair location for chromsome
             read.pairOffset += self.chromOffsets[read.pairChrom]
 
-            self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
+            if read.exons:
+                self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
             foundMate = False
-            if read.pairOffset <= read.exons[0][0]:
-
+            if read.pairOffset <= read.pos:
                 i = self.find_mate(read, name, self.unmatched)
+
                 if i >= 0:
                     mate = self.unmatched[name][i]
+
                     if mate.exons[-1][1] > read.exons[-1][1]:
                         self.add_paired(read, mate)
                     else:
@@ -113,6 +117,7 @@ class Alignments:
                     i = self.find_mate(read, name, self.cross_bundle_reads)
                     if i >= 0:
                         mate = self.cross_bundle_reads[name][i]
+
                         self.cross_bundle_pairs.append((mate, read))
 
                         foundMate = True
@@ -120,8 +125,8 @@ class Alignments:
             if not foundMate:
                 # Mate has not been processed yet
 
-                if (read.pairOffset - read.exons[0][0]) < self.frag_len_cutoff:
-                    self.update_gene_bounds(read.exons[0][0], read.pairOffset)
+                if (read.pairOffset - read.pos) < self.frag_len_cutoff:
+                    self.update_gene_bounds(read.pos, read.pairOffset)
                 
 
                 if name in self.unmatched:
@@ -143,9 +148,20 @@ class Alignments:
 
         for i in range(len(unmatched[name])):
             match = unmatched[name][i]
-            if read.pairOffset == match.exons[0][0] and match.pairOffset == read.exons[0][0] and (not self.split_discordant or not self.conflicts(read.exons, match.exons)):
-                # Return index in unmatched dictionary of match
-                return i
+            if read.pairOffset == match.pos and match.pairOffset == read.pos:
+                if not read.exons:
+                    if not read.pos == match.pos:
+                        print('Error matching reads with name %s' % name)
+                    read.exons = match.exons[:]
+                    return i
+                elif not match.exons:
+                    if not read.pos == match.pos:
+                        print('Error matching reads with name %s' % name)
+                    match.exons = read.exons[:]
+                    return i
+                elif not self.split_discordant or not self.conflicts(read.exons, match.exons):
+                    # Return index in unmatched dictionary of match
+                    return i
 
         # If no match found, return -1
         return -1
@@ -250,6 +266,9 @@ class Alignments:
                         else:
                             self.cross_bundle_reads[name] = [r]
                     else:
+                        if not r.exons:
+                            print(name)
+                            exit()
                         self.add_unpaired(r)
 
         # Reset dictionary for next bundle
@@ -318,6 +337,8 @@ class Alignments:
 
         for r in self.unpaired:
             partitions = self.add_unpaired_to_partition(r, partitions)
+            #if not r.exons:
+            #    print(r.pos)
             if r.length > max_len:
                 max_len = r.length
         for p in self.paired:
