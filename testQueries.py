@@ -177,7 +177,7 @@ def queryReadsInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chroms
                 timesTrue.append(endTime - startTime)
 
                 startTime = time.time()
-                predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
+                _, predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
                 endTime = time.time()
                 timesPred.append(endTime - startTime)
         else:
@@ -190,7 +190,7 @@ def queryReadsInBundles(filename, expander, chrom, bamFile, bedtoolsPath, chroms
                 timesTrue.append(endTime - startTime)
 
                 startTime = time.time()
-                predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
+                _, predUnpaired, predPaired = expander.getReads(filename, c, b[0], b[1])
                 endTime = time.time()
                 timesPred.append(endTime - startTime)
 

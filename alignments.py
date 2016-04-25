@@ -18,8 +18,10 @@ class Alignments:
         self.frag_len_cutoff = frag_len_cutoff
         self.split_discordant = split_discordant
 
-        self.chromosomes = chromosomes
-        self.chromosomeNames = sorted(chromosomes.keys())
+        self.chromosomeNames = chromosomes[0]
+        self.chromosomes = dict()
+        for i in range(len(chromosomes[0])):
+            self.chromosomes[chromosomes[0][i]] = chromosomes[1][i]
 
         # Initialize exon breaks between all chromosomes
         self.exons = set()
@@ -29,11 +31,9 @@ class Alignments:
 
         # Bases are generally indexed from 1
         nextOffset = 1
-        for c in self.chromosomeNames:
-            self.chromOffsets[c] = nextOffset
-            nextOffset += chromosomes[c]+1
-            #self.exons += [nextOffset]
-
+        for i in range(len(chromosomes[0])):
+            self.chromOffsets[chromosomes[0][i]] = nextOffset
+            nextOffset += chromosomes[1][i] + 1
 
         # List of potential gene boundaries as tuples
         self.gene_bounds = []
@@ -88,6 +88,11 @@ class Alignments:
 
         if not paired:
             # Update the boundaries of the current bundle
+            #if read.exons[0][0] == 249431703:
+            #    print('A')
+            #    print(name)
+            #    print(read.pos)
+            #    print(read.exons)
             self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
             self.add_unpaired(read)
@@ -96,6 +101,11 @@ class Alignments:
             read.pairOffset += self.chromOffsets[read.pairChrom]
 
             if read.exons:
+                #if read.exons[0][0] == 249431703:
+                #    print('B')
+                #    print(name)
+                #    print(read.pos)
+                #    print(read.exons)
                 self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
             foundMate = False
@@ -126,6 +136,11 @@ class Alignments:
                 # Mate has not been processed yet
 
                 if (read.pairOffset - read.pos) < self.frag_len_cutoff:
+                    #if read.exons[0][0] == 249431703:
+                    #    print('C')
+                    #    print(name)
+                    #    print(read.pos)
+                    #    print(read.exons)
                     self.update_gene_bounds(read.pos, read.pairOffset)
                 
 
@@ -1949,8 +1964,8 @@ class Alignments:
         # write header
         if header:
             filehandle.write('@HD\tVN:1.0\tSO:unsorted\n')
-            for k,v in self.chromosomes.items():
-                filehandle.write('@SQ\tSN:' + str(k) + '\tLN:' + str(v) + '\n')
+            for c in self.chromosomeNames:
+                filehandle.write('@SQ\tSN:' + str(c) + '\tLN:' + str(self.chromosomes[c]) + '\n')
 
         for read in unpaired:
             exons = read.exons

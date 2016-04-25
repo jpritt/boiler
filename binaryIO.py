@@ -27,24 +27,15 @@ def readVal(f, numBytes):
     return v
 
 def writeChroms(chroms):
-    names = []
-    lens = []
-    maxLen = 0
-    for k,v in chroms.items():
-        names.append(k)
-        lens.append(v)
-        if v > maxLen:
-            maxLen = v
-
     # find length in bytes to fit all numbers
-    numBytes = findNumBytes(maxLen)
+    numBytes = findNumBytes(max(chroms[1]))
 
     # Write keys
-    s = bytes('\t'.join(names) + '\n', 'UTF-8')
+    s = bytes('\t'.join(chroms[0]) + '\n', 'UTF-8')
 
     # Write values
     s += valToBinary(1, numBytes)
-    for l in lens:
+    for l in chroms[1]:
         s += valToBinary(numBytes, l)
 
     return s
@@ -54,10 +45,11 @@ def readChroms(f):
     names = line.rstrip().split('\t')
 
     numBytes = readVal(f, 1)
-    chroms = dict()
-    for n in names:
-        chroms[n] = readVal(f, numBytes)
-    return chroms
+    num_chroms = len(names)
+    lens = [0] * num_chroms
+    for i in range(num_chroms):
+        lens[i] = readVal(f, numBytes)
+    return [names, lens]
 
 def writeDict(d):
     ''' Generic method to write a dictionary in tuple form with string keys and integer values '''

@@ -5,6 +5,7 @@ import binaryIO
 import math
 import os
 import preprocess
+import time
 
 class Compressor:
     aligned = None
@@ -88,8 +89,11 @@ class Compressor:
         diff_strand_unpaired_id = 0
         num_diff_strand_unpaired = len(self.diff_strand_unpaired)
 
+        firstR = None
+
         with open(input_name, 'r') as filehandle:
             id = 0
+            start_id = 0
             for line in filehandle:
                 # Check if header line
                 if line[0] == '@':
@@ -100,7 +104,7 @@ class Compressor:
                 if row[2] == '*':
                     # HISAT includes unmapped reads at the end of the file; we just skip them
                     continue
-                if not row[2] in self.chromosomes.keys():
+                if not row[2] in self.chromosomes[0]:
                     print('Error! Chromosome ' + str(row[2]) + ' not found!')
                     exit()
 
@@ -111,8 +115,22 @@ class Compressor:
                     # Compress most recent bundle
                     self.aligned.finalizeExons()
                     self.aligned.finalizeUnmatched()
+                    #print('Bundle spanning lines %d to %d' % (start_id, id-1))
+                    #print('Range %d to %d (%d exons)' % (self.aligned.exons[0], self.aligned.exons[-1], len(self.aligned.exons)))
+                    #print('Gene bounds: ' + str(self.aligned.gene_bounds))
+                    #print('%d unpaired, %d paired' % (len(self.aligned.unpaired), len(self.aligned.paired)))
+                    #if len(self.aligned.unpaired) > 0:
+                    #    r = self.aligned.unpaired[0]
+                    #    print(r.chrom + '\t' + str(r.pos) + '\t' + str(r.exons))
+                    #if len(self.aligned.paired) > 0:
+                    #    r = self.aligned.paired[0]
+                    #    print(r.chromA + '\t' + str(r.exonsA))
+                    #    print(r.chromB + '\t' + str(r.exonsB))
+                    #print('')
                     self.aligned.finalize_cross_bundle_reads()
                     bundle_id += 1
+
+                    start_id = id
 
                     bundles.append(self.aligned.exons)
 
@@ -229,7 +247,7 @@ class Compressor:
 
         # Write index information and append spliced and unspliced files
         with open(compressed_name, 'wb') as f:
-            s = binaryIO.writeChroms(self.aligned.chromosomes)
+            s = binaryIO.writeChroms(self.chromosomes)
             s += binaryIO.writeClusters(bundles)
             s += binaryIO.writeList(spliced_index)
             f.write(s)
@@ -362,12 +380,17 @@ class Compressor:
         return exons
 
     def parseSAMHeader(self, header):
-        chromosomes = dict()
+        # In the order they appear in the header
+        chromNames = []
+        chromLens = []
+
+        # Dictionary contains chromosome lengths for lookup
         for line in header.split('\n'):
             if line[0:3] == '@SQ':
                 row = line.strip().split('\t')
-                chromosomes[row[1][3:]] = int(row[2][3:])
-        return chromosomes
+                chromNames.append(row[1][3:])
+                chromLens.append(int(row[2][3:]))
+        return [chromNames, chromLens]
 
     def compressString(self, s):
         ''' Use a predefined python library to compress the given string.
