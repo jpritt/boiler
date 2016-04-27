@@ -64,6 +64,8 @@ class Alignments:
         self.read_timeB = 0.0
         self.read_countB = 0
 
+        self.numUnmatched = 0
+
     def processRead(self, name, read, paired):
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
@@ -87,62 +89,61 @@ class Alignments:
         #self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
         if not paired:
-            # Update the boundaries of the current bundle
-            #if read.exons[0][0] == 249431703:
-            #    print('A')
-            #    print(name)
-            #    print(read.pos)
-            #    print(read.exons)
             self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
-
             self.add_unpaired(read)
         else:   # paired read
             # update pair location for chromsome
             read.pairOffset += self.chromOffsets[read.pairChrom]
 
             if read.exons:
-                #if read.exons[0][0] == 249431703:
-                #    print('B')
-                #    print(name)
-                #    print(read.pos)
-                #    print(read.exons)
                 self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
-            foundMate = False
             if read.pairOffset <= read.pos:
-                i = self.find_mate(read, name, self.unmatched)
+                # Look for mates from the current bundle
+                foundMate = True
+                while foundMate and read.NH > 0:
+                    i = self.find_mate(read, name, self.unmatched)
+                    if i >= 0:
+                        mate = self.unmatched[name][i]
 
-                if i >= 0:
-                    mate = self.unmatched[name][i]
+                        if mate.exons[-1][1] > read.exons[-1][1]:
+                            self.add_paired(read, mate)
+                        else:
+                            self.add_paired(mate, read)
 
-                    if mate.exons[-1][1] > read.exons[-1][1]:
-                        self.add_paired(read, mate)
+                        if read.NH >= mate.NH:
+                            read.NH -= mate.NH
+                            mate.NH = 0 
+                            del self.unmatched[name][i]
+                        else:
+                            mate.NH -= read.NH
+                            read.NH = 0
                     else:
-                        self.add_paired(mate, read)
+                        foundMate = False
 
-                    foundMate = True
-                    del self.unmatched[name][i]
-
-                if not foundMate:
+                # Look for mates from a previous bundle
+                foundMate = True
+                while foundMate and read.NH > 0:
                     i = self.find_mate(read, name, self.cross_bundle_reads)
                     if i >= 0:
                         mate = self.cross_bundle_reads[name][i]
 
-                        self.cross_bundle_pairs.append((mate, read))
+                        self.cross_bundle_pairs.append((mate, read, min(read.NH, mate.NH)))
 
-                        foundMate = True
-                        del self.cross_bundle_reads[name][i]
-            if not foundMate:
-                # Mate has not been processed yet
+                        if read.NH >= mate.NH:
+                            read.NH -= mate.NH
+                            mate.NH = 0 
+                            del self.cross_bundle_reads[name][i]
+                        else:
+                            mate.NH -= read.NH
+                            read.NH = 0
+                    else:
+                        foundMate = False
 
+            if read.NH > 0:
+                # One of its mates has not been processed yet
                 if (read.pairOffset - read.pos) < self.frag_len_cutoff:
-                    #if read.exons[0][0] == 249431703:
-                    #    print('C')
-                    #    print(name)
-                    #    print(read.pos)
-                    #    print(read.exons)
                     self.update_gene_bounds(read.pos, read.pairOffset)
-                
 
                 if name in self.unmatched:
                     self.unmatched[name].append(read)
@@ -161,8 +162,9 @@ class Alignments:
         if not name in unmatched:
             return -1
 
-        for i in range(len(unmatched[name])):
-            match = unmatched[name][i]
+        r = unmatched[name]
+        for i in range(len(r)):
+            match = r[i]
             if read.pairOffset == match.pos and match.pairOffset == read.pos:
                 if not read.exons:
                     if not read.pos == match.pos:
@@ -281,6 +283,7 @@ class Alignments:
                         else:
                             self.cross_bundle_reads[name] = [r]
                     else:
+                        self.numUnmatched += 1
                         if not r.exons:
                             print(name)
                             exit()
@@ -324,7 +327,7 @@ class Alignments:
             if p[1].length > self.max_cross_bundle_read_len:
                 self.max_cross_bundle_read_len = p[1].length
 
-            NH = min(p[0].NH, p[1].NH)
+            NH = p[2]
             strand = p[0].strand or p[1].strand
             if strand == '-':
                 strand = -1

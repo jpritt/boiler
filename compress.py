@@ -66,6 +66,8 @@ class Compressor:
 
         self.compressByBundle(samFilename, compressedFilename, min_filename)
 
+        print('%d unmatched' % self.aligned.numUnmatched)
+
     def compressByBundle(self, input_name, compressed_name, intermediate_name=None):
         '''
         Read a sorted SAM file and compress in segments determined by clusters of reads
@@ -233,10 +235,10 @@ class Compressor:
 
         leftovers = 0
         for k,v in self.aligned.cross_bundle_reads.items():
-            #if len(v) > 0:
-            #    print(k)
-            #    print(v)
-            #    exit()
+            if len(v) > 0:
+                print(k)
+                print(v)
+                exit()
             leftovers += len(v)
         print('%d cross-bundle reads unmatched' % leftovers)
 
