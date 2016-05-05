@@ -259,8 +259,8 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     font = {'size': 18}
     plt.rc('font', **font)
 
-    x_start = 70
-    x_end = 80
+    x_start = 0
+    x_end = 100
     f, axs = plt.subplots(1,2,figsize=(20,8))
     a, = axs[1].plot(range(x_start,x_end), fragment_lengths1[x_start:x_end])
     b, = axs[1].plot(range(x_start,x_end), fragment_lengths2[x_start:x_end])
@@ -274,11 +274,12 @@ def plot_frag_lens(fragment_lengths1, fragment_lengths2):
     x_range = 100
     ratio = [0] * x_range
     for i in range(x_range):
-        ratio[i] = float(fragment_lengths2[i]) / float(fragment_lengths1[i])
+        if fragment_lengths1[i] > 0:
+            ratio[i] = float(fragment_lengths2[i]) / float(fragment_lengths1[i])
     axs[0].plot(range(x_range), ratio)
     axs[0].set_xlabel('Genomic Outer Distance (kb)')
     axs[0].set_ylabel('Compressed / Original Frequency')
-    plt.savefig('frag_len_geuv.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig('frag_len.pdf', format='pdf', bbox_inches='tight')
     plt.clf()
 
 def write_frag_lens(filename, fragment_lengths1, fragment_lengths2):
