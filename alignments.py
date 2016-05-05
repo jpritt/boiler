@@ -543,8 +543,6 @@ class Alignments:
         self.cross_bundle_pairs = []
         self.curr_cross_bundle_reads = dict()
 
-
-
     def findReads(self, unpairedLens, pairedLens, lensLeft, lensRight, coverage, boundaries=None):
         ''' Find the set of reads that most closely matches the distribution of readLens and the coverage vector
         '''
@@ -572,6 +570,8 @@ class Alignments:
         for k,v in pairedLens.items():
             countPaired += v
         #print(pairedLens)
+
+        print(pairedLens)
 
         t1 = time.time()
 
