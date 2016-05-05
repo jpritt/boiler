@@ -63,7 +63,11 @@ class Expander:
             self.aligned.exons = self.bundles[i]
 
             #print('Expanding cluster')
-            self.expandCluster(f, spliced_index[i])
+            debug = False
+            #if i == 13238:
+            #    debug = True
+            #    print(self.aligned.exons)
+            self.expandCluster(f, spliced_index[i], debug)
 
             if i == 0:
                 with open(out_name, 'w') as f2:
@@ -85,12 +89,14 @@ class Expander:
         #print('  Getting pairs time:      %f s' % self.pair_time)
         #print('  Assigning reads time:    %f s' % self.assign_time)
 
-    def expandCluster(self, f, length):
+    def expandCluster(self, f, length, debug):
         cluster = self.expandString(f.read(length))
         readLenBytes, startPos = binaryIO.binaryToVal(cluster, 1, 0)
         sorted_junctions, exonBytes, startPos = binaryIO.readJunctionsList(cluster, startPos)
 
         for key in sorted_junctions:
+            if debug:
+                print(key)
             exons = key[:-2]
 
             length = 0
@@ -113,7 +119,11 @@ class Expander:
 
             junc.coverage = self.RLEtoVector(junc.coverage)
 
-            self.expandJunc(junc)
+            self.expandJunc(junc, debug)
+            if debug:
+                print('')
+        if debug:
+            exit()
 
     def expandCrossBundleBuckets(self, filehandle):
         num_bundles = len(self.bundles)
@@ -149,7 +159,8 @@ class Expander:
                     for n in range(1, len(exon_bounds)):
                         boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
                     b.boundaries = boundaries
-                    self.expandCrossBundleBucket(b)
+
+                    self.expandCrossBundleBucket(b, False)
 
                     # Delete this bucket to save space
                     buckets[i] = None
@@ -200,8 +211,18 @@ class Expander:
             exit()
     '''
 
-    def expandJunc(self, junc):
+    def expandJunc(self, junc, debug):
+        if debug:
+            countUnpaired = 0
+            for l,f in junc.unpairedLens.items():
+                countUnpaired += f
+            countPaired = 0
+            for l,f in junc.pairedLens.items():
+                countPaired += f
         unpaired, paired, t1, t2 = self.aligned.findReads(junc.unpairedLens, junc.pairedLens, junc.lensLeft, junc.lensRight, junc.coverage, junc.boundaries)
+        if debug:
+            print('  Unpaired: %d > %d' % (countUnpaired, len(unpaired)))
+            print('  Paired:   %d > %d' % (countPaired, len(paired)))
 
         self.read_time += t1
         self.pair_time += t2
@@ -311,7 +332,7 @@ class Expander:
         end_t = time.time()
         self.assign_time += (end_t - start_t)
 
-    def expandCrossBundleBucket(self, bucket):
+    def expandCrossBundleBucket(self, bucket, debug):
         if not sum([e[1]-e[0] for e in bucket.exon_bounds]) == bucket.length:
             print(bucket.exon_bounds)
             print(sum([e[1]-e[0] for e in bucket.exon_bounds]))
@@ -320,7 +341,16 @@ class Expander:
             print(bucket.length)
             exit()
 
+        if debug:
+            countPaired = 0
+            for l,f in bucket.pairedLens.items():
+                countPaired += f
+
         unpaired, paired, t1, t2 = self.aligned.findReads(dict(), bucket.pairedLens, bucket.lensLeft, bucket.lensRight, bucket.coverage, bucket.boundaries)
+        if debug:
+            print('Unpaired: %d > %d' % (0, len(unpaired)))
+            print('Paired:   %d > %d' % (countPaired, len(paired)))
+            print('')
 
         numP = len(paired)
         numR = len(unpaired) + 2 * numP

@@ -42,15 +42,10 @@ def parseCigar(cigar, offset):
     exons = []
     newExon = True
 
-    orig_cigar = cigar[:]
-
     # Parse cigar string
     match = re.search("\D", cigar)
     while match:
         index = match.start()
-
-        if len(cigar[:index]) == 0:
-            print(orig_cigar)
         length = int(''.join(cigar[:index]))
 
         if cigar[index] == 'N':
@@ -68,7 +63,9 @@ def parseCigar(cigar, offset):
             if not newExon:
                 exons[-1][1] += length
 
-        offset += length
+        # Skip soft clipping
+        if not cigar[index] == 'S':
+            offset += length
         cigar = cigar[index+1:]
         match = re.search("\D", cigar)
 
@@ -99,9 +96,13 @@ def getChromReads(f, chr, fragment_lengths, countUnpaired, countPaired, countDis
         if len(row) < 6:
             continue
 
+        flags = int(row[1])
+        if (flags & 4):
+            continue
+
         if row[2] == chr:
             exons = parseCigar(row[5],int(row[3]))
-            if row[6] == '*':
+            if row[6] == '*' or (flags & 8):
                 countUnpaired += 1
             else:
                 countPaired += 1
@@ -179,6 +180,10 @@ def compareSAMs(file1, file2):
 
         reads1.sort()
         reads2.sort()
+
+        #print(reads1[:10])
+        #print(reads2[:10])
+        #exit()
 
         # No pairing
         tp = 0

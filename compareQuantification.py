@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 import sys
 from scipy.stats.stats import pearsonr
+import math
 
 '''
 Compare 2 .fpkm_tracking files output by Cufflinks (run with the -G option)
@@ -37,6 +38,7 @@ with open(sys.argv[2], 'r') as f:
             fpkm_id = row.index('FPKM')
             header = False
         else:
+            #print(row)
             fpkm = float(row[fpkm_id])
             fpkmsB.append((row[label_id], float(row[fpkm_id])))
 
@@ -44,15 +46,15 @@ if not len(fpkmsA) == len(fpkmsB):
     print('Lengths not equal!')
     print(len(fpkmsA))
     print(len(fpkmsB))
-    exit()
+    #exit()
 else:
    print('%d fpkms' % len(fpkmsA))
 
 fpkmsA.sort()
 fpkmsB.sort()
-for i in range(100):
-    print(fpkmsA[i][0] + '\t' + fpkmsB[i][0])
-print('')
+#for i in range(100):
+#    print(fpkmsA[i][0] + '\t' + fpkmsB[i][0])
+#print('')
 
 namesA = [d[0] for d in fpkmsA]
 valsA = [d[1] for d in fpkmsA]
@@ -67,26 +69,33 @@ for i in range(len(namesA)):
         matchesA.append(valsA[i])
         j = namesB.index(n)
         matchesB.append(valsB[j])
+        #if valsA[i] < 300 and valsB[j] > 1000:
+        #    print(n)
+        #    print(valsA[i])
+        #    print(valsB[j])
+        #    exit()
         del namesB[j]
         del valsB[j]
         del fpkmsB[j]
     else:
         unmatchedA.append(fpkmsA[i])
 
+#print('FBtr0100187' in fpkmsB)
 print('%d total' % len(fpkmsA))
-print(len(unmatchedA))
-print(len(fpkmsB))
-print(unmatchedA[:10])
-print(fpkmsB[:10])
+#print(len(unmatchedA))
+#print(len(fpkmsB))
+#print(unmatchedA[:10])
+#print(fpkmsB[:10])
 
-#mismatches = 0
-#for i in range(len(fpkmsA)):
-#    if not fpkmsA[i][0] == fpkmsB[i][0]:
-#        #print("Line %d, names don't match! %s =/= %s" % (i, fpkmsA[i][0], fpkmsB[i][0]))
-#        mismatches += 1
-#        #exit()
-#print('%d mismatches' % mismatches)
+with open('quant_cufflinks.txt', 'w') as f:
+    for i in range(len(matchesA)):
+        f.write(str(matchesA[i]) + '\t' + str(matchesB[i]) + '\n')
 
-print('Comparing %d transcripts' % len(fpkmsA))
-p = pearsonr(matchesA, matchesB)
-print('Pearson correlation coefficient:\t%f, %f' % (p[0], p[1]))
+#print('Comparing %d transcripts' % len(fpkmsA))
+#p = pearsonr(matchesA, matchesB)
+#print('Pearson correlation coefficient:\t%f, %f' % (p[0], p[1]))
+#print('')
+
+n = len(matchesA)
+error = sum([(matchesA[i]-matchesB[i]) ** 2 for i in range(n)]) / n
+print('RMSE:\t%f' % (math.sqrt(error)))

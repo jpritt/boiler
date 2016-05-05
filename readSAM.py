@@ -237,7 +237,8 @@ class ReadSAM:
                 if not newExon:
                     exons[-1][1] += length
 
-            offset += length
+            if not cigar[index] == 'S':
+                offset += length
             cigar = cigar[index+1:]
             match = re.search("\D", cigar)
 

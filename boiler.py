@@ -18,7 +18,7 @@ def go(args):
             print('Compressing')
             start = time.time()
         compressor = compress.Compressor(args.frag_len_cutoff)
-        compressor.compress(args.alignments, args.compressed, False, args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
+        compressor.compress(args.alignments, args.compressed, 'intermediate.sam', args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
         if args.verbose:
             end = time.time()
             print('Compression took %0.3f s' % (end-start))

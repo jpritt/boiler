@@ -12,3 +12,4 @@ class Read:
         self.lenRight = 0
 
         self.NH = NH
+        self.num_remaining = None

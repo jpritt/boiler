@@ -24,7 +24,7 @@ def run():
         proc = subprocess.Popen(['goby', '16g', 'sam-to-compact', '-i', sam_prefix+'.bam', '-o', 'compressed/compressed.goby'])
     else:
         print('Running Boiler')
-        proc = subprocess.Popen(['/scratch0/langmead-fs1/shared/pypy3-2.4-linux_x86_64-portable/bin/pypy3', '/scratch0/langmead-fs1/user/jacob/compress-alignments/boiler.py', '--compress', '--alignments', sam_prefix+'.sam', '--output', 'compressed/compressed.bin', '--frag-len-z-cutoff', '0.125', '--split-discordant', '--split-diff-strands'])
+        proc = subprocess.Popen(['/scratch0/langmead-fs1/shared/pypy3-2.4-linux_x86_64-portable/bin/pypy3', '/scratch0/langmead-fs1/user/jacob/compress-alignments/boiler.py', 'compress', '--frag-len-z-cutoff', '0.125', '--split-discordant', '--split-diff-strands', sam_prefix+'.sam', 'compressed/compressed.bin'])
 
     proc.wait()
     finish()

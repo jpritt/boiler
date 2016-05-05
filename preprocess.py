@@ -213,11 +213,8 @@ class Preprocessor:
 
         return 0
 
+    '''
     def parseCigar(self, cigar, offset):
-        ''' Parse the cigar string starting at the given index of the genome
-            Returns a list of offsets for each exonic region of the read [(start1, end1), (start2, end2), ...]
-        '''
-
         exons = []
         newExon = True
 
@@ -247,3 +244,4 @@ class Preprocessor:
             match = re.search("\D", cigar)
 
         return exons
+    '''

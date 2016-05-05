@@ -10,41 +10,6 @@ import math
 import random
 import os
 
-def parseCigar(cigar, offset):
-    ''' Parse the cigar string starting at the given index of the genome
-        Returns a list of offsets for each exonic region of the read [(start1, end1), (start2, end2), ...]
-    '''
-
-    exons = []
-    newExon = True
-
-    # Parse cigar string
-    match = re.search("\D", cigar)
-    while match:
-        index = match.start()
-        length = int(''.join(cigar[:index]))
-
-        if cigar[index] == 'N':
-            # Separates contiguous exons, so set boolean to start a new one
-            newExon = True
-        elif cigar[index] == 'M':
-            # If in the middle of a contiguous exon, append the length to it, otherwise start a new exon
-            if newExon:
-                exons.append([offset, offset+length])
-                newExon = False
-            else:
-                exons[-1][1] += length
-        elif cigar[index] == 'D':
-            # If in the middle of a contiguous exon, append the deleted length to it
-            if not newExon:
-                exons[-1][1] += length
-
-        offset += length
-        cigar = cigar[index+1:]
-        match = re.search("\D", cigar)
-
-    return exons
-
 def queryCoverageRanges(filename, sam, expander):
     lens = [1000, 10000, 100000, 1000000, 10000000, 20000000]
     chroms = ['2R', '2L', '3R', '3L', 'X']

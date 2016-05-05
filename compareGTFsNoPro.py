@@ -14,19 +14,17 @@ def compareGTFs(truthGTF, compGTF):
             if len(row) < 5:
                 continue
 
-            covIndex = row[8].find('cov')
-            covStart = row[8].find('"', covIndex) + 1
-            covEnd = row[8].find('"', covStart)
-            cov = float(row[8][covStart:covEnd])
-
             transcriptIdIndex = row[8].find('transcript_id')
             transcriptIdStart = row[8].find('"', transcriptIdIndex) + 1
             transcriptIdEnd = row[8].find('"', transcriptIdStart)
             transcriptId = row[8][transcriptIdStart : transcriptIdEnd]
 
+            print(row[2])
+
             if row[2] == 'transcript':
-                transcriptsTruth[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), cov, transcriptId)
-            elif row[2] == 'exon':
+                print('Found transcript ' + str(transcriptId))
+                transcriptsTruth[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), 1, transcriptId)
+            elif row[2] == 'exon' and transcriptId in transcriptsTruth:
                 transcriptsTruth[transcriptId].exons.append( (int(row[3]), int(row[4])) )
 
     transcriptsTruth = transcriptsTruth.values()
@@ -38,46 +36,19 @@ def compareGTFs(truthGTF, compGTF):
             if len(row) < 5:
                 continue
 
-            covIndex = row[8].find('cov')
-            covStart = row[8].find('"', covIndex) + 1
-            covEnd = row[8].find('"', covStart)
-            cov = float(row[8][covStart:covEnd])
-
             transcriptIdIndex = row[8].find('transcript_id')
             transcriptIdStart = row[8].find('"', transcriptIdIndex) + 1
             transcriptIdEnd = row[8].find('"', transcriptIdStart)
             transcriptId = row[8][transcriptIdStart : transcriptIdEnd]
 
             if row[2] == 'transcript':
-                transcriptsComp[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), cov, transcriptId)
-            elif row[2] == 'exon':
+                transcriptsComp[transcriptId] = Transcript(row[0], int(row[3]), int(row[4]), 1, transcriptId)
+            elif row[2] == 'exon' and transcriptId in transcriptsComp:
                 transcriptsComp[transcriptId].exons.append( (int(row[3]), int(row[4])) )
 
     transcriptsComp = transcriptsComp.values()
 
     compareAll(transcriptsTruth, transcriptsComp)
-
-def parsePro(filename):
-    ''' Return a dictionary with transcript id (e.g. 0300689) pointing to coverage level
-    '''
-    transcripts = dict()
-    with open(filename, 'r') as f:
-        for line in f:
-            row = line.strip().split('\t')
-            if len(row) < 8:
-                continue
-
-            tag = row[1]
-            sep1 = row[0].find(':')
-            sep2 = row[0].find('-', sep1)
-            sep3 = row[0].find('W', sep2)
-            chrom = row[0][:sep1]
-            start = int(row[0][sep1+1:sep2])
-            end = int(row[0][sep2+1:sep3])
-            fraction = float(row[8])
-            transcripts[tag] = Transcript(chrom, start, end, fraction, tag)
-    return transcripts
-
 
 def compareAll(transcriptsTrue, transcriptsPredicted):
     ''' Compare 
@@ -91,10 +62,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     for t1 in transcriptsTrue:
         line += 1
 
-        if t1.cov < .000001:
-            continue
-
-
         closestScore = 0
         closestT = None
         
@@ -104,14 +71,9 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        if weightByCov:
-            if closestScore > 0:
-                totalScore += closestScore * t1.cov
-            transcriptsTrueCount += t1.cov
-        else:
-            if closestScore > 0:
-                totalScore += closestScore
-            transcriptsTrueCount += 1
+        if closestScore > 0:
+            totalScore += closestScore
+        transcriptsTrueCount += 1
     recall = float(totalScore) / float(transcriptsTrueCount)
     print('Recall    = TP/T = ' + str(recall))
     
@@ -120,10 +82,6 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
     transcriptsPredictedCount = 0
     for t1 in transcriptsPredicted:
         line += 1
-
-        if t1.cov < .000001:
-            continue
-
 
         closestScore = 0
         closestT = None
@@ -134,19 +92,11 @@ def compareAll(transcriptsTrue, transcriptsPredicted):
                 closestScore = score
                 closestT = t2
 
-        if weightByCov:
-            if closestScore > 0:
-                totalScore += closestScore * t1.cov
-            transcriptsPredictedCount += t1.cov
-        else:
-            if closestScore > 0:
-                totalScore += closestScore
-            transcriptsPredictedCount += 1
+        if closestScore > 0:
+            totalScore += closestScore
+        transcriptsPredictedCount += 1
     precision = float(totalScore) / float(transcriptsPredictedCount)
     print('Precision    = TP/P = ' + str(precision))
 
-weightByCov = False
-if sys.argv[3] == '1':
-    weightByCov = True
 compareGTFs(sys.argv[1], sys.argv[2])
 

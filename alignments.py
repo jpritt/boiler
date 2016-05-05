@@ -34,6 +34,7 @@ class Alignments:
         for i in range(len(chromosomes[0])):
             self.chromOffsets[chromosomes[0][i]] = nextOffset
             nextOffset += chromosomes[1][i] + 1
+        print(self.chromOffsets)
 
         # List of potential gene boundaries as tuples
         self.gene_bounds = []
@@ -89,6 +90,8 @@ class Alignments:
         #self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
 
         if not paired:
+            if not read.exons:
+                print(name)
             self.update_gene_bounds(read.exons[0][0], read.exons[-1][1])
             self.add_unpaired(read)
         else:   # paired read
@@ -111,6 +114,10 @@ class Alignments:
                         else:
                             self.add_paired(mate, read)
 
+                        if not read.NH == mate.NH:
+                            print(name)
+                            exit()
+
                         if read.NH >= mate.NH:
                             read.NH -= mate.NH
                             mate.NH = 0 
@@ -129,6 +136,10 @@ class Alignments:
                         mate = self.cross_bundle_reads[name][i]
 
                         self.cross_bundle_pairs.append((mate, read, min(read.NH, mate.NH)))
+
+                        if not read.NH == mate.NH:
+                            print(name)
+                            exit()
 
                         if read.NH >= mate.NH:
                             read.NH -= mate.NH
@@ -169,11 +180,13 @@ class Alignments:
                 if not read.exons:
                     if not read.pos == match.pos:
                         print('Error matching reads with name %s' % name)
+                        exit()
                     read.exons = match.exons[:]
                     return i
                 elif not match.exons:
                     if not read.pos == match.pos:
                         print('Error matching reads with name %s' % name)
+                        exit()
                     match.exons = read.exons[:]
                     return i
                 elif not self.split_discordant or not self.conflicts(read.exons, match.exons):
@@ -558,6 +571,7 @@ class Alignments:
         countPaired = 0
         for k,v in pairedLens.items():
             countPaired += v
+        #print(pairedLens)
 
         t1 = time.time()
 
@@ -593,6 +607,11 @@ class Alignments:
             #unpaired, paired = self.findPairs(reads, pairedLens)
             unpaired, paired = self.findPairsRandom(reads, pairedLens)
         t3 = time.time()
+
+        if len(paired) > countPaired:
+            print('%d > %d' % (len(paired), countPaired))
+            exit()
+        #print('')
 
         return unpaired, paired, t2-t1, t3-t2
 

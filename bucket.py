@@ -26,12 +26,6 @@ class Bucket:
         self.coverage = [0] * length
 
     def add_paired(self, p):
-        #print(self.exons)
-        #print(p.exonIds)
-        #print(p.startOffset)
-        #print(p.endOffset)
-        #print(p.lenLeft)
-        #print(p.lenRight)
 
         p.length = self.length - p.startOffset - p.endOffset
 

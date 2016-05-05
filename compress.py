@@ -117,19 +117,14 @@ class Compressor:
                     # Compress most recent bundle
                     self.aligned.finalizeExons()
                     self.aligned.finalizeUnmatched()
-                    #print('Bundle spanning lines %d to %d' % (start_id, id-1))
-                    #print('Range %d to %d (%d exons)' % (self.aligned.exons[0], self.aligned.exons[-1], len(self.aligned.exons)))
-                    #print('Gene bounds: ' + str(self.aligned.gene_bounds))
-                    #print('%d unpaired, %d paired' % (len(self.aligned.unpaired), len(self.aligned.paired)))
-                    #if len(self.aligned.unpaired) > 0:
-                    #    r = self.aligned.unpaired[0]
-                    #    print(r.chrom + '\t' + str(r.pos) + '\t' + str(r.exons))
-                    #if len(self.aligned.paired) > 0:
-                    #    r = self.aligned.paired[0]
-                    #    print(r.chromA + '\t' + str(r.exonsA))
-                    #    print(r.chromB + '\t' + str(r.exonsB))
-                    #print('')
                     self.aligned.finalize_cross_bundle_reads()
+                    #if self.aligned.gene_bounds[0] < 100480943 and self.aligned.gene_bounds[1] > 100478955:
+                    #    print(bundle_id)
+                    #    print(self.aligned.gene_bounds)
+                    #    print(self.aligned.exons)
+                    #    print(self.aligned.gene_bounds[0] - self.aligned.chromOffsets['X'])
+                    #    print(self.aligned.gene_bounds[1] - self.aligned.chromOffsets['X'])
+                    #    exit()
                     bundle_id += 1
 
                     start_id = id
@@ -167,6 +162,9 @@ class Compressor:
                 # Process read
                 if row[5] == '*':
                     # HISAT occasionally prints * as the cigar string when it is identical to its mate
+                    #print('No cigar string')
+                    #print(row[0])
+                    #exit()
                     exons = None
                 else:
                     exons = self.parseCigar(row[5], int(row[3]))
@@ -180,10 +178,15 @@ class Compressor:
                     elif r[0:3] == 'NH:':
                         NH = int(r[5:])
 
+                flags = int(row[1])
+                if flags & 4:
+                    # Read is unmapped
+                    continue
+
                 r = read.Read(row[2], int(row[3]), exons, strand, NH)
                 #r.name = row[0]
 
-                if row[6] == '*':
+                if row[6] == '*' or (flags & 8):
                     paired = False
                 elif diff_strand_unpaired_id < num_diff_strand_unpaired and id == self.diff_strand_unpaired[diff_strand_unpaired_id]:
                     #if not row[6] == '*':
@@ -235,10 +238,10 @@ class Compressor:
 
         leftovers = 0
         for k,v in self.aligned.cross_bundle_reads.items():
-            if len(v) > 0:
-                print(k)
-                print(v)
-                exit()
+            #if len(v) > 0:
+            #    print(k)
+            #    print(v)
+            #    exit()
             leftovers += len(v)
         print('%d cross-bundle reads unmatched' % leftovers)
 
@@ -274,6 +277,9 @@ class Compressor:
         junc_lens = []
         junc_string = b''
         for j in self.sortedJuncs:
+            #if self.aligned.exons[0] == 100476370 and j == [2, None, 1]:
+            #    
+
             s = binaryIO.writeJunction(readLenBytes, junctions[j])
             junc_lens.append(len(s))
             junc_string += s
@@ -375,7 +381,9 @@ class Compressor:
                 if not newExon:
                     exons[-1][1] += length
 
-            offset += length
+            # Skip soft clipping
+            if not cigar[index] == 'S':
+                offset += length
             cigar = cigar[index+1:]
             match = re.search("\D", cigar)
 
