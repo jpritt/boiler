@@ -15,6 +15,9 @@ class Compressor:
     # 2 - bz2
     compressMethod = 0
 
+    covSize = 0
+    totalSize = 0
+
     def __init__(self, frag_len_cutoff):
         if self.compressMethod == 0:
             self.zlib = __import__('zlib')
@@ -66,7 +69,9 @@ class Compressor:
 
         self.compressByBundle(samFilename, compressedFilename, min_filename)
 
-        print('%d unmatched' % self.aligned.numUnmatched)
+        #print('%d unmatched' % self.aligned.numUnmatched)
+        print('Approximately %d / %d = %f%% of compressed file is coverage' % (self.covSize, self.totalSize, 100.0*float(self.covSize)/float(self.totalSize)))
+        print('Finished compressing')
 
     def compressByBundle(self, input_name, compressed_name, intermediate_name=None):
         '''
@@ -273,6 +278,8 @@ class Compressor:
         cluster = binaryIO.valToBinary(1, readLenBytes)
         cluster += binaryIO.writeJunctionsList(self.sortedJuncs, 2)
 
+        self.totalSize += len(cluster)
+
         # TODO: No need for junc_lens?
         junc_lens = []
         junc_string = b''
@@ -280,7 +287,9 @@ class Compressor:
             #if self.aligned.exons[0] == 100476370 and j == [2, None, 1]:
             #    
 
-            s = binaryIO.writeJunction(readLenBytes, junctions[j])
+            s, c, t = binaryIO.writeJunction(readLenBytes, junctions[j])
+            self.covSize += c
+            self.totalSize += t
             junc_lens.append(len(s))
             junc_string += s
 
@@ -318,13 +327,18 @@ class Compressor:
             index += binaryIO.valToBinary(1, readLenBytes)
             index += binaryIO.writeCrossBundleBucketNames(bundleIdBytes, cross_bundle_buckets, buckets_sorted)
 
+            self.totalSize += len(index)
+
             main = b''
             chunk = b''
             chunk_id = 0
             for i in range(len(buckets_sorted)):
                 b = buckets_sorted[i]
 
-                chunk += binaryIO.writeCrossBundleBucket(readLenBytes, cross_bundle_buckets[b])
+                ch, c, t = binaryIO.writeCrossBundleBucket(readLenBytes, cross_bundle_buckets[b])
+                chunk += ch
+                self.covSize += c
+                self.totalSize += t
                 if (i+1) % chunk_size == 0:
                     compressed = self.compressString(chunk)
                     chunk_lens[chunk_id] = len(compressed)

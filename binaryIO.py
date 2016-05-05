@@ -7,9 +7,6 @@ from struct import *
 formats = {1:'B', 2:'H', 4:'I', 8:'Q'}
 byteVal = int(pow(2,8))
 
-covSize = 0
-totalSize = 0
-
 def valToBinary(numBytes, val):
     ''' Convert a value to a byte string which can then be written to a file
     '''
@@ -283,7 +280,7 @@ def readJunctionsList(s, start=0):
 def writeJunction(readLenBytes, junc):
     #s = writeCov(junc.coverage)
     s = writeCov(RLE(junc.coverage))
-    covSize += len(s)
+    covSize = len(s)
     s += writeLens(readLenBytes, junc.unpairedLens)
 
     # Find max number of bytes needed to encode fragment lengths
@@ -298,9 +295,9 @@ def writeJunction(readLenBytes, junc):
         if len(junc.lensLeft) > 0:
             s += writeLens(readLenBytes, junc.lensRight)
 
-    totalSize += len(s)
+    totalSize = len(s)
 
-    return s
+    return s, covSize, totalSize
 
 def readJunction(s, junc, readLenBytes, start=0):
     junc.coverage, start = readCov(s, start)
@@ -368,7 +365,7 @@ def writeCrossBundleBucket(readLenBytes, bucket):
 
     s += writeCov(bucket.coverage)
 
-    covSize += len(s) - l
+    covSize = len(s) - l
 
     # Find max number of bytes needed to encode fragment lengths
     if len(bucket.pairedLens) == 0:
@@ -382,9 +379,9 @@ def writeCrossBundleBucket(readLenBytes, bucket):
         if len(bucket.lensLeft) > 0:
             s += writeLens(readLenBytes, bucket.lensRight)
 
-    totalSize += len(s)
+    totalSize = len(s)
 
-    return s
+    return s, covSize, totalSize
 
 def readCrossBundleBucket(s, bucket, readLenBytes, start=0):
     v = unpack_from('b', s[start:start+1])[0]
