@@ -604,8 +604,8 @@ class Alignments:
         if boundaries:
             unpaired, paired = self.findPairsWithBoundaries(reads, unpairedLens, pairedLens, boundaries)
         else:
-            #unpaired, paired = self.findPairs(reads, pairedLens)
-            unpaired, paired = self.findPairsRandom(reads, pairedLens)
+            unpaired, paired = self.findPairsGreedy(reads, pairedLens)
+            #unpaired, paired = self.findPairsRandom(reads, pairedLens)
         t3 = time.time()
 
         if len(paired) > countPaired:
@@ -627,6 +627,7 @@ class Alignments:
         print('  Avg time: %f s' % (self.read_timeB / self.read_countB))
         print('')
 
+    '''
     def findPairsGreedy(self, reads, pairedLens):
         pairedLensSorted = sorted(pairedLens.keys(), reverse=True)
 
@@ -857,6 +858,7 @@ class Alignments:
                     continue
                 if dists[i][j] == value:
                     return i,j
+    '''
 
     def findPairsWithBoundaries(self, reads, unpaired_lens, paired_lens, boundaries):
         '''
@@ -1143,7 +1145,6 @@ class Alignments:
 
         return [j]
 
-
     def findPairsRandom(self, reads, paired_lens, debug=False):
         #print('Pairing %d reads' % len(reads))
 
@@ -1388,7 +1389,152 @@ class Alignments:
 
         return pair
 
+    def findPairsGreedy(self, reads, paired_lens):
+        countPairs = 0
+        for k,v in paired_lens.items():
+            countPairs += v
 
+        reads.sort()
+
+        unique_reads = [reads[0]]
+        read_counts = [1]
+        for r in reads[1:]:
+            if r == unique_reads[-1]:
+                read_counts[-1] += 1
+            else:
+                unique_reads.append(r)
+                read_counts.append(1)
+
+        possible = list(range(len(reads)))
+
+        paired = []
+        unmatched = []
+        while countPairs > 0 and len(possible) > 1:
+            p = self.findPairGreedy(unique_reads, read_counts, paired_lens, possible, unmatched)
+            if p:
+                paired.append(p)
+                countPairs -= 1
+
+        paired_lens_sorted = sorted(paired_lens)
+        for _ in range(min(countPairs, len(unmatched)/2)):
+            p = self.findApproxPairGreedy(unique_reads, read_counts, paired_lens_sorted, unmatched)
+            paired.append(p)
+            countPairs -= 1
+        unpaired = []
+        for i in range(len(read_counts)):
+            for _ in range(read_counts[i]):
+                unpaired.append(unique_reads[i][:])
+        return unpaired, paired
+
+    def findPairGreedy(self, reads, counts, paired_lens, possible, unmatched):
+        n = len(possible)
+        id1 = random.randint(n-1)
+        r1 = reads[possible[id1]]
+        for id2 in range(id1):
+            r2 = reads[possible[id2]]
+            l = r1[1] - r2[0]
+            if l in paired_lens:
+                pair = [r2[:], r1[:]]
+
+                counts[possible[id1]] -= 1
+                if counts[possible[id1]] == 0:
+                    del possible[id1]
+
+                counts[possible[id2]] -= 1
+                if counts[possible[id2]] == 0:
+                    del possible[id2]
+
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+
+                return pair
+        for id2 in range(id1+1, n):
+            r2 = reads[possible[id2]]
+            l = r2[1] - r1[0]
+            if l in paired_lens:
+                pair = [r1[:], r2[:]]
+
+                counts[possible[id2]] -= 1
+                if counts[possible[id2]] == 0:
+                    del possible[id2]
+
+                counts[possible[id1]] -= 1
+                if counts[possible[id1]] == 0:
+                    del possible[id1]
+
+                if paired_lens[l] > 1:
+                    paired_lens[l] -= 1
+                else:
+                    del paired_lens[l]
+
+                return pair
+
+        # No pair found for this read
+        unmatched.append(id1)
+        del possible[id1]
+        return None
+
+    def findApproxPairGreedy(self, reads, counts, paired_lens_sorted, possible):
+        n = len(possible)
+        num_lens = len(paired_lens_sorted)
+
+        id1 = random.randint(n-1)
+        r1 = reads[possible[id1]]
+
+        closestD = None
+        closestId = None
+        for id2 in range(id1):
+            r2 = reads[possible[id2]]
+            l = r1[1] - r2[0]
+            id = bisect.bisect_left(paired_lens_sorted, l)
+            if id < num_lens:
+                d = abs(l - paired_lens_sorted[id])
+                if closestD == None or d < closestD:
+                    closestD = d
+                    closestId = id2
+            if id > 0:
+                d = abs(l - paired_lens_sorted[id-1])
+                if closestD == None or d < closestD:
+                    closestD = d
+                    closestId = id2
+
+        for id2 in range(id1+1, n):
+            r2 = reads[possible[id2]]
+            l = r2[1] - r1[0]
+            id = bisect.bisect_left(paired_lens_sorted, l)
+            if id < num_lens:
+                d = abs(l - paired_lens_sorted[id])
+                if closestD == None or d < closestD:
+                    closestD = d
+                    closestId = id2
+            if id > 0:
+                d = abs(l - paired_lens_sorted[id-1])
+                if closestD == None or d < closestD:
+                    closestD = d
+                    closestId = id2
+
+        pair = [r1[:], reads[possible[closestId]][:]]
+        if closestId > id1:
+            counts[possible[closestId]] -= 1
+            if counts[possible[closestId]] == 0:
+                del possible[closestId]
+
+            counts[possible[id1]] -= 1
+            if counts[possible[id1]] == 0:
+                del possible[id1]
+        else:
+            counts[possible[id1]] -= 1
+            if counts[possible[id1]] == 0:
+                del possible[id1]
+
+            counts[possible[closestId]] -= 1
+            if counts[possible[closestId]] == 0:
+                del possible[closestId]
+        return pair
+
+    '''
     def findPairs(self, reads, pairedLens):
         if len(pairedLens) == 0:
             return reads, []
@@ -1529,6 +1675,7 @@ class Alignments:
         paired += p
 
         return unpaired, paired
+    '''
 
     def findReadsInCoverage_v1(self, coverage, readLens, boundaries=None):
         ''' Given a coverage vector, return a set of reads the closely fits the coverage vector as well the distribution of read lengths.
