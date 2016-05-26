@@ -3,6 +3,7 @@ import sys
 import argparse
 import time
 import logging
+import os
 
 VERSION = '1.0.1'
 
@@ -14,11 +15,32 @@ def go(args):
     if args.command == 'compress':
         import compress
 
+        if args.preprocess.lower() == 'tophat':
+            print('Preprocessing TopHat alignments')
+            import inferXStags
+            prefix = args.alignments[:args.alignments.index('.')] + '.processed'
+            inferXStags.inferTags(args.alignments, prefix + '.sam')
+            os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
+            os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
+        elif args.preprocess.lower() == 'hisat':
+            print('Preprocessing HISAT alignments')
+            import removeUp
+            import enumeratePairs
+            import inferXStags
+            prefix = args.alignments[:args.alignments.index('.')] + '.processed'
+            removeUp.removeUnmapped(args.alignments, 'temp1.sam')
+            enumeratePairs.processHISAT('temp1.sam', 'temp2.sam')
+            os.system('rm temp1.sam')
+            inferXStags.inferTags('temp2.sam', prefix + '.sam')
+            os.system('rm temp2.sam')
+            os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
+            os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
+
         if args.verbose:
             print('Compressing')
             start = time.time()
         compressor = compress.Compressor(args.frag_len_cutoff)
-        compressor.compress(args.alignments, args.compressed, 'intermediate.sam', args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
+        compressor.compress(prefix + '.sam', args.compressed, None, args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
         if args.verbose:
             end = time.time()
             print('Compression took %0.3f s' % (end-start))
@@ -135,6 +157,7 @@ if __name__ == '__main__':
     parser_compress.add_argument("-z", "--frag-len-z-cutoff", type=float, help='Store any fragments above this z-score in a bundle-spanning bucket')
     parser_compress.add_argument("-s", "--split-diff-strands", action="store_true", help='Split any pairs with different XS values')
     parser_compress.add_argument("-d", "--split-discordant", action="store_true", help='Treat discordant pairs as unpaired reads')
+    parser_compress.add_argument("-p", "--preprocess", type=str, help="Set to 'tophat' to preprocess TopHat alignments, 'hisat' to preprocess HISAT alignments")
     parser_compress.add_argument("-v", "--verbose", help="Print timing information", action="store_true")
     parser_compress.add_argument("alignments", type=str, help='Full path of SAM file containing aligned reads')
     parser_compress.add_argument("compressed", type=str, nargs='?', default='compressed.bin', help="Compressed filename. Default: compressed.bin")

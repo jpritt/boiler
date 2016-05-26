@@ -571,7 +571,7 @@ class Alignments:
             countPaired += v
         #print(pairedLens)
 
-        print(pairedLens)
+        #print(pairedLens)
 
         t1 = time.time()
 
@@ -604,13 +604,13 @@ class Alignments:
         if boundaries:
             unpaired, paired = self.findPairsWithBoundaries(reads, unpairedLens, pairedLens, boundaries)
         else:
-            unpaired, paired = self.findPairsGreedy(reads, pairedLens)
-            #unpaired, paired = self.findPairsRandom(reads, pairedLens)
+            #unpaired, paired = self.findPairsGreedy(reads, pairedLens)
+            unpaired, paired = self.findPairsRandom(reads, pairedLens)
         t3 = time.time()
 
-        if len(paired) > countPaired:
-            print('%d > %d' % (len(paired), countPaired))
-            exit()
+        #if len(paired) > countPaired:
+        #    print('%d > %d' % (len(paired), countPaired))
+        #    exit()
         #print('')
 
         return unpaired, paired, t2-t1, t3-t2

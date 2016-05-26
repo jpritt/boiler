@@ -31,20 +31,6 @@ def writeReads(f_out, readsA, readsB):
         print('Error! No right mates found for %s' % readsA[0][0])
         exit()
 
-    #if not (numA == numB) and numA > 1 and numB > 1:
-    '''
-    if numA == 2 and (numA == numB):
-        for r in readsA:
-            print(r[0] + '\t' + r[2] + '\t' + r[3] + '\t\t' + r[6] + '\t' + r[7])
-        print('')
-        for r in readsB:
-            print(r[0] + '\t' + r[2] + '\t' + r[3] + '\t\t' + r[6] + '\t' + r[7])
-        print('')
-        print('')        
-
-        exit()
-    '''
-
     chromsA = [r[2] for r in readsA]
     startsA = [r[3] for r in readsA]
     chromsB = [r[2] for r in readsB]
@@ -111,18 +97,63 @@ def writeReads(f_out, readsA, readsB):
             r[7] = startsA[i]
             f_out.write('\t'.join(r) + '\n')
 
-def processHISAT(f_in, f_out):
-    currName = None
-    readsA = []
-    readsB = []
-    last = None
-    for line in f_in:
-        if line[0] == '@':
-            f_out.write(line)
-            continue
+def processHISAT(input, output):
+    with open(input, 'r') as f_in:
+        with open(output, 'w') as f_out:
+            currName = None
+            readsA = []
+            readsB = []
+            last = None
+            for line in f_in:
+                if line[0] == '@':
+                    f_out.write(line)
+                    continue
 
-        row = line.rstrip().split('\t')
-        if not currName == row[0]:
+                row = line.rstrip().split('\t')
+                if not currName == row[0]:
+                    if readsA:
+                        if oneToOne(readsA, readsB):
+                            NH = str(len(readsA))
+                            for r in readsA:
+                                for i in range(11, len(r)):
+                                    if r[i][:2] == 'NH':
+                                        r[i] = 'NH:i:' + NH
+                                        break
+                                f_out.write('\t'.join(r) + '\n')
+                            NH = str(len(readsB))
+                            for r in readsB:
+                                for i in range(11, len(r)):
+                                    if r[i][:2] == 'NH':
+                                        r[i] = 'NH:i:' + NH
+                                        break
+                                f_out.write('\t'.join(r) + '\n')
+                        else:
+                            writeReads(f_out, readsA, readsB)
+                    currName = row[0]
+                    readsA = []
+                    readsB = []
+
+                if row[2] == '*' and row[3] == '0' and row[5] == '*':
+                    continue
+
+                if row[6] == '*':
+                    #print(row[0])
+                    #exit()
+                    f_out.write(line)
+
+                flags = int(row[1])
+
+                if (flags & 64):
+                    readsA.append(row)
+                elif (flags & 128):
+                    readsB.append(row)
+                else:
+                    print('Read does not have a template flag set!')
+                    print(line)
+                    exit()
+
+                last = row[:]
+
             if readsA:
                 if oneToOne(readsA, readsB):
                     NH = str(len(readsA))
@@ -141,65 +172,6 @@ def processHISAT(f_in, f_out):
                         f_out.write('\t'.join(r) + '\n')
                 else:
                     writeReads(f_out, readsA, readsB)
-            currName = row[0]
-            readsA = []
-            readsB = []
-
-        if row[2] == '*' and row[3] == '0' and row[5] == '*':
-            continue
-
-        if row[6] == '*':
-            #print(row[0])
-            #exit()
-            f_out.write(line)
-
-        '''
-        if row[5] == '*':
-            if not row[2] == last[2] and row[6] == last[6]:
-                print(row[0])
-                exit()
-            row[5] = last[5]
-            for r in row[11:]:
-                if r[:2] == 'XS':
-                    print('Row has XS')
-                    print(line)
-                    exit()
-            for r in last[11:]:
-                if r[:2] == 'XS':
-                    row.append(r)
-        '''
-
-        flags = int(row[1])
-
-        if (flags & 64):
-            readsA.append(row)
-        elif (flags & 128):
-            readsB.append(row)
-        else:
-            print('Read does not have a template flag set!')
-            print(line)
-            exit()
-
-        last = row[:]
-
-    if readsA:
-        if oneToOne(readsA, readsB):
-            NH = str(len(readsA))
-            for r in readsA:
-                for i in range(11, len(r)):
-                    if r[i][:2] == 'NH':
-                        r[i] = 'NH:i:' + NH
-                        break
-                f_out.write('\t'.join(r) + '\n')
-            NH = str(len(readsB))
-            for r in readsB:
-                for i in range(11, len(r)):
-                    if r[i][:2] == 'NH':
-                        r[i] = 'NH:i:' + NH
-                        break
-                f_out.write('\t'.join(r) + '\n')
-        else:
-            writeReads(f_out, readsA, readsB)
 
 
 if __name__ == '__main__':
@@ -211,6 +183,4 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=str, required=True, help='Path and filename of SAM file to write')
     args = parser.parse_args(sys.argv[1:])
 
-    with open(args.input, 'r') as f_in:
-        with open(args.output, 'w') as f_out:
-            processHISAT(f_in, f_out)
+    processHISAT(args.input, args.output)

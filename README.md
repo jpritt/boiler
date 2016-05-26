@@ -4,7 +4,7 @@ compress-alignments
 'boiler.py' is the main script that runs compression and decompression. Python 3 is required to run Boiler. The input SAM file must be sorted by read start position.
 To compress, run the following:.
 
-> ./boiler.py compress [--frag-len-z-cutoff 0.125] [--split-discordant] [--split-diff-strands] path/to/alignments.sam path/to/compressed.bin
+> ./boiler.py compress [--frag-len-z-cutoff 0.125] [--split-discordant] [--split-diff-strands] [--preprocess tophat | stringtie] path/to/alignments.sam path/to/compressed.bin
 
 --frag-len-z-cutoff sets the z-score for paired-end read lengths at which to set the cutoff for placing mates in different bundles. 0.125 seems to be a good z-score. Alternatively, you can use --frag-len-cutoff to set the cutoff directly.
 If --split-discordant is present, discordant reads will be treated as unpaired reads.
