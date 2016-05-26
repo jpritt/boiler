@@ -59,6 +59,8 @@ class Expander:
         self.expandCrossBundleBuckets(f)
         t3 = time.time()
 
+        readId = 0
+
         for i in range(len(self.bundles)):
             self.aligned.exons = self.bundles[i]
 
@@ -71,10 +73,10 @@ class Expander:
 
             if i == 0:
                 with open(out_name, 'w') as f2:
-                    self.aligned.writeSAM(f2, self.aligned.unpaired, self.aligned.paired, True, self.force_xs)
+                    readId = self.aligned.writeSAM(f2, self.aligned.unpaired, self.aligned.paired, True, self.force_xs, readId)
             else:
                 with open(out_name, 'a') as f2:
-                    self.aligned.writeSAM(f2, self.aligned.unpaired, self.aligned.paired, False, self.force_xs)
+                    readId = self.aligned.writeSAM(f2, self.aligned.unpaired, self.aligned.paired, False, self.force_xs, readId)
 
             self.aligned.unpaired = []
             self.aligned.paired = []

@@ -15,32 +15,34 @@ def go(args):
     if args.command == 'compress':
         import compress
 
-        if args.preprocess.lower() == 'tophat':
-            print('Preprocessing TopHat alignments')
-            import inferXStags
-            prefix = args.alignments[:args.alignments.index('.')] + '.processed'
-            inferXStags.inferTags(args.alignments, prefix + '.sam')
-            os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
-            os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
-        elif args.preprocess.lower() == 'hisat':
-            print('Preprocessing HISAT alignments')
-            import removeUp
-            import enumeratePairs
-            import inferXStags
-            prefix = args.alignments[:args.alignments.index('.')] + '.processed'
-            removeUp.removeUnmapped(args.alignments, 'temp1.sam')
-            enumeratePairs.processHISAT('temp1.sam', 'temp2.sam')
-            os.system('rm temp1.sam')
-            inferXStags.inferTags('temp2.sam', prefix + '.sam')
-            os.system('rm temp2.sam')
-            os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
-            os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
+        if args.preprocess:
+            if args.preprocess.lower() == 'tophat':
+                print('Preprocessing TopHat alignments')
+                import inferXStags
+                prefix = args.alignments[:args.alignments.index('.')] + '.processed'
+                inferXStags.inferTags(args.alignments, prefix + '.sam')
+                os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
+                os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
+            elif args.preprocess.lower() == 'hisat':
+                print('Preprocessing HISAT alignments')
+                import removeUp
+                import enumeratePairs
+                import inferXStags
+                prefix = args.alignments[:args.alignments.index('.')] + '.processed'
+                removeUp.removeUnmapped(args.alignments, 'temp1.sam')
+                enumeratePairs.processHISAT('temp1.sam', 'temp2.sam')
+                os.system('rm temp1.sam')
+                inferXStags.inferTags('temp2.sam', prefix + '.sam')
+                os.system('rm temp2.sam')
+                os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
+                os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
+            args.alignments = prefix + '.sam'
 
         if args.verbose:
             print('Compressing')
             start = time.time()
         compressor = compress.Compressor(args.frag_len_cutoff)
-        compressor.compress(prefix + '.sam', args.compressed, None, args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
+        compressor.compress(args.alignments, args.compressed, args.gtf, None, args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
         if args.verbose:
             end = time.time()
             print('Compression took %0.3f s' % (end-start))
@@ -83,57 +85,6 @@ def go(args):
             end = time.time()
             print('Decompression took %0.3f s' % (end-start))
 
-
-    '''
-    compressedName = 'compressed.bin'
-    if args.output:
-        compressedName = args.output
-
-    if args.compress:
-        if args.alignments is None:
-            print('In order to run compression, you must specify a SAM file to compress with the --alignments flag')
-            exit()
-
-        print('Compressing to %s' % compressedName)
-
-        compressor = compress.Compressor(args.force_xs, args.frag_len_cutoff)
-        startTime = time.time()
-        #import cProfile
-        #import pstats
-        #import io
-        #pr = cProfile.Profile()
-        #pr.enable()
-        compressor.compress(args.alignments, compressedName, args.intermediate, args.frag_len_z_cutoff, args.split_diff_strands, args.split_discordant)
-        #pr.disable()
-        #s = io.StringIO()
-        #sortby = 'tottime'
-        #ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        #ps.print_stats(30)
-        #print(s.getvalue())
-        endTime = time.time()
-
-        print('Compression time: %0.3f s' % (endTime-startTime))
-        print('')
-
-    if args.decompress:
-        if args.expand_to is None:
-            print('In order to run decompression, you must specify a file to expand to with the --expand-to flag')
-            exit()
-
-        print('Decompressing from %s' % compressedName)
-
-        expander = expand.Expander(args.force_xs)
-        startTime = time.time()
-
-
-        expander.expand(compressedName, args.expand_to)
-
-
-        endTime = time.time()
-        print('Decompression time: %0.3f s' % (endTime-startTime))
-        print('')
-    '''
-
 if __name__ == '__main__':
 
     if '--version' in sys.argv:
@@ -158,6 +109,7 @@ if __name__ == '__main__':
     parser_compress.add_argument("-s", "--split-diff-strands", action="store_true", help='Split any pairs with different XS values')
     parser_compress.add_argument("-d", "--split-discordant", action="store_true", help='Treat discordant pairs as unpaired reads')
     parser_compress.add_argument("-p", "--preprocess", type=str, help="Set to 'tophat' to preprocess TopHat alignments, 'hisat' to preprocess HISAT alignments")
+    parser_compress.add_argument("-g", "--gtf", type=str, help="Path to reference GTF to improve compression accuracy (this will result in larger file size)")
     parser_compress.add_argument("-v", "--verbose", help="Print timing information", action="store_true")
     parser_compress.add_argument("alignments", type=str, help='Full path of SAM file containing aligned reads')
     parser_compress.add_argument("compressed", type=str, nargs='?', default='compressed.bin', help="Compressed filename. Default: compressed.bin")

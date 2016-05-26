@@ -67,6 +67,9 @@ class Alignments:
 
         self.numUnmatched = 0
 
+        self.gtf_exons = []
+        self.gtf_id = 0
+
     def processRead(self, name, read, paired):
         ''' If read is unpaired, add it to the correct spliced or unspliced list of reads.
             If read is paired, find its pair or add it to a list to be found later. Once a pair of reads is found, add the combined read to the appropriate list of reads
@@ -310,8 +313,21 @@ class Alignments:
         Convert the set of exon boundaries to a list
         '''
 
-        self.exons.add(self.gene_bounds[0])
-        self.exons.add(self.gene_bounds[1])
+        start = self.gene_bounds[0]
+        end = self.gene_bounds[1]
+
+        self.exons.add(start)
+        self.exons.add(end)
+
+        if self.gtf_exons:
+            for i in range(self.gtf_id, len(self.gtf_exons)):
+                e = self.gtf_exons[i]
+                if e > end:
+                    break
+                elif e > start:
+                    self.exons.add(e)
+            self.gtf_id = i
+
         self.exons = sorted(list(self.exons))
 
     def finalize_cross_bundle_reads(self):

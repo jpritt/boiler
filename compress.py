@@ -30,7 +30,7 @@ class Compressor:
             print('Set fragment length cutoff to %d' % frag_len_cutoff)
         self.frag_len_cutoff = frag_len_cutoff
 
-    def compress(self, samFilename, compressedFilename, min_filename, frag_len_z_cutoff, split_diff_strands, split_discordant):
+    def compress(self, samFilename, compressedFilename, gtf, min_filename, frag_len_z_cutoff, split_diff_strands, split_discordant):
         ''' Compresses the alignments to 2 files, one for unspliced and one for spliced
 
             file_prefix: Prefix for all output file names
@@ -66,6 +66,9 @@ class Compressor:
                     break
         self.chromosomes = self.parseSAMHeader(header)
         self.aligned = alignments.Alignments(self.chromosomes, self.frag_len_cutoff, split_discordant)
+
+        if gtf:
+            self.aligned.gtf_exons = self.parseGTF(gtf, self.aligned.chromOffsets)
 
         self.compressByBundle(samFilename, compressedFilename, min_filename)
 
@@ -415,6 +418,16 @@ class Compressor:
                 chromNames.append(row[1][3:])
                 chromLens.append(int(row[2][3:]))
         return [chromNames, chromLens]
+
+    def parseGTF(self, gtf, chromOffsets):
+        exons = set()
+        with open(gtf, 'r') as f:
+            for line in f:
+                row = line.rstrip().split('\t')
+                if row[2] == 'exon':
+                    exons.add(int(row[3]) + chromOffsets[row[0]])
+                    exons.add(int(row[4]) + chromOffsets[row[0]])
+        return sorted(list(exons))
 
     def compressString(self, s):
         ''' Use a predefined python library to compress the given string.

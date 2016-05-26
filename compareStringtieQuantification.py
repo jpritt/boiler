@@ -12,11 +12,14 @@ threshold = 0
 fpkmsA = []
 with open(sys.argv[1], 'r') as f:
     for line in f:
+        if line[0] == '#':
+            continue
+
         row = line.rstrip().split('\t')
 
         if row[2] == 'transcript':
             desc = row[8]
-            i = desc.index('reference_id')
+            i = desc.index('transcript_id')
             start = desc.index('"', i+1)
             end = desc.index('"', start+1)
             name = desc[start+1:end]
@@ -30,11 +33,14 @@ with open(sys.argv[1], 'r') as f:
 fpkmsB = []
 with open(sys.argv[2], 'r') as f:
     for line in f:
+        if line[0] == '#':
+            continue
+
         row = line.rstrip().split('\t')
 
         if row[2] == 'transcript':
             desc = row[8]
-            i = desc.index('reference_id')
+            i = desc.index('transcript_id')
             start = desc.index('"', i+1)
             end = desc.index('"', start+1)
             name = desc[start+1:end]
