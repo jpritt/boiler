@@ -1085,6 +1085,45 @@ class Expander:
                 return True
         return False
 
+    def getCounts(self, compressed, gtf):
+        with open(compressed, 'rb') as f:
+            chromosomes = binaryIO.readChroms(f)
+            self.aligned = alignments.Alignments(chromosomes)
+            transcripts = self.parseGTF(gtf, self.aligned.chromOffsets)
+
+            self.bundles = binaryIO.readClusters(f)
+
+            spliced_index = binaryIO.readListFromFile(f)
+
+            coverage = self.getAllCrossBucketsCoverage(f, coverage, start_i, end_i, start, end)
+
+            f.seek(sum(spliced_index[:start_i]), 1)
+            st = time.time()
+            for i in range(start_i, end_i):
+                self.aligned.exons = self.bundles[i]
+                coverage = self.getBundleCoverage(f, spliced_index[i], coverage, start, end)
+
+    def parseGTF(self, gtf, chromOffsets):
+        transcripts = dict()
+        with open(gtf, 'r') as f:
+            for line in f:
+                row = line.rstrip().split('\t')
+                if row[2] == 'exon':
+                    start = int(row[3]) + chromOffsets[row[0]]
+                    end = int(row[4]) + chromOffsets[row[0]]
+
+                    desc = row[8]
+                    s = desc.index('transcript_id')
+                    s = desc.index('"', s)
+                    e = desc.index('"', s+1)
+                    t_id = desc[s+1:e]
+
+                    if t_id in transcripts:
+                        transcripts[t_id].append([start, end])
+                    else:
+                        transcripts[t_id] = [[start, end]]
+        return sorted(transcripts.values())
+
     def updateRLE(self, vector, start, end, val):
         '''
         Update the run-length encoded vector by adding val to each base in the range [start, end)
