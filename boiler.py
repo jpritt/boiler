@@ -62,16 +62,26 @@ def go(args):
             f = sys.stdout
 
         expander = expand.Expander()
-        if args.bundles:
-            bundles = expander.getGeneBounds(args.compressed, args.chrom, args.start, args.end)
-            for b in bundles:
-                f.write(str(b[0])+'\t'+str(b[1])+'\n')
-        if args.coverage:
-            cov = expander.getCoverage(args.compressed, args.chrom, args.start, args.end)
-            f.write(','.join([str(c) for c in cov]) + '\n')
-        if args.reads:
-            aligned, unpaired, paired = expander.getReads(args.compressed, args.chrom, args.start, args.end)
-            aligned.writeSAM(f, unpaired, paired, False, False, 0)
+        if args.counts:
+            if not args.gtf:
+                print('Missing required argument for counts query: --gtf path/to/reference.gtf')
+                exit()
+            expander.getCounts(args.compressed, args.gtf)
+        else:
+            if not args.chrom:
+                print('Missing required argument for query: --chrom chromosome')
+                exit()
+
+            if args.bundles:
+                bundles = expander.getGeneBounds(args.compressed, args.chrom, args.start, args.end)
+                for b in bundles:
+                    f.write(str(b[0])+'\t'+str(b[1])+'\n')
+            if args.coverage:
+                cov = expander.getCoverage(args.compressed, args.chrom, args.start, args.end)
+                f.write(','.join([str(c) for c in cov]) + '\n')
+            if args.reads:
+                aligned, unpaired, paired = expander.getReads(args.compressed, args.chrom, args.start, args.end)
+                aligned.writeSAM(f, unpaired, paired, False, False, 0)
 
     elif args.command == 'decompress':
         import expand
@@ -119,9 +129,11 @@ if __name__ == '__main__':
     group.add_argument('-b', '--bundles', help="Query bundles", action="store_true")
     group.add_argument('-c', '--coverage', help="Query coverage", action="store_true")
     group.add_argument('-r', '--reads', help="Query reads", action="store_true")
-    parser_query.add_argument('--chrom', help="Chromosome to query", type=str, required=True)
+    group.add_argument('-f', '--counts', help='Query read counts over exons and splice junctions in a GTF', action="store_true")
+    parser_query.add_argument('--chrom', help="Chromosome to query", type=str)
     parser_query.add_argument('--start', help="Beginning of range to query", type=int)
     parser_query.add_argument('--end', help="End of range to query", type=int)
+    parser_query.add_argument('--gtf', help="Path to reference GTF over which to query counts")
     parser_query.add_argument('compressed', help="Path to compressed file created by Boiler", type=str)
     parser_query.add_argument('output', nargs='?', default=None, help="File to write result to. Default: Standard out")
 

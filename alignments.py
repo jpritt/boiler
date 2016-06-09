@@ -34,7 +34,7 @@ class Alignments:
         for i in range(len(chromosomes[0])):
             self.chromOffsets[chromosomes[0][i]] = nextOffset
             nextOffset += chromosomes[1][i] + 1
-        print(self.chromOffsets)
+        #print(self.chromOffsets)
 
         # List of potential gene boundaries as tuples
         self.gene_bounds = []
