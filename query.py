@@ -14,6 +14,9 @@ def go(args):
     if args['reads']:
         print('Querying reads')
         print(expander.getReads(args['compressed'], args['chrom'], args['start'], args['end']))
+    if args['counts']:
+        print('Querying read counts')
+        e,j = expander.getCounts(args['compressed'], args['gtf'])
 
 if __name__ == '__main__':
     # Print file's docstring if -h is invoked
@@ -24,6 +27,7 @@ if __name__ == '__main__':
     group.add_argument('--bundles', help="Query bundles", action="store_true")
     group.add_argument('--coverage', help="Query coverage", action="store_true")
     group.add_argument('--reads', help="Query reads", action="store_true")
+    group.add_argument('--counts', help='Query read counts over exons and splice junctions in a GTF', action="store_true")
     parser.add_argument('--chrom', help="Chromosome to query", type=str, required=True)
     parser.add_argument('--start', help="Beginning of range to query", type=int)
     parser.add_argument('--end', help="End of range to query", type=int)
