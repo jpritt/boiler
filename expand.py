@@ -475,7 +475,10 @@ class Expander:
 
     def getGeneBounds(self, compressedFilename, chrom, start=None, end=None):
         with open(compressedFilename, 'rb') as f:
-            chromosomes = binaryIO.readChroms(f)
+            chromsList = binaryIO.readChroms(f)
+            chromosomes = dict()
+            for i in range(len(chromsList[0])):
+                chromosomes[chromsList[0][i]] = chromsList[1][i]
             if start == None:
                 start = 0
             if end == None:
@@ -497,7 +500,6 @@ class Expander:
     def getCoverage(self, compressedFilename, chrom, start=None, end=None):
         #print('Getting coverage in %s: %d - %d' % (chrom, start, end))
         with open(compressedFilename, 'rb') as f:
-
             chromosomes = binaryIO.readChroms(f)
             self.aligned = alignments.Alignments(chromosomes)
             if start == None:
@@ -505,9 +507,9 @@ class Expander:
             else:
                 start = max(start, 0)
             if end == None:
-                end = chromosomes[chrom]
+                end = self.aligned.chromosomes[chrom]
             else:
-                end = min(end, chromosomes[chrom])
+                end = min(end, self.aligned.chromosomes[chrom])
 
             start += self.aligned.chromOffsets[chrom]
             end += self.aligned.chromOffsets[chrom]
@@ -742,9 +744,9 @@ class Expander:
             else:
                 start = max(start, 0)
             if end == None:
-                end = chromosomes[chrom]
+                end = self.aligned.chromosomes[chrom]
             else:
-                end = min(end, chromosomes[chrom])
+                end = min(end, self.aligned.chromosomes[chrom])
 
             start += self.aligned.chromOffsets[chrom]
             end += self.aligned.chromOffsets[chrom]
