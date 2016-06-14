@@ -1,0 +1,188 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Tutorial &mdash; Boiler 1.0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Boiler 1.0.1 documentation" href="index.html" />
+    <link rel="next" title="Reference" href="reference.html" />
+    <link rel="prev" title="What is Boiler?" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="reference.html" title="Reference"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="What is Boiler?"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">Boiler 1.0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="tutorial">
+<h1>Tutorial<a class="headerlink" href="#tutorial" title="Permalink to this headline">¶</a></h1>
+<p>To begin, download the latest version of Boiler from <a class="reference external" href="https://github.com/jpritt/boiler">https://github.com/jpritt/boiler</a>. Add the main directory to your path and make sure you have Python version 3 or higher.</p>
+<p>Download the SAM dataset from &lt;url&gt; and move it to your working directory.</p>
+<p>Run</p>
+<div class="highlight-python"><div class="highlight"><pre>mkdir compressed
+python3 boiler.py compress --frag-len-z-cutoff 0.125 accepted_hits.sam compressed/compressed.bl
+</pre></div>
+</div>
+<p>If all goes well, you should see something like this (exact output may change with future versions):</p>
+<div class="highlight-python"><div class="highlight"><pre>Set fragment length cutoff to z=0.125000 (33165) based on length distribution
+0.84 % of pairs are longer than the cutoff
+Using fragment length cutoff of 33165
+Not splitting mates on different strands
+Not splitting discordant
+0 cross-bundle reads unmatched
+Minimum bundle length: 12
+Maximum bundle length: 206957
+Average bundle length: 2514
+1097 cross-bundle buckets
+Compressed size: 29682
+Approximately 3979761 / 6972093 = 57.081295% of compressed file is coverage
+Finished compressing
+</pre></div>
+</div>
+<p>You should now have a file <tt class="docutils literal"><span class="pre">compressed/compressed.bl</span></tt> roughly 4.3 MB in size.</p>
+<p>Now let&#8217;s query all of the bundles that Boiler found in chromosome 2L:</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py query --bundles --chrom 2L compressed/compressed.bl bundles.txt
+</pre></div>
+</div>
+<p>You should now have a file <tt class="docutils literal"><span class="pre">bundles.txt</span></tt> containing all of the bundles used by Boiler. Type</p>
+<div class="highlight-python"><div class="highlight"><pre>head bundles.txt
+</pre></div>
+</div>
+<p>to see the first few lines of this file:</p>
+<div class="highlight-python"><div class="highlight"><pre>7478        9485
+9841        21430
+21825       23108
+23180       24034
+24856       25219
+25404       26251
+26333       33987
+34045       35094
+36182       37317
+37538       37931
+</pre></div>
+</div>
+<p>To query the coverage in the first bundle, run</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py query --coverage --chrom 2L --start 7478 --end 9485 compressed/compressed.bl coverage.txt
+</pre></div>
+</div>
+<p><tt class="docutils literal"><span class="pre">coverage.txt</span></tt> should now contain a comma-separated vector containing the coverage at every base in the interval [7478, 9485). Finally, to query the reads in the first bundle, run</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py query --reads --chrom 2L --start 7478 --end 9485 compressed/compressed.bl reads.sam
+</pre></div>
+</div>
+<p><tt class="docutils literal"><span class="pre">reads.sam</span></tt> is a SAM file with no header, containing all the aligned reads in the interval [7478, 9485). Type</p>
+<div class="highlight-python"><div class="highlight"><pre>head reads.sam
+</pre></div>
+</div>
+<p>to see the first few reads in this bundle, which should look like this:</p>
+<div class="highlight-python"><div class="highlight"><pre>2L:0        0       2L      7772    50      76M     *       0       0       *       *       NH:i:1
+2L:1        0       2L      7795    50      76M     *       0       0       *       *       NH:i:1
+2L:2        0       2L      7808    50      76M     *       0       0       *       *       NH:i:1
+2L:3        0       2L      7863    50      76M     *       0       0       *       *       NH:i:1
+2L:4        0       2L      8073    50      44M112N32M      *       0       0       *       *       XS:A:+  NH:i:1
+2L:5        0       2L      8595    50      76M     *       0       0       *       *       NH:i:1
+2L:6        0       2L      8781    50      76M     *       0       0       *       *       NH:i:1
+2L:7        0       2L      8852    50      76M     *       0       0       *       *       NH:i:1
+2L:8        0       2L      8963    50      76M     *       0       0       *       *       NH:i:1
+2L:9        0       2L      8969    50      76M     *       0       0       *       *       NH:i:1
+</pre></div>
+</div>
+<p>Finally, let&#8217;s decompress the compressed file by running</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py decompress compressed/compressed.bl expanded.sam
+</pre></div>
+</div>
+<p>The resulting SAM file is unsorted &#8211; to sort and convert it to BAM, run</p>
+<div class="highlight-python"><div class="highlight"><pre>samtools view -bS expanded.sam | samtools sort - expanded
+</pre></div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">What is Boiler?</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="reference.html"
+                        title="next chapter">Reference</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/tutorial.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="reference.html" title="Reference"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="What is Boiler?"
+             >previous</a> |</li>
+        <li><a href="index.html">Boiler 1.0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2016, Jacob Pritt.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

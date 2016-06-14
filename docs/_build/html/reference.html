@@ -1,0 +1,237 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Reference &mdash; Boiler 1.0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Boiler 1.0.1 documentation" href="index.html" />
+    <link rel="prev" title="What is Boiler?" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="index.html" title="What is Boiler?"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">Boiler 1.0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="reference">
+<h1>Reference<a class="headerlink" href="#reference" title="Permalink to this headline">¶</a></h1>
+<p>Boiler has three modes, each described in more detail below:</p>
+<ol class="arabic simple">
+<li><a class="reference internal" href="#compress"><em>compress</em></a> &#8211; compress a SAM file.</li>
+<li><a class="reference internal" href="#query"><em>query</em></a> &#8211; query a compressed file.</li>
+<li><a class="reference internal" href="#decompress"><em>decompress</em></a> &#8211; expand a compressed file, outputting a SAM file.</li>
+</ol>
+<p>Boiler is invoked by entering</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py &lt;mode&gt; &lt;[args]&gt;
+</pre></div>
+</div>
+<p>To run with PyPy instead of Python, run</p>
+<div class="highlight-python"><div class="highlight"><pre>pypy boiler.py &lt;mode&gt; &lt;[args]&gt;
+</pre></div>
+</div>
+<p>To get help for a given mode, enter</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py &lt;mode&gt; -h
+</pre></div>
+</div>
+<div class="section" id="compress">
+<span id="id1"></span><h2>compress<a class="headerlink" href="#compress" title="Permalink to this headline">¶</a></h2>
+<p>Boiler requires a SAM file to compress. To convert a BAM file to SAM with SAMtools, run:</p>
+<div class="highlight-python"><div class="highlight"><pre>samtools view -h -o path/to/alignments.bam path/to/alignments.sam
+</pre></div>
+</div>
+<p>To compress a SAM file with Boiler, run the following command:</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py compress &lt;[args]&gt; path/to/alignments.sam path/to/compressed.bl
+</pre></div>
+</div>
+<p>The following optional arguments are available:</p>
+<p><tt class="docutils literal"><span class="pre">-c/--frag-len-cutoff</span> <span class="pre">&lt;threshold&gt;</span></tt></p>
+<blockquote>
+<div><p>As a first step in compressing, Boiler groups overlapping reads into &#8216;bundles&#8217; using a similar method to Cufflinks (see the <a class="reference internal" href="#bundles"><em>bundles</em></a> query below for more details). In paired-end datasets, some mates are mapped millions of bases apart or even on different chromosomes. Boiler stores such pairs as bundle-spanning reads, rather than creating massively long bundles to suit them. If <tt class="docutils literal"><span class="pre">frag-len-cutoff</span></tt> is set, pairs longer than this cutoff will not contribute to determining bundles, so they will often be stored as bundle-spanning pairs.</p>
+<p>Changing the threshold for <tt class="docutils literal"><span class="pre">--frag-len-cutoff</span></tt> will not affect accuracy. Generally, decreasing the threshold will lead to faster compression, decompression, and query times, but also to larger file size, and vice versa. See <tt class="docutils literal"><span class="pre">--frag-len-z-cutoff</span></tt> below for an alternative to setting the threshold directly.</p>
+</div></blockquote>
+<p><tt class="docutils literal"><span class="pre">-z/--frag-len-z-cutoff</span> <span class="pre">&lt;z-score&gt;</span></tt></p>
+<blockquote>
+<div>As an alternative to setting <tt class="docutils literal"><span class="pre">--frag-len-cutoff</span></tt> directly, if <tt class="docutils literal"><span class="pre">--frag-len-z-cutoff</span></tt> is set Boiler will perform a first pass over the reads to establish the average and standard distribution of all paired read lengths. Any reads with a <a class="reference external" href="https://en.wikipedia.org/wiki/Standard_score">z-score</a> greater than <tt class="docutils literal"><span class="pre">--frag-len-z-cutoff</span></tt> will not contribute to determining bundles, so they will often be stored as bundle-spanning pairs. If neither <tt class="docutils literal"><span class="pre">--frag-len-cutoff</span></tt> nor <tt class="docutils literal"><span class="pre">--frag-len-z-cutoff</span></tt> is set, Boiler will set <tt class="docutils literal"><span class="pre">--frag-len-z-cutoff</span></tt> to <tt class="docutils literal"><span class="pre">0.125</span></tt>, which we have found to work well in practice.</div></blockquote>
+<p><tt class="docutils literal"><span class="pre">-s/--split-diff-strands</span></tt></p>
+<blockquote>
+<div>Sometimes a SAM file contains paired mates that lie on different chromosomes. Boiler preserves these pairs by default; use <tt class="docutils literal"><span class="pre">--split-diff-strands</span></tt> to convert them to unpaired reads.</div></blockquote>
+<p><tt class="docutils literal"><span class="pre">-d/--split-discordant</span></tt></p>
+<blockquote>
+<div>SAM files often contain discordant pairs, i.e. paires where one mate intersects an intron of the other mate. Boiler preserves these pairs by default; use <tt class="docutils literal"><span class="pre">--split-discordant</span></tt> to convert them to unpaired reads.</div></blockquote>
+<p><tt class="docutils literal"><span class="pre">-p/--preprocess</span></tt></p>
+<blockquote>
+<div><p>This argument should be added for alignments produced by HISAT, which require an additional processing step before compression. For multimapped reads, HISAT outputs a list of <tt class="docutils literal"><span class="pre">n</span></tt> left mates and <tt class="docutils literal"><span class="pre">m</span></tt> right mates, where any left mate may be be paired with any right mate. In contrast, Cufflinks outputs a pair for each unique combination of possible left and right mates. Boiler requires pairs to be enumerated, as in Cufflinks output.</p>
+<p>Alternatively, you can preprocess HISAT alignments yourself by running:</p>
+<div class="highlight-python"><div class="highlight"><pre>python enumeratePairs.py --input alignments.sam --output alignments.processed.sam
+samtools sort -bS alignments.processed.sam | samtools sort - alignments.processed
+samtools view -h -o alignments.processed.sam alignments.processed.bam
+</pre></div>
+</div>
+<p>Following which you can run Boiler as normal:</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py compress &lt;[args]&gt; alignments.processed.sam path/to/compressed.bl
+</pre></div>
+</div>
+</div></blockquote>
+<p><tt class="docutils literal"><span class="pre">-g/--gtf</span> <span class="pre">&lt;path/to/transcripts.gtf&gt;</span></tt></p>
+<blockquote>
+<div>Boiler offers the option of using a reference gtf file to guide compression. Boiler adds additional splice sites at every transcript splice site and endpoint in the gtf. This improves the accuracy of read recovery at the cost of a significant size increase.</div></blockquote>
+<p><tt class="docutils literal"><span class="pre">-v/--verbose</span></tt></p>
+<blockquote>
+<div>Print additional debug information.</div></blockquote>
+</div>
+<div class="section" id="query">
+<span id="id2"></span><h2>query<a class="headerlink" href="#query" title="Permalink to this headline">¶</a></h2>
+<p>Boiler currently supports the following queries:</p>
+<ol class="arabic simple">
+<li><a class="reference internal" href="#bundles"><em>bundles</em></a></li>
+<li><a class="reference internal" href="#coverage"><em>coverage</em></a></li>
+<li><a class="reference internal" href="#reads"><em>reads</em></a></li>
+<li><a class="reference internal" href="#counts"><em>counts</em></a></li>
+</ol>
+<p>The first 3 queries require a chromsome and optional start and end position. Boiler will return the results over the query over the given interval. If <tt class="docutils literal"><span class="pre">--start</span></tt> or <tt class="docutils literal"><span class="pre">--end</span></tt> are not specified, the endpoints of the given chromsome will be used. Results will be written to the given <tt class="docutils literal"><span class="pre">out_file</span></tt>.  To run on of these queries, enter:</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py [--bundles | --coverage | --reads] --chrom &lt;c&gt; --start &lt;s&gt; --end &lt;e&gt; path/to/compressed.bl out_file
+</pre></div>
+</div>
+<p>The <tt class="docutils literal"><span class="pre">counts</span></tt> query takes a gtf file as input, but no chromosome or range. Results will be returned for the entire genome. To run this query, enter:</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py --counts --gtf &lt;path/to/transcripts.gtf&gt; path/to/compressed.bl out_file
+</pre></div>
+</div>
+<div class="section" id="bundles">
+<span id="id3"></span><h3>bundles<a class="headerlink" href="#bundles" title="Permalink to this headline">¶</a></h3>
+<p>&#8216;Bundles&#8217; divide the genome into manageable chunks, roughly corresponding to potential gene boundaries. Boiler calculates bundles in a similar way to Cufflinks; as read are processed in order of position, the end of the current bundle is extended to the end of the current paired-end read. If the next read begins more than 50 bases after the end of the current bundle, a new bundle is creating beginning at the current read.</p>
+<p>This query prints the bounds of each bundle that overlaps the given range.</p>
+</div>
+<div class="section" id="coverage">
+<span id="id4"></span><h3>coverage<a class="headerlink" href="#coverage" title="Permalink to this headline">¶</a></h3>
+<p>This query prints a vector containing the total coverage at each base in the given range.</p>
+</div>
+<div class="section" id="reads">
+<span id="id5"></span><h3>reads<a class="headerlink" href="#reads" title="Permalink to this headline">¶</a></h3>
+<p>This query outputs a SAM file containing all reads that overlap the given range.</p>
+</div>
+<div class="section" id="counts">
+<span id="id6"></span><h3>counts<a class="headerlink" href="#counts" title="Permalink to this headline">¶</a></h3>
+<p>Boiler parses the gtf file and extracts a list of exons and junctions</p>
+</div>
+</div>
+<div class="section" id="decompress">
+<span id="id7"></span><h2>decompress<a class="headerlink" href="#decompress" title="Permalink to this headline">¶</a></h2>
+<p>To decompress a file with Boiler, run</p>
+<div class="highlight-python"><div class="highlight"><pre>python3 boiler.py decompress &lt;[args]&gt; path/to/compressed.bl expanded.sam
+</pre></div>
+</div>
+<p>The output SAM file is not sorted; to convert to a sorted BAM file, enter</p>
+<div class="highlight-python"><div class="highlight"><pre>samtools view -bS expanded.sam | samtools sort - expanded
+</pre></div>
+</div>
+<p>Then you can then sort the expanded SAM file by running</p>
+<div class="highlight-python"><div class="highlight"><pre>samtools view -h -o expanded.sam expanded.bam
+</pre></div>
+</div>
+<p>The following arguments are available for decompression:</p>
+<p><tt class="docutils literal"><span class="pre">--force-xs</span></tt></p>
+<blockquote>
+<div>Boiler will assign a random XS value to any spliced reads that do not have an XS tag. This is meant for some tools such as Cufflinks which require that all spliced reads have an XS tag.</div></blockquote>
+<p><tt class="docutils literal"><span class="pre">-v/--verbose</span></tt></p>
+<blockquote>
+<div>Print additional debug information.</div></blockquote>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Reference</a><ul>
+<li><a class="reference internal" href="#compress">compress</a></li>
+<li><a class="reference internal" href="#query">query</a><ul>
+<li><a class="reference internal" href="#bundles">bundles</a></li>
+<li><a class="reference internal" href="#coverage">coverage</a></li>
+<li><a class="reference internal" href="#reads">reads</a></li>
+<li><a class="reference internal" href="#counts">counts</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#decompress">decompress</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">What is Boiler?</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/reference.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="index.html" title="What is Boiler?"
+             >previous</a> |</li>
+        <li><a href="index.html">Boiler 1.0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2016, Jacob Pritt.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

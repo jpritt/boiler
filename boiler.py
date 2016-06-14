@@ -16,26 +16,18 @@ def go(args):
         import compress
 
         if args.preprocess:
-            if args.preprocess.lower() == 'tophat':
-                print('Preprocessing TopHat alignments')
-                import inferXStags
-                prefix = args.alignments[:args.alignments.index('.')] + '.processed'
-                inferXStags.inferTags(args.alignments, prefix + '.sam')
-                os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
-                os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
-            elif args.preprocess.lower() == 'hisat':
+            modes = ['hisat']
+            if args.preprocess.lower() == 'hisat':
                 print('Preprocessing HISAT alignments')
-                import removeUp
                 import enumeratePairs
-                import inferXStags
                 prefix = args.alignments[:args.alignments.index('.')] + '.processed'
-                removeUp.removeUnmapped(args.alignments, 'temp1.sam')
-                enumeratePairs.processHISAT('temp1.sam', 'temp2.sam')
-                os.system('rm temp1.sam')
-                inferXStags.inferTags('temp2.sam', prefix + '.sam')
-                os.system('rm temp2.sam')
+                enumeratePairs.processHISAT(args.alignments, prefix + '.sam')
                 os.system('samtools view -bS ' + prefix + '.sam | samtools sort - ' + prefix)
                 os.system('samtools view -h -o ' + prefix + '.sam ' + prefix + '.bam')
+            else:
+                print('Preprocessing mode not recognized: %s' % args.preprocess)
+                print('Supported preprocessing modes include: ' + ', '.join(modes))
+                exit()
             args.alignments = prefix + '.sam'
 
         if args.verbose:
