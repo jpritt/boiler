@@ -51,8 +51,8 @@
             
   <div class="section" id="tutorial">
 <h1>Tutorial<a class="headerlink" href="#tutorial" title="Permalink to this headline">¶</a></h1>
-<p>To begin, download the latest version of Boiler from <a class="reference external" href="https://github.com/jpritt/boiler">https://github.com/jpritt/boiler</a>. Add the main directory to your path and make sure you have Python version 3 or higher.</p>
-<p>Download the SAM dataset from &lt;url&gt; and move it to your working directory.</p>
+<p>To begin, download the latest version of Boiler from <a class="reference external" href="https://github.com/jpritt/boiler">https://github.com/jpritt/boiler</a>. Add the main directory to your path and make sure you have Python version 3 or higher. You will also need SAMtools, which you can download from samtools.sourceforge.net.</p>
+<p>Download the SAM dataset <a class="reference external" href="https://drive.google.com/open?id=0B-3BXIpgKqSXNkdnVjl4TnhzdkE">here</a> and move it to your working directory.</p>
 <p>Run</p>
 <div class="highlight-python"><div class="highlight"><pre>mkdir compressed
 python3 boiler.py compress --frag-len-z-cutoff 0.125 accepted_hits.sam compressed/compressed.bl

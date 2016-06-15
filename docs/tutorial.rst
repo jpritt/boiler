@@ -1,9 +1,9 @@
 Tutorial
 ========
 
-To begin, download the latest version of Boiler from https://github.com/jpritt/boiler. Add the main directory to your path and make sure you have Python version 3 or higher.
+To begin, download the latest version of Boiler from https://github.com/jpritt/boiler. Add the main directory to your path and make sure you have Python version 3 or higher. You will also need SAMtools, which you can download from samtools.sourceforge.net.
 
-Download the SAM dataset from <url> and move it to your working directory.
+Download the SAM dataset `here <https://drive.google.com/open?id=0B-3BXIpgKqSXNkdnVjl4TnhzdkE>`_ and move it to your working directory.
 
 Run ::
 
