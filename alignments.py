@@ -2153,6 +2153,14 @@ class Alignments:
                 filehandle.write('@SQ\tSN:' + str(c) + '\tLN:' + str(self.chromosomes[c]) + '\n')
 
         for read in unpaired:
+            invalid = False
+            for i in range(len(read.exons)-1):
+                if read.exons[i+1][0] < read.exons[i][1]:
+                    invalid = True
+                    break
+            if invalid:
+                continue
+
             exons = read.exons
             cigar = [str(exons[0][1] - exons[0][0]) + 'M']
             spliced = False
@@ -2183,6 +2191,20 @@ class Alignments:
             readId += 1
         
         for pair in paired:
+            invalid = False
+            for i in range(len(pair.exonsA)-1):
+                if pair.exonsA[i+1][0] < pair.exonsA[i][1]:
+                    invalid = True
+                    break
+            if invalid:
+                continue
+            for i in range(len(pair.exonsB)-1):
+                if pair.exonsB[i+1][0] < pair.exonsB[i][1]:
+                    invalid = True
+                    break
+            if invalid:
+                continue
+
             exonsA = pair.exonsA
             cigarA = [str(exonsA[0][1] - exonsA[0][0]) + 'M']
             spliced = False
