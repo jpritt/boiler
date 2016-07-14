@@ -1094,14 +1094,29 @@ class Expander:
             self.aligned = alignments.Alignments(chromosomes)
             transcripts = self.parseGTF(gtf, self.aligned.chromOffsets)
 
+            '''
             exon_counts = []
             junc_counts = []
             for t in transcripts:
                 exon_counts.append([0] * len(t))
                 junc_counts.append([0] * (len(t)-1))
+            '''
+
+            start_t = time.time()
+            exons = set()
+            juncs = set()
+            for t in transcripts:
+                for e in t:
+                    exons.add((e[0], e[1]))
+                for i in range(len(t)-1):
+                    juncs.add((t[i][1], t[i+1][0]))
+            exon_counts = [[e[0], e[1], 0] for e in sorted(list(exons))]
+            junc_counts = [[e[0], e[1], 0] for e in sorted(list(juncs))]
 
             self.bundles = binaryIO.readClusters(f)
+            print('Sorting exons and junctions time: %fs' % (time.time()-start_t))
 
+            '''
             t = time.time()
             # For each bundle, store a list of the transcript ids that overlap that bundle
             ts = [(t[0][0], t[-1][1]) for t in transcripts]
@@ -1125,36 +1140,57 @@ class Expander:
                         break
                 overlapping_ts.append(overlapping)
             print('Calculating overlaps time: %fs' % (time.time()-t))
+            '''
+
+            overlapping_exons = [0] * len(self.bundles)
+            overlapping_juncs = [0] * len(self.bundles)
+            start_exon = 0
+            start_junc = 0
+            num_exons = len(exon_counts)
+            num_juncs = len(junc_counts)
+            for i in range(len(self.bundles)):
+                b = self.bundles[i]
+                start = b[0]
+                end = b[-1]
+
+                for start_exon in range(start_exon, num_exons):
+                    if exon_counts[start_exon][1] > start:
+                        break
+                for j in range(start_exon, num_exons):
+                    if exon_counts[j][0] > end:
+                        end_exon = j
+                        break
+
+                for start_junc in range(start_junc, num_juncs):
+                    if junc_counts[start_junc][0] > start:
+                        break
+                for j in range(start_junc, num_juncs):
+                    if junc_counts[j][0] > end:
+                        end_junc = j
+                        break
+
+                overlapping_exons[i] = [start_exon, end_exon]
+                overlapping_juncs[i] = [start_junc, end_junc]
 
             spliced_index = binaryIO.readListFromFile(f)
 
             t = time.time()
-            self.getCrossBundleCounts(f, transcripts, exon_counts, junc_counts, overlapping_ts)
+            self.getCrossBundleCounts(f, transcripts, exon_counts, junc_counts, overlapping_exons, overlapping_juncs)
             print('Cross bundle time: %fs' % (time.time()-t))
 
             t = time.time()
             for i in range(len(spliced_index)):
                 self.aligned.exons = self.bundles[i]
-                self.getBundleCounts(f, spliced_index[i], transcripts, exon_counts, junc_counts, overlapping_ts[i])
+                self.getBundleCounts(f, spliced_index[i], transcripts, exon_counts, junc_counts, overlapping_exons[i], overlapping_juncs[i])
 
             print('Normal bundle time: %fs' % (time.time()-t))
 
         end_t = time.time()
         print('Total time: %fs' % (end_t-start_t))
 
-        for i in range(3):
-            print(exon_counts[i])
-            print(junc_counts[i])
-            print('')
-        #print('')
-        #for i in range(len(exon_counts)-8, len(exon_counts)):
-        #    print(exon_counts[i])
-        #    print(junc_counts[i])
-        #    print('')
-
         return exon_counts, junc_counts
 
-    def getCrossBundleCounts(self, filehandle, transcripts, exon_counts, junc_counts, all_overlapping_ts):
+    def getCrossBundleCounts(self, filehandle, transcripts, exon_counts, junc_counts, overlapping_exons, overlapping_juncs):
         num_bundles = len(self.bundles)
         bundleIdBytes = binaryIO.findNumBytes(num_bundles)
         numBytes = binaryIO.readVal(filehandle, 1)
@@ -1196,35 +1232,47 @@ class Expander:
                     for n in range(len(exon_bounds)):
                         boundaries.append(boundaries[-1] + exon_bounds[n][1]-exon_bounds[n][0])
 
-                    overlapping_ts = all_overlapping_ts[b.bundleA] + all_overlapping_ts[b.bundleB]
-
                     for i in range(len(exon_bounds)):
                         start = exon_bounds[i][0]
                         end = exon_bounds[i][1]
 
-                        for j in overlapping_ts:
-                            for k in range(len(exon_counts[j])):
-                                if transcripts[j][k][0] < end and transcripts[j][k][1] > start:
-                                    startOffset = min(0, transcripts[j][k][0]-start)
-                                    l = min(transcripts[j][k][1], end) - startOffset
-                                    cov = self.sumCov(b.coverage, boundaries[i]+startOffset, boundaries[i]+startOffset+l)
-                                    #exon_counts[j][k] += float(cov) / (avg_len * b.NH)
+                        for j in range(overlapping_exons[b.bundleA][0], overlapping_exons[b.bundleA][1]):
+                            if exon_counts[j][0] < end and exon_counts[j][1] > start:
+                                startOffset = min(0, exon_counts[j][0]-start)
+                                l = min(exon_counts[j][1], end) - startOffset
+                                cov = self.sumCov(b.coverage, boundaries[i]+startOffset, boundaries[i]+startOffset+l)
+                                exon_counts[j][2] += float(cov) / (avg_len * b.NH)
+                        for j in range(overlapping_exons[b.bundleB][0], overlapping_exons[b.bundleB][1]):
+                            if exon_counts[j][0] < end and exon_counts[j][1] > start:
+                                startOffset = min(0, exon_counts[j][0]-start)
+                                l = min(exon_counts[j][1], end) - startOffset
+                                cov = self.sumCov(b.coverage, boundaries[i]+startOffset, boundaries[i]+startOffset+l)
+                                exon_counts[j][2] += float(cov) / (avg_len * b.NH)
 
-                                    if transcripts[j][k][1] == end and i < (len(exon_bounds)-1) and k < (len(transcripts[j])-1) and transcripts[j][k+1][0] == exon_bounds[i+1][0]:
-                                        v = min(self.getCov(b.coverage, boundaries[i]-1), self.getCov(b.coverage, boundaries[i]))
-                                        #junc_counts[j][k] += float(v) / b.NH
+                        for j in range(overlapping_juncs[b.bundleA][0], overlapping_juncs[b.bundleA][0]):
+                            if junc_counts[j][0] == end and i < (len(exon_bounds)-1) and junc_counts[j][1] == exon_bounds[i+1][0]:
+                                    v = min(self.getCov(b.coverage, boundaries[i]-1), self.getCov(b.coverage, boundaries[i]))
+                                    junc_counts[j][2] += float(v) / b.NH
+                        for j in range(overlapping_juncs[b.bundleB][0], overlapping_juncs[b.bundleB][1]):
+                            if junc_counts[j][0] == end and i < (len(exon_bounds)-1) and junc_counts[j][1] == exon_bounds[i+1][0]:
+                                    v = min(self.getCov(b.coverage, boundaries[i]-1), self.getCov(b.coverage, boundaries[i]))
+                                    junc_counts[j][2] += float(v) / b.NH
 
                 curr_bucket += buckets_in_chunk
 
         return
 
-    def getBundleCounts(self, f, length, transcripts, exon_counts, junc_counts, overlapping_ts):
+    def getBundleCounts(self, f, length, transcripts, exon_counts, junc_counts, overlapping_exons, overlapping_juncs):
         bundle = self.expandString(f.read(length))
         startPos = 0
         readLenBytes, startPos = binaryIO.binaryToVal(bundle, 1, startPos)
         sorted_buckets, exonBytes, startPos = binaryIO.readJunctionsList(bundle, startPos)
 
+        #print(self.aligned.exons)
+
         for key in sorted_buckets:
+            #print('>>>>')
+            #print(key)
             bucket_exons = key[:-2]
 
             # Boundaries contains the positions in the junction coverage vector where each new subexon begins
@@ -1242,6 +1290,7 @@ class Expander:
                         boundaries.append(boundaries[-1] + subexon_length)
 
             b, startPos = binaryIO.readJunction(bundle, bucket.Bucket(bucket_exons, length, boundaries), readLenBytes, startPos)
+            #print(b.coverage)
             b.NH = float(key[-1])
 
             count = 0
@@ -1267,19 +1316,45 @@ class Expander:
                 start = exon_bounds[i][0]
                 end = exon_bounds[i][1]
 
-                for j in overlapping_ts:
-                    for k in range(len(exon_counts[j])):
-                        if transcripts[j][k][0] < end and transcripts[j][k][1] > start:
-                            startOffset = min(0, transcripts[j][k][0]-start)
-                            l = min(transcripts[j][k][1], end) - startOffset
-                            cov = self.sumCov(b.coverage, boundaries[i]+startOffset, boundaries[i]+startOffset+l)
-                            exon_counts[j][k] += float(cov) / (avg_len * b.NH)
+                #print(exon_bounds)
 
-                            if transcripts[j][k][1] == end-1 and i < (len(exon_bounds)-1) and k < (len(transcripts[j])-1) and transcripts[j][k+1][0] == exon_bounds[i+1][0]:
-                                v = min(self.getCov(b.coverage, boundaries[i+1]-1), self.getCov(b.coverage, boundaries[i+1]))
-                                junc_counts[j][k] += float(v) / b.NH
+                for j in range(overlapping_exons[0], overlapping_exons[1]):
+                    if exon_counts[j][0] < end and exon_counts[j][1] > start:
+                            startOffset = max(0, exon_counts[j][0]-start)
+                            l = min(exon_counts[j][1], end) - (start + startOffset)
+
+                            cov = self.sumCov(b.coverage, boundaries[i]+startOffset, boundaries[i]+startOffset+l)
+                            exon_counts[j][2] += float(cov) / (avg_len * b.NH)
+
+                for j in range(overlapping_juncs[0], overlapping_juncs[1]):
+                    if junc_counts[j][0] == end-1 and i < (len(exon_bounds)-1) and junc_counts[j][1] == exon_bounds[i+1][0]:
+                            v = min(self.getCov(b.coverage, boundaries[i+1]-1), self.getCov(b.coverage, boundaries[i+1]))
+                            junc_counts[j][2] += float(v) / b.NH
+
+                #print('')
+
+            #print(exon_counts[:3])
+            #print(junc_counts[:3])
+            #print('')
 
         return
+
+    def write_counts(self, exon_counts, junc_counts, out_prefix):
+        '''
+
+        :param transcripts:
+        :param exon_counts:
+        :param transcript_counts:
+        :return: Print the counts output as a table of counts for each exon and a table for each junction
+        '''
+
+        with open(out_prefix+'.exons.txt', 'w') as f:
+            for exon in exon_counts:
+                f.write(str(exon[0]) + '-' + str(exon[1]) + '\t' + str(exon[2]) + '\n')
+
+        with open(out_prefix+'.juncs.txt', 'w') as f:
+            for junc in junc_counts:
+                f.write(str(junc[0]) + '-' + str(junc[1]) + '\t' + str(junc[2]) + '\n')
 
     def sumCov(self, rle, start, end):
         '''

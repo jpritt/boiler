@@ -42,27 +42,32 @@ def go(args):
     elif args.command == 'query':
         import expand
 
-        if args.output:
-            #logging.info('Opening %s to write results' % args.output)
-            try:
-                f = open(args.output, 'w')
-            except IOError:
-                #logging.info('Couldn\'t open file %s for writing. Using standard out instead.' % args.output)
-                f = sys.stdout
-        else:
-            #logging.warning('Writing results to standard out')
-            f = sys.stdout
-
         expander = expand.Expander()
         if args.counts:
             if not args.gtf:
                 print('Missing required argument for counts query: --gtf path/to/reference.gtf')
                 exit()
-            expander.getCounts(args.compressed, args.gtf)
+            if not args.output:
+                print('Counts query cannot write to standard output -- please include a file prefix for output')
+                exit()
+
+            exon_counts, junc_counts = expander.getCounts(args.compressed, args.gtf)
+            expander.write_counts(exon_counts, junc_counts, args.output)
         else:
             if not args.chrom:
                 print('Missing required argument for query: --chrom chromosome')
                 exit()
+
+            if args.output:
+                #logging.info('Opening %s to write results' % args.output)
+                try:
+                    f = open(args.output, 'w')
+                except IOError:
+                    #logging.info('Couldn\'t open file %s for writing. Using standard out instead.' % args.output)
+                    f = sys.stdout
+            else:
+                #logging.warning('Writing results to standard out')
+                f = sys.stdout
 
             if args.bundles:
                 bundles = expander.getGeneBounds(args.compressed, args.chrom, args.start, args.end)
