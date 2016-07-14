@@ -1350,11 +1350,20 @@ class Expander:
 
         with open(out_prefix+'.exons.txt', 'w') as f:
             for exon in exon_counts:
-                f.write(str(exon[0]) + '-' + str(exon[1]) + '\t' + str(exon[2]) + '\n')
+                chr = self.aligned.getChromosome(exon[0])
+                f.write(chr + '\t' + str(exon[0] - self.aligned.chromOffsets[chr]) + '\t' + str(exon[1] - self.aligned.chromOffsets[chr]) + '\t' + str(exon[2]) + '\n')
 
+        skipped = 0
         with open(out_prefix+'.juncs.txt', 'w') as f:
             for junc in junc_counts:
-                f.write(str(junc[0]) + '-' + str(junc[1]) + '\t' + str(junc[2]) + '\n')
+                chr1 = self.aligned.getChromosome(junc[0])
+                chr2 = self.aligned.getChromosome(junc[1])
+                if not chr1 == chr2:
+                    skipped += 1
+                    continue
+                f.write(chr1 + '\t' + str(junc[0]) + '\t' + str(junc[1]) + '\t' + str(junc[2]) + '\n')
+        if skipped > 0:
+            print('Skipped %d junctions on different chromosomes' % skipped)
 
     def sumCov(self, rle, start, end):
         '''
